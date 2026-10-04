@@ -1,0 +1,399 @@
+/* ============================================================
+   style.css — Centro de información (estética HUD de ÉLIX en azul)
+   Qué hace: define TODO el aspecto de la página (barra superior, tarjetas con corchetes
+   HUD, ventanas desplegables, formatos de texto, animaciones y temas claro/oscuro).
+   Para qué sirve: que la página se vea idéntica al Centro de ayuda de ÉLIX, pero con la
+   paleta azul (--color-principal, --color-principal-hover, --color-principal-activo).
+   Reglas del proyecto:
+   - TODOS los colores viven como variables en :root (tema oscuro por defecto y tema claro
+     en :root[data-tema="claro"]). Fuera de esos dos bloques NO hay ningún color escrito a mano.
+   - TODAS las tipografías vienen de Google Fonts (fonts.google.com, se cargan con <link> en
+     index.html) y son variables en :root.
+   - TODOS los iconos son Material Symbols (fonts.google.com/icons).
+   ============================================================ */
+
+:root {
+  color-scheme: dark; /* controles nativos (scroll, inputs) acordes al tema */
+
+  /* ---- Tipografías (Google Fonts) ---- */
+  --fuente-titulo: 'Oxanium', sans-serif;               /* títulos y botones (estilo HUD) */
+  --fuente-texto: 'Space Grotesk', sans-serif;          /* texto general */
+  --fuente-hud: 'Share Tech Mono', monospace;           /* contadores y pie de página tipo HUD */
+  --fuente-mono: 'JetBrains Mono', monospace;           /* bloques de código y teclas */
+  --fuente-codigo: 'Cutive Mono', monospace;            /* código en línea dentro de un párrafo */
+  --fuente-iconos: 'Material Symbols Rounded';          /* iconos (fonts.google.com/icons) */
+
+  /* ---- Azules de la marca (paleta base del proyecto) ---- */
+  --color-principal: #000180;          /* azul profundo: base de degradados, fondos de botón */
+  --color-principal-hover: #1B2FBF;    /* azul intermedio: estado hover */
+  --color-principal-activo: #3248E6;   /* azul vivo: estado activo / pulsado y detalles brillantes */
+
+  /* ---- Neutros, tema oscuro AMOLED ---- */
+  --color-negro: #000000;
+  --color-blanco: #FFFFFF;
+  --color-fondo: var(--color-negro);
+  --color-fondo-2: color-mix(in srgb, var(--color-principal) 30%, var(--color-negro));   /* azul casi negro del degradado de fondo */
+  --color-tarjeta: #0B0B10;
+  --color-tarjeta-2: #15151C;
+  --color-texto: #E6E6EA;
+  --color-texto-suave: #9A9AA6;
+  --color-gris: #2B2B36;
+  --color-gris-claro: #666672;
+
+  /* ---- Acento derivado de los azules (lo que ÉLIX hacía con el morado) ---- */
+  --color-acento: var(--color-principal-activo);                                              /* corchetes HUD, bordes activos, foco, halo */
+  --color-acento-texto: color-mix(in srgb, var(--color-principal-activo) 60%, var(--color-blanco));   /* texto, enlaces e iconos de acento (legible sobre negro) */
+  --color-acento-suave: color-mix(in srgb, var(--color-acento) 15%, transparent);             /* fondo al pasar el mouse */
+  --color-acento-borde: color-mix(in srgb, var(--color-acento) 45%, transparent);             /* bordes suaves */
+
+  /* ---- Colores de estado (avisos) ---- */
+  --color-success: #22c55e;
+  --color-warning: #facc15;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+  --color-success-texto: var(--color-success);   /* versiones para TEXTO (en el tema claro se oscurecen) */
+  --color-warning-texto: var(--color-warning);
+  --color-error-texto: var(--color-error);
+  --color-info-texto: var(--color-info);
+  --color-success-suave: color-mix(in srgb, var(--color-success) 14%, transparent);
+  --color-warning-suave: color-mix(in srgb, var(--color-warning) 14%, transparent);
+  --color-error-suave: color-mix(in srgb, var(--color-error) 14%, transparent);
+  --color-info-suave: color-mix(in srgb, var(--color-info) 14%, transparent);
+  --color-resaltado: color-mix(in srgb, var(--color-warning) 42%, transparent);   /* texto marcado (<mark>) */
+
+  /* ---- Efectos HUD ---- */
+  --color-cuadricula: color-mix(in srgb, var(--color-acento) 8%, transparent);    /* cuadrícula tenue del fondo */
+  --color-halo: color-mix(in srgb, var(--color-acento) 30%, transparent);          /* resplandor superior y de iconos */
+  --color-esqueleto: color-mix(in srgb, var(--color-acento) 22%, var(--color-tarjeta-2));   /* cajita que late mientras cargan los iconos */
+  --sombra-tarjeta: 0 6px 22px color-mix(in srgb, var(--color-negro) 55%, transparent);
+  --sombra-acento: 0 0 22px color-mix(in srgb, var(--color-acento) 38%, transparent);
+  --sombra-acento-fuerte: 0 0 30px color-mix(in srgb, var(--color-acento) 55%, transparent);
+
+  /* ---- Degradados ---- */
+  --gradiente-principal: linear-gradient(135deg, var(--color-principal-hover), var(--color-principal));
+  --gradiente-principal-hover: linear-gradient(135deg, var(--color-principal-activo), var(--color-principal-hover));
+  --gradiente-fondo: linear-gradient(160deg, var(--color-fondo), var(--color-fondo-2));
+
+  /* ---- Radios (esquinas más rectas, estilo HUD) ---- */
+  --radio-sm: 4px;
+  --radio-md: 8px;
+  --radio-lg: 12px;
+
+  /* ---- Movimiento: duraciones y curvas usadas por TODAS las animaciones ---- */
+  --mov-rapido: 150ms;                                   /* micro-interacciones (hover, pulsación) */
+  --mov-medio: 260ms;                                    /* aperturas, entradas, cambios de estado */
+  --mov-lento: 480ms;                                    /* momentos destacados (ondas, línea de la barra) */
+  --mov-esqueleto: 1.4s;                                 /* vuelta completa del latido de carga */
+  --ease-salida: cubic-bezier(0.16, 1, 0.3, 1);          /* arranca rápido y frena suave (entradas) */
+  --ease-suave: cubic-bezier(0.4, 0, 0.2, 1);            /* transiciones de color/borde */
+  --ease-rebote: cubic-bezier(0.34, 1.56, 0.64, 1);      /* pequeño rebote (pop, selección, flechas) */
+
+  /* ---- Medidas ---- */
+  --ancho-contenedor: 520px;                             /* ancho de la página (crece en tablets y escritorio) */
+}
+
+/* ---- Tema claro: solo cambia valores de variables; se activa con <html data-tema="claro"> ---- */
+:root[data-tema="claro"] {
+  color-scheme: light;
+  --color-fondo: #F4F6FF;
+  --color-fondo-2: #DCE2F8;
+  --color-tarjeta: var(--color-blanco);
+  --color-tarjeta-2: #ECEFFB;
+  --color-texto: #12142B;
+  --color-texto-suave: #555A78;
+  --color-gris: #D0D5EA;
+  --color-gris-claro: #858AA6;
+  --color-acento-texto: var(--color-principal-hover);   /* sobre fondo claro el texto de acento usa el azul intermedio (buen contraste) */
+  /* Estados con más contraste sobre fondo claro */
+  --color-success-texto: #15803d;
+  --color-warning-texto: #a16207;
+  --color-error-texto: #dc2626;
+  --color-info-texto: #1d4ed8;
+  --color-halo: color-mix(in srgb, var(--color-acento) 18%, transparent);
+  --color-cuadricula: color-mix(in srgb, var(--color-acento) 9%, transparent);
+  --sombra-tarjeta: 0 6px 20px color-mix(in srgb, var(--color-principal) 14%, transparent);
+  --sombra-acento: 0 4px 18px color-mix(in srgb, var(--color-acento) 30%, transparent);
+  --sombra-acento-fuerte: 0 6px 24px color-mix(in srgb, var(--color-acento) 45%, transparent);
+}
+
+/* ---------- Base ---------- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: var(--fuente-texto);
+  /* Fondo HUD: cuadrícula tenue + halo azul superior + degradado */
+  background:
+    linear-gradient(var(--color-cuadricula) 1px, transparent 1px) 0 0 / 34px 34px,
+    linear-gradient(90deg, var(--color-cuadricula) 1px, transparent 1px) 0 0 / 34px 34px,
+    radial-gradient(ellipse 80% 45% at 50% -8%, var(--color-halo), transparent),
+    var(--gradiente-fondo);
+  background-attachment: fixed;
+  background-color: var(--color-fondo);   /* respaldo explícito del fondo */
+  color: var(--color-texto);
+  min-height: 100dvh;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+}
+a { color: var(--color-acento-texto); text-decoration: none; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input { font-family: inherit; color: inherit; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--color-acento-texto); outline-offset: 2px; }
+code { font-family: var(--fuente-codigo); font-size: 1.05em; padding: 0 0.3em; border-radius: 4px; background: color-mix(in srgb, currentColor 14%, transparent); }
+
+/* Icono Material Symbols: <span class="material-symbols-rounded">nombre</span> */
+.material-symbols-rounded {
+  font-family: var(--fuente-iconos);
+  font-weight: normal; font-style: normal; font-size: 24px; line-height: 1;
+  letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap;
+  direction: ltr; -webkit-font-smoothing: antialiased; font-feature-settings: 'liga'; user-select: none;
+}
+
+/* ---------- Estructura ---------- */
+/* Márgenes que respetan los bordes seguros (notch, esquinas redondeadas y barra de gestos) */
+.contenedor { width: 100%; max-width: var(--ancho-contenedor); margin: 0 auto; padding: 20px max(16px, env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); flex: 1; }
+.pila { display: flex; flex-direction: column; gap: 14px; }
+.nota { font-size: 12px; color: var(--color-texto-suave); text-align: center; }
+.pie { text-align: center; padding: 14px; font-family: var(--fuente-hud); font-size: 12px; color: var(--color-texto-suave); display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 10px; }   /* pie con versión y fecha */
+.vacio { text-align: center; color: var(--color-texto-suave); padding: 40px 16px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.vacio .material-symbols-rounded { font-size: 64px; color: var(--color-gris-claro); }
+
+/* Tarjeta con esquinas "HUD": dos corchetes azules en esquinas opuestas */
+.tarjeta { position: relative; background: var(--color-tarjeta); border: 1px solid var(--color-gris); border-radius: var(--radio-md); box-shadow: var(--sombra-tarjeta); padding: 20px; }
+.tarjeta::before, .tarjeta::after { content: ''; position: absolute; width: 16px; height: 16px; border: 2px solid var(--color-acento); pointer-events: none; }
+.tarjeta::before { top: -1px; left: -1px; border-right: none; border-bottom: none; border-top-left-radius: var(--radio-md); }
+.tarjeta::after { bottom: -1px; right: -1px; border-left: none; border-top: none; border-bottom-right-radius: var(--radio-md); }
+
+/* Título de sección con barra lateral (indica dónde empieza cada bloque) */
+.titulo-seccion { font-family: var(--fuente-titulo); font-size: 16px; font-weight: 700; color: var(--color-texto); border-left: 3px solid var(--color-acento); padding-left: 10px; letter-spacing: 0.02em; }
+
+/* ---------- Barra superior ---------- */
+.appbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 10px max(12px, env(safe-area-inset-left)); background: var(--color-tarjeta); border-bottom: 1px solid var(--color-gris); }
+.appbar::after { content: ''; position: absolute; left: 0; bottom: -1px; width: 88px; height: 1px; background: var(--color-acento); box-shadow: var(--sombra-acento); }   /* línea azul que se extiende al cargar */
+.appbar__titulo { flex: 1; font-family: var(--fuente-titulo); font-weight: 700; font-size: 17px; text-align: center; letter-spacing: 0.04em; }
+.appbar__espacio { min-width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }   /* hueco izquierdo: equilibra el botón de tema de la derecha */
+
+/* ---------- Botones ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 20px; border-radius: var(--radio-sm); font-family: var(--fuente-titulo); font-weight: 700; font-size: 15px; letter-spacing: 0.04em; border: 1px solid transparent; text-align: center; white-space: nowrap; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn--primario { background: var(--gradiente-principal); color: var(--color-blanco); border-color: var(--color-acento); box-shadow: var(--sombra-acento); }
+.btn--primario:hover:not(:disabled) { background: var(--gradiente-principal-hover); box-shadow: var(--sombra-acento-fuerte); }   /* hover: azul intermedio → vivo */
+.btn--primario:active:not(:disabled) { background: var(--color-principal-activo); }                                               /* pulsado: azul activo */
+.btn--secundario { background: var(--color-tarjeta-2); border-color: var(--color-acento-borde); color: var(--color-texto); }
+.btn--secundario:hover { background: var(--color-acento-suave); border-color: var(--color-acento); }
+.btn--fantasma { color: var(--color-acento-texto); }
+.btn--fantasma:hover { background: var(--color-acento-suave); }
+.btn-icono { width: 40px; height: 40px; border-radius: var(--radio-sm); display: inline-flex; align-items: center; justify-content: center; color: var(--color-texto); flex-shrink: 0; }
+.btn-icono:hover { background: var(--color-acento-suave); color: var(--color-acento-texto); }
+
+/* ---------- Buscador ---------- */
+.campo__entrada { width: 100%; background: var(--color-fondo); border: 1px solid var(--color-gris); border-radius: var(--radio-md); padding: 12px 14px; font-size: 16px; outline: none; }   /* 16 px: evita el zoom automático de iPhone al enfocar */
+.campo__entrada:focus { border-color: var(--color-acento); box-shadow: var(--sombra-acento); }
+.buscador { position: relative; flex: 1; }
+.buscador > .material-symbols-rounded { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--color-texto-suave); }
+.buscador .campo__entrada { padding-left: 44px; padding-right: 14px; }
+
+/* ---------- Chips (índice de temas) ---------- */
+.chip { padding: 8px 14px; border-radius: var(--radio-sm); border: 1px solid var(--color-gris); background: var(--color-fondo); font-size: 14px; color: var(--color-texto); }
+
+/* ---------- Insignias (etiquetas pequeñas, para usar dentro de las respuestas) ---------- */
+.insignia { display: inline-flex; align-items: center; gap: 4px; font-family: var(--fuente-titulo); font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: var(--radio-sm); background: var(--color-acento-suave); color: var(--color-acento-texto); vertical-align: middle; white-space: nowrap; line-height: 1.2; margin: 0 1px; }
+.insignia .material-symbols-rounded { font-size: 14px; }
+.insignia--gris { background: var(--color-gris); color: var(--color-texto); }
+.insignia--exito { background: var(--color-success-suave); color: var(--color-success-texto); }
+.insignia--error { background: var(--color-error-suave); color: var(--color-error-texto); }
+.insignia--aviso { background: var(--color-warning-suave); color: var(--color-warning-texto); }
+
+/* ---------- Avisos en línea (recuadros de color para las respuestas) ---------- */
+.aviso { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: var(--radio-md); border: 1px solid; font-size: 14px; }
+.aviso .material-symbols-rounded { font-size: 22px; flex-shrink: 0; }
+.aviso__cuerpo { flex: 1; min-width: 0; }
+.aviso--info { background: var(--color-info-suave); border-color: var(--color-info); }
+.aviso--info > .material-symbols-rounded { color: var(--color-info-texto); }
+.aviso--warning { background: var(--color-warning-suave); border-color: var(--color-warning); }
+.aviso--warning > .material-symbols-rounded { color: var(--color-warning-texto); }
+.aviso--error { background: var(--color-error-suave); border-color: var(--color-error); }
+.aviso--error > .material-symbols-rounded { color: var(--color-error-texto); }
+.aviso--success { background: var(--color-success-suave); border-color: var(--color-success); }
+.aviso--success > .material-symbols-rounded { color: var(--color-success-texto); }
+
+/* ---------- Centro de información: portada, índice y ventanas desplegables ---------- */
+.ayuda-hero { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.ayuda-hero__icono { font-size: 44px; color: var(--color-acento-texto); filter: drop-shadow(0 0 10px var(--color-halo)); }   /* icono grande de la portada */
+.ayuda-hero__titulo { font-family: var(--fuente-titulo); font-size: 22px; font-weight: 700; }
+.ayuda-hero__texto { font-size: 14px; color: var(--color-texto-suave); }
+.ayuda-hero .buscador { flex: none; width: 100%; margin-top: 4px; }   /* el buscador ocupa todo el ancho de la tarjeta */
+.ayuda-indice { display: flex; flex-wrap: wrap; gap: 8px; }
+.ayuda-indice:empty { display: none; }                                  /* sin JavaScript no hay chips: no deja hueco */
+.ayuda-indice .chip { display: inline-flex; align-items: center; gap: 6px; }
+.ayuda-indice .chip .material-symbols-rounded { font-size: 18px; }
+.ayuda-acciones { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }   /* contador + abrir/cerrar todas */
+.contador-lista { font-family: var(--fuente-hud); font-size: 14px; color: var(--color-texto); white-space: nowrap; }
+.ayuda-seccion { scroll-margin-top: 76px; }                             /* al saltar a una sección no queda tapada por la barra */
+.ayuda-seccion .titulo-seccion .faq__ic { margin-right: 6px; font-size: 20px; }   /* icono al inicio del título de cada sección */
+
+/* Ventana desplegable: <details class="faq"> (funciona hasta sin JavaScript) */
+.faq { scroll-margin-top: 76px; border: 1px solid var(--color-gris); border-radius: var(--radio-md); background: var(--color-fondo); }
+.faq[open] { border-color: var(--color-acento-borde); }
+.faq > summary { list-style: none; display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; font-family: var(--fuente-titulo); font-weight: 700; font-size: 15px; border-radius: var(--radio-md); }
+.faq > summary::-webkit-details-marker { display: none; }
+.faq > summary:hover { background: var(--color-acento-suave); }
+.faq > summary:focus-visible { outline: 2px solid var(--color-acento-texto); outline-offset: 2px; }   /* foco visible al navegar con teclado */
+.faq__flecha { margin-left: auto; flex-shrink: 0; color: var(--color-acento-texto); }
+.faq[open] .faq__flecha { transform: rotate(180deg); }               /* la flecha se da vuelta al abrir */
+.faq__ic { font-size: 18px; vertical-align: middle; color: var(--color-acento-texto); }   /* icono dentro de una frase o título */
+
+/* ---------- Formato del contenido de cada respuesta ----------
+   Qué hace: da estilo a TODO lo que se escriba dentro de <div class="faq__respuesta">: párrafos, títulos, negrita, cursiva,
+   subrayado, tachado, marcado, listas (también anidadas), citas, código, teclas, tablas, imágenes, videos, avisos, botones y colores.
+   Para qué sirve: poder escribir en cada ventana desplegable cualquier tipo de texto con formato sin tocar el CSS.
+   Los hijos directos se separan con margen (no con flex) para que texto suelto y etiquetas en línea fluyan con normalidad. */
+.faq__respuesta { padding: 4px 14px 14px; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.faq__respuesta > * + * { margin-top: 10px; }
+.faq__respuesta h3 { font-family: var(--fuente-titulo); font-size: 16px; font-weight: 700; color: var(--color-texto); border-left: 3px solid var(--color-acento); padding-left: 10px; letter-spacing: 0.02em; margin-top: 16px; }   /* título dentro de la respuesta */
+.faq__respuesta h4 { font-family: var(--fuente-titulo); font-size: 14px; font-weight: 700; color: var(--color-acento-texto); letter-spacing: 0.04em; text-transform: uppercase; margin-top: 14px; }   /* subtítulo */
+.faq__respuesta strong, .faq__respuesta b { font-weight: 700; }
+.faq__respuesta em, .faq__respuesta i { font-style: italic; }
+.faq__respuesta u { text-decoration: underline; text-underline-offset: 2px; }
+.faq__respuesta s, .faq__respuesta del { text-decoration: line-through; color: var(--color-texto-suave); }
+.faq__respuesta mark { background: var(--color-resaltado); color: inherit; padding: 0 0.25em; border-radius: 3px; }   /* texto resaltado */
+.faq__respuesta small { font-size: 12px; color: var(--color-texto-suave); }
+.faq__respuesta sub, .faq__respuesta sup { font-size: 0.75em; line-height: 0; }
+.faq__respuesta a:not(.btn) { color: var(--color-acento-texto); text-decoration: underline; text-underline-offset: 2px; }
+.faq__respuesta a:not(.btn):hover { color: var(--color-texto); }
+.faq__respuesta ul, .faq__respuesta ol { padding-left: 20px; }
+.faq__respuesta li + li { margin-top: 4px; }
+.faq__respuesta li > ul, .faq__respuesta li > ol { margin-top: 4px; }   /* listas anidadas */
+.faq__respuesta li::marker { color: var(--color-acento-texto); }
+.faq__respuesta blockquote { border-left: 3px solid var(--color-acento); background: var(--color-acento-suave); padding: 10px 14px; border-radius: 0 var(--radio-md) var(--radio-md) 0; font-style: italic; }   /* cita */
+.faq__respuesta blockquote footer, .faq__respuesta cite { font-size: 12px; font-style: normal; color: var(--color-texto-suave); }
+.faq__respuesta pre { font-family: var(--fuente-mono); font-size: 13px; line-height: 1.5; background: var(--color-fondo); border: 1px solid var(--color-gris); border-radius: var(--radio-md); padding: 12px 14px; overflow-x: auto; white-space: pre; overflow-wrap: normal; }   /* bloque de código */
+.faq__respuesta pre code { font-family: inherit; font-size: inherit; padding: 0; background: none; }
+.faq__respuesta kbd { font-family: var(--fuente-mono); font-size: 12px; padding: 1px 6px; border: 1px solid var(--color-gris-claro); border-bottom-width: 2px; border-radius: var(--radio-sm); background: var(--color-tarjeta-2); color: var(--color-texto); white-space: nowrap; }   /* tecla */
+.faq__respuesta hr { border: none; height: 1px; background: var(--color-gris); margin-top: 14px; margin-bottom: 14px; }
+.faq__respuesta img, .faq__respuesta video, .faq__respuesta iframe { display: block; max-width: 100%; border-radius: var(--radio-md); border: 1px solid var(--color-gris); }
+.faq__respuesta iframe { width: 100%; aspect-ratio: 16 / 9; }
+.faq__respuesta figure { display: block; }
+.faq__respuesta figcaption { margin-top: 6px; font-size: 12px; color: var(--color-texto-suave); text-align: center; }
+.faq__respuesta dt { font-family: var(--fuente-titulo); font-weight: 700; }
+.faq__respuesta dd { margin-left: 14px; color: var(--color-texto-suave); }
+.faq__respuesta dd + dt { margin-top: 8px; }
+.faq__respuesta .aviso p + p { margin-top: 6px; }
+/* Tabla: se escribe dentro de <div class="tabla-caja"> para que en celulares se pueda deslizar de lado */
+.tabla-caja { overflow-x: auto; border: 1px solid var(--color-gris); border-radius: var(--radio-md); }
+.tabla-caja table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 300px; }
+.tabla-caja th, .tabla-caja td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--color-gris); }
+.tabla-caja tr:last-child td { border-bottom: none; }
+.tabla-caja th { font-family: var(--fuente-titulo); font-size: 12px; letter-spacing: 0.02em; color: var(--color-acento-texto); background: var(--color-tarjeta-2); white-space: nowrap; }
+/* Utilidades de formato: colores de texto, alineación y tamaño (se usan con <span class="..."> o <p class="...">) */
+.txt-acento { color: var(--color-acento-texto); }
+.txt-exito { color: var(--color-success-texto); }
+.txt-aviso { color: var(--color-warning-texto); }
+.txt-error { color: var(--color-error-texto); }
+.txt-info { color: var(--color-info-texto); }
+.txt-suave { color: var(--color-texto-suave); }
+.txt-centro { text-align: center; }
+.txt-derecha { text-align: right; }
+.txt-grande { font-size: 18px; }
+.txt-pequeno { font-size: 12px; }
+
+/* ============================================================
+   MOVIMIENTO — animaciones (las mismas de ÉLIX)
+   Qué hace: entrada en cascada de los bloques, línea de la barra que se extiende, apertura de las respuestas,
+   hover/pulsación, ondas al tocar, corchetes HUD que se abren, selección de chips y cambio de tema con fundido.
+   Para qué sirve: dar respuesta visual a cada acción. Todo usa los tokens --mov-* y --ease-* del :root
+   y NO dependen del ajuste "reducir movimiento" del sistema (igual que ÉLIX, que las deja activas por defecto).
+   ============================================================ */
+
+/* ---------- Keyframes ---------- */
+@keyframes entrar { from { opacity: 0; transform: translateY(10px); } }                      /* aparece subiendo */
+@keyframes pop { 0% { opacity: 0; transform: scale(.85); } 60% { opacity: 1; transform: scale(1.06); } 100% { transform: scale(1); } }
+@keyframes seleccion { 0% { transform: scale(.94); } 60% { transform: scale(1.03); } 100% { transform: scale(1); } }
+@keyframes onda { to { transform: scale(1); opacity: 0; } }                                  /* onda que nace al tocar */
+@keyframes extender { from { width: 0; } }                                                   /* la línea de la barra se extiende */
+@keyframes esqueleto-pulso { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }                /* latido suave de la cajita de carga */
+@keyframes vt-salir { to { opacity: 0; } }
+@keyframes vt-entrar { from { opacity: 0; } }
+
+/* ---------- Cambio de tema: fundido cruzado (navegadores con View Transitions) ---------- */
+::view-transition-old(root) { animation: vt-salir var(--mov-medio) var(--ease-suave) both; }
+::view-transition-new(root) { animation: vt-entrar var(--mov-medio) var(--ease-suave) both; }
+/* Alternativa cuando no hay View Transitions: los colores se funden (script.js pone la clase unos instantes) */
+:root.tema-cambiando, :root.tema-cambiando *, :root.tema-cambiando *::before, :root.tema-cambiando *::after {
+  transition: background-color var(--mov-medio) var(--ease-suave), color var(--mov-medio) var(--ease-suave), border-color var(--mov-medio) var(--ease-suave), box-shadow var(--mov-medio) var(--ease-suave) !important;
+}
+
+/* ---------- Entrada de pantalla: los bloques suben en cascada ---------- */
+.contenedor > * { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: calc(var(--i, 0) * 60ms); }
+.contenedor > :nth-child(2) { --i: 1; }
+.contenedor > :nth-child(3) { --i: 2; }
+.contenedor > :nth-child(4) { --i: 3; }
+.contenedor > :nth-child(5) { --i: 4; }
+.contenedor > :nth-child(n+6) { --i: 5; }
+.appbar::after { animation: extender var(--mov-lento) var(--ease-salida) backwards; }   /* la línea azul de la barra se extiende */
+
+/* ---------- Respuestas: al abrir una ventana, su contenido sube suavemente ---------- */
+.faq[open] .faq__respuesta { animation: entrar var(--mov-medio) var(--ease-salida) backwards; }
+.faq { transition: border-color var(--mov-rapido) var(--ease-suave); }
+
+/* ---------- Hover, pulsación y ondas ---------- */
+/* Elementos "tocables": posición relativa + recorte para que la onda no se salga */
+.btn, .btn-icono, .chip { position: relative; overflow: hidden; }
+/* Onda que nace en el punto donde se toca (la crea script.js); usa el color del texto del propio elemento */
+.onda { position: absolute; border-radius: 50%; background: currentColor; opacity: .28; transform: scale(0); pointer-events: none; animation: onda var(--mov-lento) var(--ease-salida) forwards; }
+.btn, .btn-icono, .chip {
+  transition: transform var(--mov-rapido) var(--ease-suave), background-color var(--mov-rapido) var(--ease-suave), border-color var(--mov-rapido) var(--ease-suave), box-shadow var(--mov-rapido) var(--ease-suave), color var(--mov-rapido) var(--ease-suave);
+}
+.faq > summary { transition: background-color var(--mov-rapido) var(--ease-suave); }
+.btn:hover:not(:disabled), .chip:hover { transform: translateY(-1px); }
+.btn:active:not(:disabled) { transform: translateY(0) scale(.97); }
+.chip:active { transform: scale(.97); }
+.btn-icono:hover { transform: scale(1.08); }
+.btn-icono:active { transform: scale(.92); }
+.chip:hover { border-color: var(--color-acento-borde); }
+
+/* Iconos: cada uno reacciona a su botón; la flecha de las ventanas rebota al girar */
+.material-symbols-rounded { transition: transform var(--mov-medio) var(--ease-rebote); }
+.btn:hover .material-symbols-rounded { transform: scale(1.14); }
+[data-tema-boton]:hover .material-symbols-rounded { transform: rotate(60deg); }   /* el icono de tema gira al pasar el mouse (como el engranaje de ÉLIX) */
+
+/* Tarjetas HUD: los corchetes de las esquinas se abren al pasar el mouse */
+.tarjeta::before, .tarjeta::after { transition: width var(--mov-medio) var(--ease-salida), height var(--mov-medio) var(--ease-salida); }
+.tarjeta:hover::before, .tarjeta:hover::after { width: 26px; height: 26px; }
+
+/* Buscador: el campo se ilumina al enfocar */
+.campo__entrada { transition: border-color var(--mov-rapido), box-shadow var(--mov-rapido); }
+
+/* Selección (chip recién tocado) */
+.chip:focus-visible { animation: seleccion var(--mov-medio) var(--ease-rebote); }
+
+/* ---------- Iconos mientras la fuente de iconos no llegó (script.js pone .iconos-cargando en <html>) ----------
+   Una cajita que late en vez del nombre del icono escrito como texto */
+.iconos-cargando .material-symbols-rounded { display: inline-block; width: 1em; height: 1em; overflow: hidden; color: transparent !important; background: var(--color-esqueleto); border-radius: var(--radio-sm); animation: esqueleto-pulso var(--mov-esqueleto) ease-in-out infinite; }
+
+/* ============================================================
+   ELEMENTOS DEL SISTEMA CON LA ESTÉTICA DE ÉLIX
+   Barras de desplazamiento, selección de texto, cursor, autocompletado y buscador.
+   ============================================================ */
+:root { accent-color: var(--color-acento); }
+/* Barras de desplazamiento finas, del color de la app */
+* { scrollbar-width: thin; scrollbar-color: var(--color-acento-borde) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-acento-borde); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-acento); background-clip: padding-box; }
+::-webkit-scrollbar-button { display: none; }                /* sin flechas de las barras clásicas */
+::selection { background: var(--color-acento-borde); color: var(--color-texto); }
+input { caret-color: var(--color-acento-texto); }
+::placeholder { color: var(--color-texto-suave); opacity: .75; }
+/* Autocompletado del navegador (fondo amarillo/azul por defecto) con los colores de la app */
+input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-texto); caret-color: var(--color-acento-texto);
+  box-shadow: 0 0 0 1000px var(--color-fondo) inset; transition: background-color 9999s ease-out;
+}
+/* Buscador sin la "x" nativa del navegador (Esc borra la búsqueda) */
+input[type="search"]::-webkit-search-decoration, input[type="search"]::-webkit-search-cancel-button, input[type="search"]::-webkit-search-results-button { -webkit-appearance: none; appearance: none; display: none; }
+
+/* ---------- Pantallas grandes: la página se ensancha un poco ---------- */
+@media (min-width: 768px) { :root { --ancho-contenedor: 600px; } .contenedor { padding-top: 32px; } }

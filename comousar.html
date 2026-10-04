@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Centro de información</title>
+  <meta name="description" content="Centro de información con ventanas desplegables.">
+  <!-- Tipografías (Google Fonts): Oxanium (títulos), Space Grotesk (texto), Share Tech Mono (HUD), JetBrains Mono (código) y Cutive Mono (código en línea).
+       Cada una es una variable --fuente-* en el :root de css/style.css -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cutive+Mono&family=JetBrains+Mono:wght@400;700&family=Oxanium:wght@200..800&family=Share+Tech+Mono&family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+  <!-- Iconos (fonts.google.com/icons): Material Symbols Rounded, con eje de relleno (FILL) -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Tema claro/oscuro: se carga en el <head> para aplicar el tema antes de pintar y evitar el parpadeo. Toda la lógica está en js/script.js -->
+  <script src="js/script.js"></script>
+</head>
+<body>
+  <!-- Barra superior: hueco a la izquierda (equilibra), título centrado y botón para cambiar de tema (su icono lo pone script.js) -->
+  <header class="appbar">
+    <span class="appbar__espacio" aria-hidden="true"></span>
+    <h1 class="appbar__titulo">Centro de información</h1>
+    <button class="btn-icono" id="btnTema" type="button" data-tema-boton aria-label="Cambiar a tema claro"><span class="material-symbols-rounded">light_mode</span></button>
+  </header>
+
+  <!-- ============================================================================================================
+       CÓMO EDITAR ESTA PÁGINA
+       - Cada ventana desplegable es un bloque <details class="faq" id="faq-algo"> ... </details>. Dentro de <div class="faq__respuesta">
+         se puede escribir CUALQUIER formato HTML (párrafos, títulos h3/h4, listas, tablas, citas, código, avisos, botones, imágenes...).
+       - Cada grupo de ventanas va dentro de <section class="ayuda-seccion pila" id="nombre-unico">. El chip del índice se crea solo
+         a partir del icono y el texto del título de la sección.
+       - Los iconos salen de https://fonts.google.com/icons (se escribe el nombre dentro de <span class="material-symbols-rounded">).
+       - Para enlazar a otra ventana: <a href="#faq-id-de-la-otra">texto</a> (la abre y baja hasta ella).
+       ============================================================================================================ -->
+  <main class="contenedor pila">
+
+    <!-- Portada + buscador (el buscador lo maneja script.js) -->
+    <section class="tarjeta ayuda-hero">
+      <span class="material-symbols-rounded ayuda-hero__icono">contact_support</span>
+      <h2 class="ayuda-hero__titulo">¿Qué quieres saber?</h2>
+      <p class="ayuda-hero__texto">Toda la información en ventanas desplegables. Busca una palabra o elige un tema.</p>
+      <label class="buscador">
+        <span class="material-symbols-rounded">search</span>
+        <input class="campo__entrada" id="buscador" type="search" placeholder="Ej.: colores, tablas, código…" aria-label="Buscar en la página" autocomplete="off" autocapitalize="none" spellcheck="false">
+      </label>
+    </section>
+
+    <!-- Índice de temas: script.js crea aquí un chip por cada sección -->
+    <nav class="ayuda-indice" id="indice" aria-label="Temas"></nav>
+
+    <!-- Contador de ventanas visibles + abrir/cerrar todas (lo maneja script.js) -->
+    <div class="ayuda-acciones">
+      <span class="contador-lista" id="cuenta" aria-live="polite"></span>
+      <button class="btn btn--fantasma" id="btnAbrirTodas" type="button"><span class="material-symbols-rounded">unfold_more</span><span class="btn__texto">Abrir todas</span></button>
+    </div>
+
+    <!-- ===================== EMPEZAR ===================== -->
+    <section class="ayuda-seccion pila" id="empezar">
+      <h2 class="titulo-seccion"><span class="material-symbols-rounded faq__ic">rocket_launch</span><span class="titulo-seccion__texto">Empezar</span></h2>
+
+      <details class="faq" id="faq-que-es">
+        <summary><span>¿Qué es esta página?</span><span class="material-symbols-rounded faq__flecha">expand_more</span></summary>
+        <div class="faq__respuesta">
+          <p>Es una página sencilla organizada en <strong>ventanas desplegables</strong>: tocas el título de una pregunta y se abre su respuesta. Cada respuesta puede tener <em>cualquier tipo de formato</em>: texto, listas, tablas, código, avisos y más.</p>
+          <p>Sirve para explicar cosas en orden y que quien lea encuentre rápido lo que busca, sin tener que recorrer un texto larguísimo.</p>
+        </div>
+      </details>
+
+      <details class="faq" id="faq-resumen">
+        <summary><span>Resumen en 30 segundos</span><span class="material-symbols-rounded faq__flecha">expand_more</span></summary>
+        <div class="faq__respuesta">
+          <ol>
+            <li>Elige un <strong>tema</strong> en los botones de arriba, o escribe una palabra en el <strong>buscador</strong>.</li>
+            <li>Toca el <strong>título</strong> de una ventana para abrirla; tócalo otra vez para cerrarla.</li>
+            <li>Usa <strong>Abrir todas</strong> si prefieres leerlo todo de corrido.</li>
+            <li>Cambia entre tema <strong>claro</strong> y <strong>oscuro</strong> con el botón de la esquina superior derecha.</li>
+          </ol>
+        </div>
+      </details>
+
+      <details class="faq" id="faq-tema">
+        <summary><span>¿Puedo cambiar entre tema claro y oscuro?</span><span class="material-symbols-rounded faq__flecha">expand_more</span></summary>
+        <div class="faq__respuesta">
+          <p>Sí. Toca el icono <span class="material-symbols-rounded faq__ic">light_mode</span> / <span class="material-symbols-rounded faq__ic">dark_mode</span> de la barra superior. La elección <strong>se recuerda</strong> la próxima vez que abras la página.</p>
+          <p>Si quieres saber cómo se definen los colores de cada tema, mira <a href="#faq-colores">¿Cómo cambio los colores?</a></p>
+        </div>
+      </details>
+    </section>
+
+    <!-- ===================== FORMATOS DE TEXTO ===================== -->
+    <section class="ayuda-seccion pila" id="formatos">
+      <h2 class="titulo-seccion"><span class="material-symbols-rounded faq__ic">text_fields</span><span class="titulo-seccion__texto">Formatos de texto</span></h2>
+
+      <details class="faq" id="faq-estilos">
+        <summary><span>Estilos básicos de texto</span><span class="material-symbols-rounded faq__flecha">expand_more</span></summary>
+        <div class="faq__respuesta">
+          <p>Puedes escribir en <strong>negrita</strong>, en <em>cursiva</em>, <u>subrayado</u>, <s>tachado</s> o <mark>resaltado</mark>. También se pueden combinar: <strong><em>negrita y cursiva</em></strong>.</p>
+          <p>Para nombres técnicos usa <code>código en línea</code>; para teclas, <kbd>Ctrl</kbd> + <kbd>F</kbd>. Y si hace falta, <small>texto pequeño para aclaraciones</small>, H<sub>2</sub>O o x<sup>2</sup>.</p>
+          <p>Los <a href="https://fonts.google.com/icons" target="_blank" rel="noopener">enlaces</a> se ven subrayados y se iluminan al pasar el mouse.</p>
+        </div>
+      </details>
+
+      <details class="faq" id="faq-titulos">
+        <summary><span>Títulos y subtítulos dentro de una respuesta</span><span class="material-symbols-rounded faq__flecha">expand_more</span></summary>
+        <div class="faq__respuesta">
+          <p>Cuando una respuesta es larga, conviene dividirla en partes.</p>
+          <h3>Esto es un título (h3)</h3>
+          <p>Lleva la barra azul lateral, igual que los títulos de sección.</p>
+          <h4>Esto es un subtítulo (h4)</h4>
+          <p>Va en mayúsculas y con el azul de acento.</p>
+        </div>
+      </details>
+
+      <details class="faq" id="faq-listas">
+        <summary><span>Listas y listas anidadas</span><span class="material-symbols-rounded faq__flecha">expand_more</span></summary>
+        <div class="faq__respuesta">
+          <h4>Con viñetas</h4>
+          <ul>
+            <li>Primer elemento</li>
+            <li>Segundo elemento
+              <ul>
+                <li>Sub-elemento A</li>
+                <li>Sub-elemento B</li>
+              </ul>
+            </li>
+            <li>Tercer elemento</li>
+          </ul>
+          <h4>Numerada</h4>
+          <ol>
+            <li>Paso uno</li>
+            <li>Paso dos</li>
+            <li>Paso tres</li>
+          </ol>
+          <h4>Lista de definiciones</h4>
+          <dl>
+            <dt>Ventana</dt>
+            <dd>Bloque que se abre y se cierra al tocar su título.</dd>
+            <dt>Sección</dt>
+            <dd>Grupo de ventanas con un mismo tema.</dd>
+          </dl>
+        </div>
+      </details>
+
+      <details class="faq" id="faq-citas-codigo">
+        <summary><span>Citas y bloques de código</span><span class="material-symbols-rounded faq__flecha">expand_more</span></summary>
+        <div class="faq__respuesta">
+          <blockquote>
+            <p>Una cita se destaca con la barra azul y un fondo suave.</p>
+            <footer>— Nombre de quien lo dijo</footer>
+          </blockquote>
+          <p>Y un bloque de código, que se puede deslizar de lado si es muy ancho:</p>
+          <pre><code>function saludar(nombre) {
+  return `Hola, ${nombre}`;
+}
+
+console.log(saludar('mundo'));</code></pre>
+        </div>
+      </details>
+
+      <details class="faq" id="faq-tablas">
+        <summary><span>Tablas</span><span class="material-symbols-rounded faq__flecha">expand_more</span></summary>
+        <div class="faq__respuesta">
+          <p>Las tablas se escriben dentro de <code>&lt;div class="tabla-caja"&gt;</code> para que en el celular se puedan deslizar de lado.</p>
+          <div class="tabla-caja">
+            <table>
+              <thead>
+                <tr><th>Plan</th><th>Duración</th><th>Estado</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Básico</td><td>1 mes</td><td><span class="insignia insignia--exito">Activo</span></td></tr>
+                <tr><td>Estándar</td><td>3 meses</td><td><span class="insignia insignia--aviso">Pendiente</span></td></tr>
+                <tr><td>Premium</td><td>12 meses</td><td><span class="insignia insignia--gris">Agotado</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+
+      <details class="faq" id="faq-avisos">
+        <summary><span>Avisos y recuadros de color</span><span class="material-symbols-rounded faq__flecha">expand_more</span></summary>
+        <div class="faq__respuesta">
+          <div class="aviso aviso--info"><span class="material-symbols-rounded">info</span><div class="aviso__cuerpo"><p><strong>Información.</strong> Para datos útiles que conviene tener presentes.</p></div></div>
+          <div class="aviso aviso--success"><span class="material-symbols-rounded">check_circle</span><div class="aviso__cuerpo"><p><strong>Correcto.</strong> Para confirmar que algo salió bien.</p></div></div>
+          <div class="aviso aviso--warning"><span class="material-symbols-rounded">warning</span><div class="aviso__cuerpo"><p><strong>Atención.</strong> Para algo que hay que hacer con cuidado.</p></div></div>
+          <div class="aviso aviso--error"><span class="material-symbols-rounded">error</span><div class="aviso__cuerpo"><p><strong>Importante.</strong> Para errores o cosas que no se pueden deshacer.</p></div></div>
+        </div>
+      </details>
+
+      <details class="faq" id="faq-botones">
+        <summary><span>Botones, insignias y colores de texto</span><span class="material-symbols-rounded faq__flecha">expand_more</span></summary>
+        <div class="faq__respuesta">
+          <h4>Botones</h4>
+          <p>
+            <a class="btn btn--primario" href="#empezar"><span class="material-symbols-rounded">rocket_launch</span>Primario</a>
+            <a class="btn btn--secundario" href="#formatos">Secundario</a>
+            <a class="btn btn--fantasma" href="#uso">Fantasma</a>
+          </p>
+          <h4>Insignias</h4>
+          <p>Etiquetas pequeñas: <span class="insignia">Nuevo</span> <span class="insignia insignia--exito">Listo</span> <span class="insignia insignia--aviso">Revisar</span> <span class="insignia insignia--error">Urgente</span> <span class="insignia insignia--gris">Archivado</span></p>
+          <h4>Colores de texto</h4>
+          <p><span class="txt-acento">Texto azul de acento</span> · <span class="txt-exito">texto verde</span> · <span class="txt-aviso">texto amarillo</span> · <span class="txt-error">texto rojo</span> · <span class="txt-info">texto informativo</span> · <span class="txt-suave">texto suave</span></p>
+          <p class="txt-centro">Párrafo centrado</p>
+          <p class="txt-derecha">Párrafo a la derecha</p>
+          <p class="txt-grande">Texto más grande</p>
+        </div>
+      </details>
+
+      <details class="faq" id="faq-multimedia">
+        <summary><span>Imágenes y videos</span><span class="material-symbols-rounded faq__flecha">expand_more</span></summary>
+        <div class="faq__respuesta">
+          <p>Las imágenes, los videos y los videos incrustados (por ejemplo de YouTube) se ajustan solos al ancho de la ventana y llevan las esquinas redondeadas. Un ejemplo de cómo escribirlos:</p>
+          <pre><code>&lt;figure&gt;
+  &lt;img src="img/foto.jpg" alt="Descripción de la foto"&gt;
+  &lt;figcaption&gt;Pie de foto opcional&lt;/figcaption&gt;
+&lt;/figure&gt;
+
+&lt;iframe src="https://www.youtube.com/embed/ID_DEL_VIDEO" allowfullscreen&gt;&lt;/iframe&gt;</code></pre>
+          <p><small>Guarda las imágenes en una carpeta <code>img/</code> junto a <code>index.html</code>.</small></p>
+        </div>
+      </details>
+    </section>
+
+    <!-- ===================== CÓMO EDITAR ===================== -->
+    <section class="ayuda-seccion pila" id="uso">
+      <h2 class="titulo-seccion"><span class="material-symbols-rounded faq__ic">edit_note</span><span class="titulo-seccion__texto">Cómo editar la página</span></h2>
+
+      <details class="faq" id="faq-agregar">
+        <summary><span>¿Cómo agrego una ventana nueva?</span><span class="material-symbols-rounded faq__flecha">expand_more</span></summary>
+        <div class="faq__respuesta">
+          <ol>
+            <li>Abre <code>index.html</code> y copia un bloque <code>&lt;details&gt;</code> completo.</li>
+            <li>Pégalo dentro de la sección que quieras.</li>
+            <li>Cambia el <code>id</code> (debe ser único), el título y el contenido.</li>
+          </ol>
+          <pre><code>&lt;details class="faq" id="faq-mi-ventana"&gt;
+  &lt;summary&gt;&lt;span&gt;Mi pregunta&lt;/span&gt;&lt;span class="material-symbols-rounded faq__flecha"&gt;expand_more&lt;/span&gt;&lt;/summary&gt;
+  &lt;div class="faq__respuesta"&gt;
+    &lt;p&gt;Mi respuesta, con &lt;strong&gt;cualquier formato&lt;/strong&gt;.&lt;/p&gt;
+  &lt;/div&gt;
+&lt;/details&gt;</code></pre>
+          <div class="aviso aviso--info"><span class="material-symbols-rounded">lightbulb</span><div class="aviso__cuerpo"><p>El buscador y el contador de ventanas se actualizan solos: no hay que tocar el JavaScript.</p></div></div>
+        </div>
+      </details>
+
+      <details class="faq" id="faq-seccion">
+        <summary><span>¿Cómo agrego una sección nueva?</span><span class="material-symbols-rounded faq__flecha">expand_more</span></summary>
+        <div class="faq__respuesta">
+          <p>Copia una <code>&lt;section class="ayuda-seccion pila"&gt;</code> completa, cambia su <code>id</code> y el icono y texto de su título. El chip del índice de arriba aparece solo.</p>
+          <p>Los iconos se eligen en <a href="https://fonts.google.com/icons" target="_blank" rel="noopener">fonts.google.com/icons</a>: escribe el nombre del icono dentro del <code>&lt;span class="material-symbols-rounded"&gt;</code>.</p>
+        </div>
+      </details>
+
+      <details class="faq" id="faq-colores">
+        <summary><span>¿Cómo cambio los colores?</span><span class="material-symbols-rounded faq__flecha">expand_more</span></summary>
+        <div class="faq__respuesta">
+          <p>Todos los colores son variables al inicio de <code>css/style.css</code>, en el bloque <code>:root</code>. Los tres azules base son:</p>
+          <pre><code>--color-principal: #000180;
+--color-principal-hover: #1B2FBF;
+--color-principal-activo: #3248E6;</code></pre>
+          <p>El resto (acentos, bordes, halos, sombras) se calcula a partir de ellos, así que cambiar estas tres líneas recolorea toda la página. El tema claro tiene su propio bloque, <code>:root[data-tema="claro"]</code>.</p>
+        </div>
+      </details>
+    </section>
+
+    <!-- Sin resultados de la búsqueda (lo muestra script.js) -->
+    <div class="vacio" id="sinResultados" hidden>
+      <span class="material-symbols-rounded">search_off</span>
+      <p>No encontramos nada con esa búsqueda. Prueba con otra palabra o revisa los temas de arriba.</p>
+    </div>
+
+    <!-- Cierre -->
+    <section class="tarjeta pila" id="cierre">
+      <h2 class="titulo-seccion">¿Sigues con dudas?</h2>
+      <p>Si no encontraste lo que buscabas, prueba con otra palabra en el buscador o abre todas las ventanas con el botón <strong>Abrir todas</strong>.</p>
+    </section>
+  </main>
+
+  <!-- Pie: versión y fecha de la última modificación de index.html (actualizar cada vez que se edite este archivo) -->
+  <footer class="pie">
+    <span id="pieVersion">Versión 1.0.0</span>
+    <span aria-hidden="true">·</span>
+    <span id="pieFecha">03/10/2026</span>
+  </footer>
+</body>
+</html>
