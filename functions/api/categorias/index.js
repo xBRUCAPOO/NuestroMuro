@@ -1,0 +1,34 @@
+/* ============================================================
+   categorias/index.js — GET /api/categorias (listar) y POST /api/categorias (crear)  [NUEVO v2.1]
+   Qué hace: GET devuelve todas las categorías en el orden en que se crearon; POST crea una nueva con nombre e icono
+   (nombre de Material Symbols), a nombre de quien tiene la sesión.
+   Para qué sirve: poder clasificar las publicaciones (como las listas de YouTube) y filtrar el muro por categoría.
+   Las categorías son compartidas: M y xB ven y usan las mismas.
+   ============================================================ */
+import { json, bd, limpiar, LIM_CAT, ICONO_RE } from '../../_lib/comun.js';
+
+export async function onRequestGet({ env }) {
+  const db = await bd(env);
+  const { results } = await db.prepare('SELECT id, nombre, icono, autor, creado FROM categorias ORDER BY creado ASC').all();
+  return json({ categorias: results });
+}
+
+export async function onRequestPost({ request, env, data }) {
+  let c = {};
+  try { c = await request.json(); } catch (e) { return json({ error: 'Datos no válidos.' }, 400); }
+  const nombre = limpiar(c.nombre, LIM_CAT.nombre);
+  const icono = typeof c.icono === 'string' && ICONO_RE.test(c.icono) ? c.icono : 'label';   // si el icono no es válido se usa uno genérico
+  if (!nombre) return json({ error: 'Ponle un nombre a la categoría.' }, 400);
+
+  const db = await bd(env);
+  const n = await db.prepare('SELECT COUNT(*) AS n FROM categorias').first();
+  if (n.n >= LIM_CAT.total) return json({ error: 'Ya hay demasiadas categorías.' }, 400);
+  /* No se permiten dos categorías con el mismo nombre (sin importar mayúsculas) */
+  const repetida = await db.prepare('SELECT id FROM categorias WHERE LOWER(nombre) = LOWER(?)').bind(nombre).first();
+  if (repetida) return json({ error: 'Ya existe una categoría con ese nombre.' }, 409);
+
+  const cat = { id: crypto.randomUUID(), nombre, icono, autor: data.quien, creado: Date.now() };
+  await db.prepare('INSERT INTO categorias (id, nombre, icono, autor, creado) VALUES (?, ?, ?, ?, ?)')
+    .bind(cat.id, cat.nombre, cat.icono, cat.autor, cat.creado).run();
+  return json({ categoria: cat }, 201);
+}

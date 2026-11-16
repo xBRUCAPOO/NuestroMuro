@@ -60,6 +60,9 @@
         <button class="segmento__btn segmento__btn--xb" type="button" data-autor="xB">xB</button>
       </div>
     </div>
+    <!-- NUEVO v2.1: fila de categorías (script.js crea los botones: Todas, Sin categoría, cada categoría y "Nueva").
+         Va en horizontal y, si no entran todas, se desliza hacia los lados (dedo, rueda del mouse o barra) -->
+    <nav class="cat-barra" id="filtroCategorias" aria-label="Filtrar por categoría"></nav>
     <div class="ayuda-acciones"><span class="contador-lista" id="cuenta" aria-live="polite"></span></div>
 
     <!-- El muro: tarjetas en columnas tipo Pinterest (las crea script.js) -->
@@ -78,7 +81,7 @@
 
   <!-- Pie: versión y fecha de la última modificación de index.html (actualizar cada vez que se edite este archivo) -->
   <footer class="pie">
-    <span id="pieVersion">Versión 2.0.0</span>
+    <span id="pieVersion">Versión 2.1.0</span>
     <span aria-hidden="true">·</span>
     <span id="pieFecha">15/11/2026</span>
   </footer>
@@ -118,8 +121,26 @@
       <div class="modal__cuerpo">
         <label class="campo" id="campoTitulo"><span class="campo__etiqueta" id="etiquetaTitulo">Título (opcional)</span>
           <input class="campo__entrada" id="nuevoTituloCampo" type="text" maxlength="120" autocomplete="off"></label>
-        <label class="campo" id="campoTexto"><span class="campo__etiqueta" id="etiquetaTexto">Texto</span>
-          <textarea class="campo__entrada" id="nuevoTexto" rows="4" maxlength="5000"></textarea></label>
+        <!-- NUEVO v2.1: texto con formato. La barra de botones inserta marcas Markdown (negrita, cursiva, listas…) alrededor de lo seleccionado;
+             en la publicación se muestran ya con su formato. Los botones los maneja script.js por su atributo data-fmt -->
+        <div class="campo" id="campoTexto"><label class="campo__etiqueta" id="etiquetaTexto" for="nuevoTexto">Texto</label>
+          <div class="formato" id="barraFormato" role="toolbar" aria-label="Formato de texto">
+            <button class="btn-icono" type="button" data-fmt="negrita" title="Negrita (Ctrl+B)" aria-label="Negrita"><span class="material-symbols-rounded">format_bold</span></button>
+            <button class="btn-icono" type="button" data-fmt="cursiva" title="Cursiva (Ctrl+I)" aria-label="Cursiva"><span class="material-symbols-rounded">format_italic</span></button>
+            <button class="btn-icono" type="button" data-fmt="tachado" title="Tachado" aria-label="Tachado"><span class="material-symbols-rounded">strikethrough_s</span></button>
+            <button class="btn-icono" type="button" data-fmt="codigo" title="Código" aria-label="Código"><span class="material-symbols-rounded">code</span></button>
+            <span class="formato__sep" aria-hidden="true"></span>
+            <button class="btn-icono" type="button" data-fmt="titulo" title="Título" aria-label="Título"><span class="material-symbols-rounded">title</span></button>
+            <button class="btn-icono" type="button" data-fmt="cita" title="Cita" aria-label="Cita"><span class="material-symbols-rounded">format_quote</span></button>
+            <button class="btn-icono" type="button" data-fmt="lista" title="Lista con viñetas" aria-label="Lista con viñetas"><span class="material-symbols-rounded">format_list_bulleted</span></button>
+            <button class="btn-icono" type="button" data-fmt="numerada" title="Lista numerada" aria-label="Lista numerada"><span class="material-symbols-rounded">format_list_numbered</span></button>
+            <button class="btn-icono" type="button" data-fmt="enlace" title="Enlace (Ctrl+K)" aria-label="Enlace"><span class="material-symbols-rounded">link</span></button>
+            <span class="formato__sep formato__sep--der" aria-hidden="true"></span>
+            <button class="btn-icono" type="button" data-fmt="vista" id="btnVistaTexto" aria-pressed="false" title="Ver cómo queda" aria-label="Ver cómo queda"><span class="material-symbols-rounded">visibility</span></button>
+          </div>
+          <textarea class="campo__entrada" id="nuevoTexto" rows="4" maxlength="5000"></textarea>
+          <div class="md-previa" id="textoPrevia" hidden aria-live="polite"></div>
+          <p class="campo__ayuda">Selecciona texto y toca un botón. También: **negrita**, *cursiva*, ~~tachado~~, - listas, &gt; citas, [texto](https://…)</p></div>
         <label class="campo" id="campoUrl"><span class="campo__etiqueta">Dirección (link)</span>
           <input class="campo__entrada" id="nuevoUrl" type="url" inputmode="url" placeholder="https://…" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
         <!-- Lista / encuesta: filas editables que crea script.js -->
@@ -132,11 +153,44 @@
           <button class="foto-elegir" id="btnElegirFoto" type="button"><span class="material-symbols-rounded">add_a_photo</span><span id="textoFoto">Elegir o tomar una foto</span></button>
           <img class="foto-previa" id="fotoPrevia" alt="Vista previa de la foto" hidden>
           <p class="campo__ayuda">La foto se achica automáticamente para que pese poco.</p></div>
+        <!-- NUEVO v2.1: categorías, como "guardar en una lista" de YouTube: se marcan las que quieras (o "Sin categoría") y se puede crear una nueva.
+             Las filas las crea script.js -->
+        <div class="campo" id="campoCategorias"><span class="campo__etiqueta">Categorías</span>
+          <div class="cat-lista" id="catLista" role="group" aria-label="Categorías de la publicación"></div>
+          <button class="btn btn--fantasma" id="btnNuevaCat" type="button"><span class="material-symbols-rounded">new_label</span>Crear categoría nueva</button></div>
       </div>
       <p class="mensaje-form" id="errorNuevo" role="alert"></p>
       <div class="modal__acciones">
         <button class="btn btn--fantasma" type="button" data-cerrar>Cancelar</button>
         <button class="btn btn--yo" id="btnPublicar" type="submit"><span class="material-symbols-rounded">send</span><span id="textoPublicar">Publicar</span></button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ===================== NUEVA CATEGORÍA (NUEVO v2.1) =====================
+       Nombre + icono (elegido de una selección de fonts.google.com/icons, con buscador). La grilla de iconos la crea script.js -->
+  <div class="modal-fondo" id="modalCategoria" hidden>
+    <form class="modal" id="formCategoria" role="dialog" aria-modal="true" aria-labelledby="catTitulo" novalidate>
+      <div class="modal__cabecera">
+        <h2 class="modal__titulo" id="catTitulo">Nueva categoría</h2>
+        <button class="btn-icono" type="button" data-cerrar aria-label="Cerrar"><span class="material-symbols-rounded">close</span></button>
+      </div>
+      <div class="modal__cuerpo">
+        <label class="campo"><span class="campo__etiqueta">Nombre</span>
+          <input class="campo__entrada" id="catNombre" type="text" maxlength="30" placeholder="Ej.: Recetas, Viajes, Ideas…" autocomplete="off"></label>
+        <div class="campo"><span class="campo__etiqueta">Icono</span>
+          <label class="buscador">
+            <span class="material-symbols-rounded">search</span>
+            <input class="campo__entrada" id="catBuscarIcono" type="search" placeholder="Buscar icono (ej.: corazón, viaje, comida)" aria-label="Buscar icono" autocomplete="off" autocapitalize="none" spellcheck="false">
+          </label>
+          <div class="iconos-grilla" id="catIconos" role="group" aria-label="Iconos disponibles"></div>
+          <p class="campo__ayuda" id="catSinIconos" hidden>No hay iconos con ese nombre.</p></div>
+        <div class="cat-previa" aria-live="polite"><span class="campo__etiqueta">Así se verá:</span><span class="chip chip--cat chip--activo" id="catPrevia"></span></div>
+      </div>
+      <p class="mensaje-form" id="errorCat" role="alert"></p>
+      <div class="modal__acciones">
+        <button class="btn btn--fantasma" type="button" data-cerrar>Cancelar</button>
+        <button class="btn btn--yo" id="btnCrearCat" type="submit"><span class="material-symbols-rounded">check</span>Crear</button>
       </div>
     </form>
   </div>

@@ -63,6 +63,11 @@ const TABLAS = [
      creado INTEGER NOT NULL, actualizado INTEGER NOT NULL)`,
   `CREATE INDEX IF NOT EXISTS idx_posts_creado ON posts(creado DESC)`,
   `CREATE TABLE IF NOT EXISTS meta (clave TEXT PRIMARY KEY, valor TEXT)`,
+  /* NUEVO (v2.1): categorías compartidas por M y xB (como las listas de "guardar en…" de YouTube).
+     Qué hace: guarda el nombre, el icono (nombre de Material Symbols) y quién la creó.
+     Para qué sirve: clasificar publicaciones y filtrar el muro. Es CREATE IF NOT EXISTS: en una base ya desplegada solo agrega la tabla nueva. */
+  `CREATE TABLE IF NOT EXISTS categorias (
+     id TEXT PRIMARY KEY, nombre TEXT NOT NULL, icono TEXT NOT NULL, autor TEXT NOT NULL, creado INTEGER NOT NULL)`,
 ];
 let preparada = null;   // promesa: la preparación corre una sola vez por instancia del servidor
 
@@ -128,6 +133,22 @@ export function construirDatos(tipo, entrada, previo = {}) {
     if (previo.vista) datos.vista = previo.vista;
   }
   return { datos };
+}
+
+/* ---------- Categorías (NUEVO v2.1) ---------- */
+/* Límites de las categorías (aquí y no en config.js para no pisar las contraseñas que ya pusiste allí) */
+export const LIM_CAT = { total: 60, nombre: 30, porPost: 12 };
+/* Un icono de Material Symbols es solo minúsculas, números y guion bajo (ej.: "favorite", "ad_units"); así no se cuela texto raro */
+export const ICONO_RE = /^[a-z][a-z0-9_]{0,59}$/;
+/* Recibe la lista de ids que mandó el navegador y devuelve solo los que existen de verdad (sin repetidos, máx. LIM_CAT.porPost).
+   Para qué sirve: una publicación nunca guarda categorías borradas ni inventadas. */
+export async function idsCategoriasValidos(db, ids) {
+  if (!Array.isArray(ids) || !ids.length) return [];
+  const pedidos = [...new Set(ids.filter((x) => typeof x === 'string' && x.length <= 64))].slice(0, LIM_CAT.porPost);
+  if (!pedidos.length) return [];
+  const { results } = await db.prepare(`SELECT id FROM categorias WHERE id IN (${pedidos.map(() => '?').join(',')})`).bind(...pedidos).all();
+  const existen = new Set(results.map((r) => r.id));
+  return pedidos.filter((x) => existen.has(x));
 }
 
 /* ---------- Vista previa de links ---------- */

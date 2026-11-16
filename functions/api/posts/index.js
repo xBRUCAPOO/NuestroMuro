@@ -5,7 +5,7 @@
    nota, lista, encuesta, foto, link o video, a nombre de quien tiene la sesión.
    Para qué sirve: es el corazón del muro compartido.
    ============================================================ */
-import { json, bd, COLUMNAS, aPost, TIPOS, limpiar, urlValida, construirDatos, vistaPrevia } from '../../_lib/comun.js';
+import { json, bd, COLUMNAS, aPost, TIPOS, limpiar, urlValida, construirDatos, vistaPrevia, idsCategoriasValidos } from '../../_lib/comun.js';
 import { LIMITES } from '../../_lib/config.js';
 
 export async function onRequestGet({ request, env }) {
@@ -48,6 +48,8 @@ export async function onRequestPost({ request, env, data }) {
 
   const ahora = Date.now(), id = crypto.randomUUID();
   const db = await bd(env);
+  /* NUEVO v2.1: categorías elegidas (solo se guardan las que existen). Van dentro de "datos"; vacío = "sin categoría" */
+  datos.categorias = await idsCategoriasValidos(db, c.categorias);
   await db.prepare('INSERT INTO posts (id, autor, tipo, titulo, texto, url, datos, imagen, creado, actualizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(id, data.quien, tipo, titulo || null, texto || null, url, JSON.stringify(datos), imagen, ahora, ahora).run();
   const fila = await db.prepare(`SELECT ${COLUMNAS} FROM posts WHERE id = ?`).bind(id).first();

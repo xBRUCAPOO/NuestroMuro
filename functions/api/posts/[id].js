@@ -4,7 +4,7 @@
    Para qué sirve: cada uno administra lo suyo; no se puede editar ni borrar lo que subió la otra persona.
    (Las encuestas solo permiten cambiar la pregunta; las opciones y los votos no se tocan.)
    ============================================================ */
-import { json, bd, COLUMNAS, aPost, limpiar, urlValida, construirDatos, vistaPrevia } from '../../_lib/comun.js';
+import { json, bd, COLUMNAS, aPost, limpiar, urlValida, construirDatos, vistaPrevia, idsCategoriasValidos } from '../../_lib/comun.js';
 import { LIMITES } from '../../_lib/config.js';
 
 /* Busca la publicación y comprueba que sea del usuario con sesión. Devuelve { fila } o { respuesta } (error ya armado) */
@@ -40,7 +40,18 @@ export async function onRequestPatch({ request, env, data, params }) {
   if (r.error) return json({ error: r.error }, 400);
   if (previo.tipo === 'link' && !r.datos.vista) r.datos.vista = await vistaPrevia(url);
 
+  /* NUEVO v2.1: categorías. Si el navegador las envía se validan; si no, se conservan las que ya tenía (sin las borradas) */
+  const catsPrevias = await idsCategoriasValidos(db, previo.datos.categorias);
+  r.datos.categorias = c.categorias !== undefined ? await idsCategoriasValidos(db, c.categorias) : catsPrevias;
+
+  /* NUEVO v2.1: "editado". Solo se marca si de verdad cambió algo del contenido (título, texto, link, elementos de la lista o
+     categorías); guardar sin tocar nada, o dar corazón/votar, no cuenta como edición. */
   const ahora = Date.now();
+  const mismoItems = JSON.stringify(previo.datos.items || null) === JSON.stringify(r.datos.items || null);
+  const mismasCats = JSON.stringify(catsPrevias) === JSON.stringify(r.datos.categorias);
+  const cambio = titulo !== previo.titulo || texto !== previo.texto || url !== previo.url || !mismoItems || !mismasCats;
+  r.datos.editado = cambio ? ahora : (previo.datos.editado || 0);
+
   await db.prepare('UPDATE posts SET titulo = ?, texto = ?, url = ?, datos = ?, actualizado = ? WHERE id = ?')
     .bind(titulo || null, texto || null, url, JSON.stringify(r.datos), ahora, params.id).run();
   const nueva = await db.prepare(`SELECT ${COLUMNAS} FROM posts WHERE id = ?`).bind(params.id).first();

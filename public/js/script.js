@@ -7,6 +7,8 @@
    Para qué sirve: toda la lógica del navegador. Los datos viven en Cloudflare D1 y se piden a /api/* (carpeta functions/).
    IMPORTANTE: se carga en el <head> (antes de pintar) para aplicar el tema sin parpadeo; por eso el resto espera a DOMContentLoaded.
    Seguridad: todo el contenido que escriben las personas se pinta con textContent (nunca como HTML).
+   NUEVO v2.1: 9) texto con formato (barra de botones + Markdown seguro), 10) categorías (selector tipo "guardar en lista", creación
+   con nombre e icono y fila de filtros que se desliza), 11) "editado hace…" en las publicaciones modificadas, 12) corazón relleno.
    ============================================================ */
 
 /* ---------- 1) Tema claro / oscuro ---------- */
@@ -82,7 +84,8 @@ document.addEventListener('DOMContentLoaded', () => {
       else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
       else el.setAttribute(k, v === true ? '' : v);
     }
-    for (const c of hijos.flat()) { if (c == null || c === false) continue; el.append(c.nodeType ? c : document.createTextNode(c)); }
+    /* v2.1: flat(Infinity) para aceptar listas dentro de listas de hijos (el formato de texto devuelve arreglos anidados) */
+    for (const c of hijos.flat(Infinity)) { if (c == null || c === false) continue; el.append(c.nodeType ? c : document.createTextNode(c)); }
     return el;
   }
   /* Icono Material Symbols (nombre de fonts.google.com/icons); lleno = versión rellena */
@@ -201,6 +204,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const chip = $('btnYo'); chip.hidden = false; chip.textContent = quien;
     chip.setAttribute('aria-label', `Sesión de ${quien}: tocar para cambiar de identidad`);
     ultimaFirma = ''; nodos.forEach((n) => n.remove()); nodos.clear();   // otra identidad = se vuelve a pintar todo
+    categorias = []; ultimaFirmaCats = ''; filtro.cat = '';              // v2.1: también se vuelven a pedir las categorías
+    pintarFiltroCategorias();
     cargar();
   }
   /* Tocar la inicial de quien soy: confirmar y salir (vuelve a aparecer la ventana de acceso) */
@@ -214,9 +219,12 @@ document.addEventListener('DOMContentLoaded', () => {
      EL MURO — estado, filtros y pintado
      ============================================================ */
   let posts = [];                         // publicaciones tal como las devolvió el servidor (más nueva primero)
-  const filtro = { tipo: '', autor: '', q: '' };
+  /* v2.1: filtro.cat = '' (todas) | '__sin' (sin categoría) | id de una categoría */
+  const filtro = { tipo: '', autor: '', q: '', cat: '' };
   const nodos = new Map();                // id → tarjeta ya pintada (para actualizar solo lo que cambió)
   let ultimaFirma = '';                   // huella del último listado pintado (si no cambió, no se repinta)
+  let categorias = [];                    // v2.1: categorías compartidas [{ id, nombre, icono, autor, creado }]
+  let ultimaFirmaCats = '';               // huella de las categorías (si cambió, se repintan filtros y tarjetas)
 
   /* Tipos de publicación: nombre, icono (fonts.google.com/icons) y texto */
   const TIPOS = {
@@ -245,16 +253,64 @@ document.addEventListener('DOMContentLoaded', () => {
     $('filtroAutor').querySelectorAll('.segmento__btn').forEach((x) => x.classList.toggle('segmento__btn--activo', x === b));
     pintar();
   }));
+  /* ----- v2.1: fila de categorías (debajo de los filtros) -----
+     Qué hace: muestra en horizontal "Todas", "Sin categoría", una ficha por cada categoría existente (con su icono y cuántas publicaciones
+     tiene) y "Nueva". Si no entran, la fila se desliza hacia los lados (dedo, rueda del mouse o barra); los bordes se difuminan para avisar
+     que hay más. Para qué sirve: filtrar el muro por categoría con un toque. */
+  const barraCats = $('filtroCategorias');
+  /* Pone/quita la difuminación de los bordes según haya más fichas escondidas a la izquierda o a la derecha */
+  function bordesBarra() {
+    barraCats.classList.toggle('sc-izq', barraCats.scrollLeft > 4);
+    barraCats.classList.toggle('sc-der', barraCats.scrollLeft + barraCats.clientWidth < barraCats.scrollWidth - 4);
+  }
+  barraCats.addEventListener('scroll', bordesBarra, { passive: true });
+  window.addEventListener('resize', bordesBarra);
+  /* Rueda del mouse: desliza la fila de lado (solo si hay algo escondido en esa dirección; si no, la página sigue su scroll normal) */
+  barraCats.addEventListener('wheel', (e) => {
+    if (barraCats.scrollWidth <= barraCats.clientWidth || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    const alFinal = barraCats.scrollLeft + barraCats.clientWidth >= barraCats.scrollWidth - 1;
+    if ((e.deltaY < 0 && barraCats.scrollLeft <= 0) || (e.deltaY > 0 && alFinal)) return;
+    barraCats.scrollLeft += e.deltaY; e.preventDefault();
+  }, { passive: false });
+
+  /* Cambia el filtro de categoría (tocar la que ya está elegida la quita). subir = true cuando se toca desde una tarjeta: sube para ver el resultado */
+  function elegirCategoria(valor, subir) {
+    filtro.cat = filtro.cat === valor && valor !== '' ? '' : valor;
+    pintar();
+    if (subir) window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  function pintarFiltroCategorias() {
+    const ids = new Set(categorias.map((c) => c.id));
+    if (filtro.cat && filtro.cat !== '__sin' && !ids.has(filtro.cat)) filtro.cat = '';   // la categoría elegida ya no existe (la borraron)
+    const conteo = new Map(); let sin = 0;
+    posts.forEach((p) => { const cs = catsDe(p); if (!cs.length) sin++; cs.forEach((c) => conteo.set(c.id, (conteo.get(c.id) || 0) + 1)); });
+    const ficha = (valor, ic, texto, n, autor) => h('button', { class: 'chip chip--cat' + (filtro.cat === valor ? ' chip--activo' : ''), type: 'button', 'data-cat': valor, 'data-autor': autor, 'aria-pressed': String(filtro.cat === valor), onclick: () => elegirCategoria(valor) },
+      icono(ic), h('span', { text: texto }), n != null ? h('span', { class: 'chip__n', text: String(n) }) : null);
+    const x = barraCats.scrollLeft;                                     // se conserva el desplazamiento al repintar
+    barraCats.replaceChildren(
+      ficha('', 'category', 'Todas', posts.length), ficha('__sin', 'label_off', 'Sin categoría', sin),
+      ...categorias.map((c) => ficha(c.id, c.icono, c.nombre, conteo.get(c.id) || 0, c.autor)),
+      h('button', { class: 'chip chip--nueva', type: 'button', onclick: () => abrirNuevaCategoria() }, icono('add'), h('span', { text: 'Nueva' })));
+    barraCats.scrollLeft = x; bordesBarra();
+  }
+
   /* Buscador: título, texto, link, elementos de lista y opciones de encuesta */
   $('buscador').addEventListener('input', (e) => { filtro.q = normalizar(e.target.value.trim()); pintar(); });
   $('buscador').addEventListener('keydown', (e) => { if (e.key === 'Escape' && e.target.value) { e.target.value = ''; filtro.q = ''; pintar(); } });
 
-  /* Texto buscable de una publicación */
+  /* v2.1: categorías de una publicación (solo las que existen todavía), en el orden en que se crearon */
+  function catsDe(p) {
+    const ids = new Set((p.datos && p.datos.categorias) || []);
+    return categorias.filter((c) => ids.has(c.id));
+  }
+  /* Texto buscable de una publicación (v2.1: también el nombre de sus categorías) */
   function textoDe(p) {
     const d = p.datos || {};
-    return normalizar([p.titulo, p.texto, p.url, p.autor, (d.items || []).map((i) => i.t).join(' '), (d.opciones || []).map((o) => o.t).join(' '), d.vista && d.vista.titulo].join(' '));
+    return normalizar([p.titulo, p.texto, p.url, p.autor, (d.items || []).map((i) => i.t).join(' '), (d.opciones || []).map((o) => o.t).join(' '), d.vista && d.vista.titulo, catsDe(p).map((c) => c.nombre).join(' ')].join(' '));
   }
-  const pasaFiltro = (p) => (!filtro.tipo || p.tipo === filtro.tipo) && (!filtro.autor || p.autor === filtro.autor) && (!filtro.q || filtro.q.split(/\s+/).every((w) => textoDe(p).includes(w)));
+  /* v2.1: ¿pasa el filtro de categoría? '' = todas; '__sin' = ninguna categoría; si no, debe tener esa categoría */
+  const pasaCategoria = (p) => !filtro.cat || (filtro.cat === '__sin' ? !catsDe(p).length : catsDe(p).some((c) => c.id === filtro.cat));
+  const pasaFiltro = (p) => (!filtro.tipo || p.tipo === filtro.tipo) && (!filtro.autor || p.autor === filtro.autor) && pasaCategoria(p) && (!filtro.q || filtro.q.split(/\s+/).every((w) => textoDe(p).includes(w)));
 
   /* Hora relativa ("hace 5 min") y, pasada una semana, la fecha */
   const relativo = new Intl.RelativeTimeFormat('es', { numeric: 'auto' });
@@ -266,7 +322,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (a < 604800) return relativo.format(Math.round(seg / 86400), 'day');
     return new Date(ts).toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' });
   }
-  setInterval(() => document.querySelectorAll('time[data-ts]').forEach((t) => { t.textContent = hora(Number(t.dataset.ts)); }), 60000);   // refresca las horas cada minuto
+  /* v2.1: texto de "editado hace…" para una publicación modificada ("editado hace 5 minutos", "editado ayer", "editado el 3 nov 2026") */
+  function horaEditado(ts) {
+    const t = hora(ts);
+    if (t === 'ahora') return 'editado hace un momento';
+    return /^(hace|ayer|anteayer|antes)/.test(t) ? `editado ${t}` : `editado el ${t}`;
+  }
+  /* Refresca las horas cada minuto (la de publicación y la de "editado") */
+  setInterval(() => {
+    document.querySelectorAll('time[data-ts]').forEach((t) => { t.textContent = hora(Number(t.dataset.ts)); });
+    document.querySelectorAll('time[data-ed]').forEach((t) => { t.textContent = horaEditado(Number(t.dataset.ed)); });
+  }, 60000);
 
   /* ----- Video: devuelve cómo mostrarlo (YouTube / Vimeo incrustado, archivo directo) o null si solo se puede abrir como link ----- */
   function infoVideo(url) {
@@ -285,17 +351,73 @@ document.addEventListener('DOMContentLoaded', () => {
     return null;
   }
   const sitioDe = (url) => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return url; } };
-  /* Convierte las direcciones http(s) dentro de un texto en links clickeables (sin usar innerHTML) */
-  function conEnlaces(texto) {
-    const partes = [], re = /https?:\/\/[^\s<]+/g;
+  /* ----- Texto con formato (NUEVO v2.1: reemplaza a conEnlaces) -----
+     Qué hace: convierte el texto escrito con marcas simples (Markdown) en elementos con formato: **negrita**, *cursiva*, ~~tachado~~,
+     `código`, [texto](https://link), links sueltos, # títulos, > citas, - listas, 1. listas numeradas y ``` bloques de código ```.
+     Seguridad: se construye con h() (textContent), nunca con innerHTML; solo se aceptan links http(s). Lo que no se reconoce queda como texto.
+     Para qué sirve: poder escribir notas y descripciones con distintos tipos de texto. */
+  const enlace = (url, hijos) => h('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, hijos);
+  /* Marcas dentro de una línea. Grupos: 1 código · 2/3 negrita · 4/5 tachado · 6/7 cursiva * · 8/9 cursiva _ · 10/11/12 [texto](url) · 13 link suelto */
+  const MD_INLINE = '(`[^`\\n]+`)|(\\*\\*(\\S(?:.*?\\S)?)\\*\\*)|(~~(\\S(?:.*?\\S)?)~~)|(\\*(\\S(?:[^*\\n]*?\\S)?)\\*)|(\\b_(\\S(?:[^_\\n]*?\\S)?)_\\b)|(\\[([^\\]\\n]+)\\]\\((https?:\\/\\/[^\\s)]+)\\))|(https?:\\/\\/[^\\s<]+)';
+  function inline(texto) {
+    const re = new RegExp(MD_INLINE, 'g'), out = [];          // una expresión nueva por llamada: la función se llama a sí misma (negrita dentro de cursiva…)
     let ultimo = 0, m;
     while ((m = re.exec(texto))) {
-      if (m.index > ultimo) partes.push(texto.slice(ultimo, m.index));
-      partes.push(h('a', { href: m[0], target: '_blank', rel: 'noopener noreferrer', text: m[0] }));
+      if (m.index > ultimo) out.push(texto.slice(ultimo, m.index));
+      if (m[1]) out.push(h('code', { text: m[1].slice(1, -1) }));
+      else if (m[2]) out.push(h('strong', {}, inline(m[3])));
+      else if (m[4]) out.push(h('del', {}, inline(m[5])));
+      else if (m[6]) out.push(h('em', {}, inline(m[7])));
+      else if (m[8]) out.push(h('em', {}, inline(m[9])));
+      else if (m[10]) out.push(enlace(m[12], m[11]));
+      else {                                                   // link suelto: se le saca la puntuación final ("mira https://x.com.")
+        let url = m[13], resto = '';
+        const f = url.match(/[.,;:!?)\]]+$/);
+        if (f) { resto = f[0]; url = url.slice(0, -resto.length); }
+        out.push(enlace(url, url)); if (resto) out.push(resto);
+      }
       ultimo = m.index + m[0].length;
     }
-    if (ultimo < texto.length) partes.push(texto.slice(ultimo));
-    return partes;
+    if (ultimo < texto.length) out.push(texto.slice(ultimo));
+    return out;
+  }
+  /* Varias líneas seguidas de un mismo párrafo/cita: se conserva cada salto de línea */
+  function lineasInline(lineas) {
+    const out = [];
+    lineas.forEach((l, k) => { if (k) out.push(h('br')); out.push(...inline(l)); });
+    return out;
+  }
+  const MD_BLOQUE = /^(#{1,3}\s|>|```|\s*[-*+]\s|\s*\d+[.)]\s)/;   // línea que empieza un bloque nuevo (título, cita, código, lista)
+  /* Texto → <div class="md …"> con párrafos, títulos, citas, listas y código. clase = clases extra del contenedor */
+  function md(texto, clase = '') {
+    const caja = h('div', { class: ('md ' + clase).trim() }), ls = String(texto).replace(/\r\n?/g, '\n').split('\n');
+    let i = 0, m;
+    while (i < ls.length) {
+      const l = ls[i];
+      if (!l.trim()) { i++; continue; }
+      if (/^```/.test(l)) {                                          // bloque de código
+        const cod = []; i++;
+        while (i < ls.length && !/^```/.test(ls[i])) cod.push(ls[i++]);
+        i++; caja.append(h('pre', {}, h('code', { text: cod.join('\n') }))); continue;
+      }
+      if ((m = l.match(/^(#{1,3})\s+(.*)$/))) { caja.append(h('div', { class: `md-h md-h${m[1].length}`, role: 'heading', 'aria-level': String(m[1].length + 2) }, inline(m[2]))); i++; continue; }
+      if (/^>/.test(l)) {                                            // cita
+        const q = []; while (i < ls.length && /^>/.test(ls[i])) q.push(ls[i++].replace(/^>\s?/, ''));
+        caja.append(h('blockquote', {}, lineasInline(q))); continue;
+      }
+      if (/^\s*[-*+]\s+/.test(l)) {                                  // lista con viñetas
+        const it = []; while (i < ls.length && /^\s*[-*+]\s+/.test(ls[i])) it.push(ls[i++].replace(/^\s*[-*+]\s+/, ''));
+        caja.append(h('ul', {}, it.map((t) => h('li', {}, inline(t))))); continue;
+      }
+      if (/^\s*\d+[.)]\s+/.test(l)) {                                // lista numerada
+        const it = []; while (i < ls.length && /^\s*\d+[.)]\s+/.test(ls[i])) it.push(ls[i++].replace(/^\s*\d+[.)]\s+/, ''));
+        caja.append(h('ol', {}, it.map((t) => h('li', {}, inline(t))))); continue;
+      }
+      const p = [];                                                  // párrafo: hasta una línea vacía o el comienzo de otro bloque
+      while (i < ls.length && ls[i].trim() && (!p.length || !MD_BLOQUE.test(ls[i]))) p.push(ls[i++]);
+      caja.append(h('p', {}, lineasInline(p)));
+    }
+    return caja;
   }
 
   /* ----- Cuerpo de cada tipo de publicación ----- */
@@ -335,7 +457,7 @@ document.addEventListener('DOMContentLoaded', () => {
       })));
       partes.push(h('span', { class: 'progreso__texto', text: total ? `${total} ${total === 1 ? 'voto' : 'votos'}` : 'Todavía nadie votó' }));
     }
-    if (p.texto) partes.push(h('p', { class: 'post__texto' }, conEnlaces(p.texto)));   // texto con los links clickeables
+    if (p.texto) partes.push(md(p.texto, 'post__texto'));   // v2.1: texto con formato (negrita, cursiva, listas, links…)
     return partes;
   }
   /* Tarjeta de link con vista previa (imagen, sitio, título y descripción del sitio si se pudieron leer) */
@@ -351,11 +473,16 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----- Tarjeta completa ----- */
   function crearTarjeta(p) {
     const mia = p.autor === yo, cor = (p.datos && p.datos.corazones) || [], meGusta = cor.includes(yo);
+    const editado = (p.datos && p.datos.editado) || 0, cats = catsDe(p);
     const tarjeta = h('article', { class: 'post', 'data-autor': p.autor, 'data-id': p.id },
       h('div', { class: 'post__cab' },
         h('span', { class: 'autor' }, h('span', { class: 'autor__avatar', text: p.autor }), h('time', { class: 'autor__hora', 'data-ts': p.creado, text: hora(p.creado), title: new Date(p.creado).toLocaleString('es-AR') })),
         h('span', { class: 'material-symbols-rounded post__tipo', text: TIPOS[p.tipo].icono, 'aria-hidden': 'true' })),   // icono del tipo (nota, lista…) a la derecha
+      /* v2.1: "editado hace…" solo si la publicación fue modificada después de subirla */
+      editado ? h('span', { class: 'post__editado' }, icono('edit'), h('time', { 'data-ed': editado, text: horaEditado(editado), title: new Date(editado).toLocaleString('es-AR') })) : null,
       ...cuerpoPost(p),
+      /* v2.1: categorías de la publicación; tocar una filtra el muro por ella */
+      cats.length ? h('div', { class: 'post__cats' }, cats.map((c) => h('button', { class: 'post__cat', type: 'button', title: `Ver la categoría ${c.nombre}`, onclick: () => elegirCategoria(c.id, true) }, icono(c.icono), h('span', { text: c.nombre })))) : null,
       h('div', { class: 'post__pie' },
         h('button', { class: 'post__accion post__accion--corazon' + (meGusta ? ' activo' : ''), type: 'button', 'aria-pressed': String(meGusta), 'aria-label': 'Me gusta', onclick: () => accion(p, { accion: 'corazon' }) },
           icono('favorite', meGusta), cor.length ? h('span', { class: 'corazones' }, cor.map((q) => h('span', { class: `mini mini--${q}`, text: q }))) : null),
@@ -372,7 +499,8 @@ document.addEventListener('DOMContentLoaded', () => {
     nodos.forEach((el, id) => { if (!visibles.has(id)) { el.remove(); nodos.delete(id); } });   // borradas (desde otro dispositivo) o filtradas
     let orden = 0;
     lista.forEach((p, i) => {
-      const firma = JSON.stringify([p.actualizado, yo]);
+      /* v2.1: la huella incluye las categorías (nombre e icono) para que la tarjeta se repinte si se crea/borra una categoría */
+      const firma = JSON.stringify([p.actualizado, yo, catsDe(p).map((c) => [c.id, c.nombre, c.icono])]);
       let el = nodos.get(p.id);
       if (!el || el._firma !== firma) {
         const nuevo = crearTarjeta(p); nuevo._firma = firma;
@@ -389,6 +517,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('cargando').hidden = true;
     $('vacio').hidden = n > 0;
     $('vacioTexto').textContent = posts.length ? 'No hay nada que coincida con ese filtro.' : 'Todavía no hay nada en el muro. ¡Toca el botón + y sube lo primero!';
+    pintarFiltroCategorias();            // v2.1: los contadores de cada categoría siguen a las publicaciones
   }
 
   /* Pide las publicaciones al servidor (el navegador reutiliza la respuesta si nada cambió gracias al ETag) y repinta solo si cambió algo */
@@ -397,9 +526,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!yo || cargando) return;
     cargando = true;
     try {
-      const r = await api('/posts');
+      /* v2.1: se piden juntas las publicaciones y las categorías; si las categorías fallan (ej. sin conexión) se siguen usando las que ya había */
+      const [r, rc] = await Promise.all([api('/posts'), api('/categorias').catch(() => null)]);
+      let cambioCats = false;
+      if (rc) { const fc = JSON.stringify(rc.categorias); if (fc !== ultimaFirmaCats) { ultimaFirmaCats = fc; categorias = rc.categorias; cambioCats = true; } }
       const firma = JSON.stringify(r.posts.map((p) => [p.id, p.actualizado]));
-      if (firma !== ultimaFirma) { ultimaFirma = firma; posts = r.posts; pintar(); }
+      if (firma !== ultimaFirma || cambioCats) { ultimaFirma = firma; posts = r.posts; pintar(); }
     } catch (e) {
       if (e.status !== 401) { $('cargando').hidden = true; if (!posts.length) { $('vacio').hidden = false; $('vacioTexto').textContent = 'No se pudo cargar el muro. Revisa tu conexión.'; } }
     } finally { cargando = false; }
@@ -449,6 +581,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let tipoActual = 'nota';                // tipo elegido en el formulario
   let editando = null;                    // publicación que se está editando (null = publicación nueva)
   let foto = null;                        // { dataUrl, w, h } de la foto elegida
+  let catsElegidas = new Set();           // v2.1: ids de las categorías marcadas en el formulario (vacío = "sin categoría")
 
   /* Botones de tipo (Nota, Lista, Encuesta, Foto, Link, Video) */
   Object.entries(TIPOS).forEach(([clave, t]) => $('tiposNuevo').append(
@@ -492,6 +625,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('nuevoTitulo').textContent = 'Nueva publicación'; $('textoPublicar').textContent = 'Publicar';
     $('tiposNuevo').hidden = false;
     elegirTipo('nota');
+    catsElegidas = new Set(); pintarCatsComposer(); reiniciarVistaTexto();   // v2.1: sin categoría y sin vista previa al empezar
     abrirModal($('modalNuevo')); setTimeout(() => $('nuevoTexto').focus(), 80);
   }
   /* Abre el formulario con los datos de una publicación propia para editarla */
@@ -503,11 +637,429 @@ document.addEventListener('DOMContentLoaded', () => {
     elegirTipo(p.tipo);
     $('nuevoTituloCampo').value = p.titulo; $('nuevoTexto').value = p.texto; $('nuevoUrl').value = p.url;
     if (p.tipo === 'lista') { $('filasItems').replaceChildren(); (p.datos.items || []).forEach((i) => agregarFila(i.t, i.hecho)); }
+    catsElegidas = new Set(catsDe(p).map((c) => c.id)); pintarCatsComposer(); reiniciarVistaTexto();   // v2.1: sus categorías actuales quedan marcadas
     abrirModal($('modalNuevo'));
   }
   $('btnNuevo').addEventListener('click', abrirNuevo);
   document.querySelectorAll('#modalNuevo [data-cerrar]').forEach((b) => b.addEventListener('click', () => cerrarModal($('modalNuevo'))));
   $('modalNuevo').addEventListener('mousedown', (e) => { if (e.target === $('modalNuevo')) cerrarModal($('modalNuevo')); });   // clic afuera = cerrar
+
+  /* ============================================================
+     v2.1 — FORMATO DE TEXTO (barra de botones sobre el cuadro de texto)
+     Qué hace: cada botón inserta o quita marcas Markdown alrededor del texto seleccionado (negrita, cursiva, tachado, código, enlace) o al
+     comienzo de las líneas seleccionadas (título, cita, lista, lista numerada). Volver a tocar el botón deshace la marca.
+     El botón del ojo muestra cómo va a quedar. Atajos: Ctrl/Cmd + B, I y K.
+     Para qué sirve: escribir notas y descripciones con distintos tipos de texto sin saber Markdown.
+     ============================================================ */
+  const FORMATOS = {
+    negrita: { env: ['**', '**', 'texto en negrita'] },
+    cursiva: { env: ['*', '*', 'texto en cursiva'] },
+    tachado: { env: ['~~', '~~', 'texto tachado'] },
+    codigo: { env: ['`', '`', 'código'] },
+    titulo: { pre: '## ' },
+    cita: { pre: '> ' },
+    lista: { pre: '- ' },
+    numerada: { pre: '1. ', num: true },
+    enlace: { enlace: true },
+  };
+  const PREFIJO_BLOQUE = /^(#{1,3}\s|>\s?|[-*+]\s|\d+[.)]\s)/;   // marcas de comienzo de línea que se reemplazan al cambiar de formato
+  function aplicarFormato(nombre) {
+    const t = $('nuevoTexto'), f = FORMATOS[nombre], v = t.value, ini = t.selectionStart, fin = t.selectionEnd;
+    if (!f) return;
+    if (f.env) {                                                       // marcas a los dos lados de lo seleccionado
+      const [a, b, hueco] = f.env;
+      if (v.slice(ini - a.length, ini) === a && v.slice(fin, fin + b.length) === b) {
+        t.setRangeText(v.slice(ini, fin), ini - a.length, fin + b.length, 'select');   // ya estaba con ese formato: se lo quita
+      } else {
+        const sel = v.slice(ini, fin) || hueco;                        // sin selección: pone un texto de ejemplo ya seleccionado
+        t.setRangeText(a + sel + b, ini, fin, 'preserve');
+        t.setSelectionRange(ini + a.length, ini + a.length + sel.length);
+      }
+    } else if (f.pre) {                                                // marca al comienzo de cada línea seleccionada
+      const desde = v.lastIndexOf('\n', ini - 1) + 1;
+      let hasta = v.indexOf('\n', fin); if (hasta === -1) hasta = v.length;
+      const lineas = v.slice(desde, hasta).split('\n');
+      const patron = f.num ? /^\d+[.)]\s/ : new RegExp('^' + f.pre.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      const todas = lineas.every((l) => patron.test(l));               // si todas ya lo tienen, se quita
+      const nuevas = lineas.map((l, k) => (todas ? l.replace(patron, '') : (f.num ? `${k + 1}. ` : f.pre) + l.replace(PREFIJO_BLOQUE, '')));
+      t.setRangeText(nuevas.join('\n'), desde, hasta, 'select');
+    } else if (f.enlace) {                                             // [texto](dirección)
+      const sel = v.slice(ini, fin);
+      if (/^https?:\/\/\S+$/.test(sel)) { t.setRangeText(`[enlace](${sel})`, ini, fin, 'preserve'); t.setSelectionRange(ini + 1, ini + 7); }
+      else { const txt = sel || 'texto del enlace'; t.setRangeText(`[${txt}](https://)`, ini, fin, 'preserve'); t.setSelectionRange(ini + txt.length + 3, ini + txt.length + 11); }
+    }
+    t.focus(); t.dispatchEvent(new Event('input'));                    // avisa del cambio (actualiza la vista previa)
+  }
+  /* Vista previa del texto: el ojo la muestra/oculta y se actualiza mientras se escribe */
+  function actualizarVistaTexto() {
+    const caja = $('textoPrevia');
+    if (caja.hidden) return;
+    const v = $('nuevoTexto').value.trim();
+    caja.replaceChildren(v ? md(v, 'post__texto') : h('span', { class: 'campo__ayuda', text: 'Todavía no escribiste nada.' }));
+  }
+  function reiniciarVistaTexto() {
+    $('textoPrevia').hidden = true; $('btnVistaTexto').setAttribute('aria-pressed', 'false');
+    $('btnVistaTexto').querySelector('.material-symbols-rounded').textContent = 'visibility';
+  }
+  $('barraFormato').addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });   // los botones no le quitan el foco (ni la selección) al texto
+  $('barraFormato').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-fmt]'); if (!b) return;
+    if (b.dataset.fmt === 'vista') {
+      const ver = $('textoPrevia').hidden;
+      $('textoPrevia').hidden = !ver; b.setAttribute('aria-pressed', String(ver));
+      b.querySelector('.material-symbols-rounded').textContent = ver ? 'visibility_off' : 'visibility';
+      actualizarVistaTexto(); return;
+    }
+    aplicarFormato(b.dataset.fmt);
+  });
+  $('nuevoTexto').addEventListener('input', actualizarVistaTexto);
+  $('nuevoTexto').addEventListener('keydown', (e) => {                 // atajos de teclado
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    const k = e.key.toLowerCase(), fmt = { b: 'negrita', i: 'cursiva', k: 'enlace' }[k];
+    if (fmt) { e.preventDefault(); aplicarFormato(fmt); }
+  });
+
+  /* ============================================================
+     v2.1 — CATEGORÍAS EN EL FORMULARIO (selector tipo "guardar en lista" de YouTube) y CREAR CATEGORÍA
+     Qué hace: lista las categorías con casillas (se pueden marcar varias; "Sin categoría" las desmarca todas) y permite crear una nueva
+     con nombre y un icono elegido de una selección de fonts.google.com/icons con buscador. La nueva queda marcada automáticamente.
+     Quien creó una categoría puede borrarla (botón de papelera). Para qué sirve: clasificar y luego filtrar el muro.
+     ============================================================ */
+  /* Iconos que se pueden elegir: [nombre del icono en Material Symbols, palabras en español para el buscador] */
+  const ICONOS_CAT = [
+    ['favorite', 'corazon amor'],
+    ['heart_broken', 'corazon roto'],
+    ['volunteer_activism', 'regalo ayuda'],
+    ['redeem', 'regalo'],
+    ['cake', 'torta cumpleanos'],
+    ['celebration', 'fiesta'],
+    ['mood', 'feliz sonrisa'],
+    ['sentiment_satisfied', 'contento'],
+    ['star', 'estrella favorito'],
+    ['bolt', 'rayo energia'],
+    ['local_fire_department', 'fuego'],
+    ['diamond', 'diamante joya'],
+    ['workspace_premium', 'premio'],
+    ['military_tech', 'medalla'],
+    ['group', 'grupo gente'],
+    ['person', 'persona'],
+    ['diversity_1', 'amigos'],
+    ['child_care', 'bebe'],
+    ['pets', 'mascota perro gato'],
+    ['cruelty_free', 'conejo animal'],
+    ['emoji_nature', 'mariposa naturaleza'],
+    ['restaurant', 'comida'],
+    ['local_pizza', 'pizza'],
+    ['lunch_dining', 'hamburguesa'],
+    ['ramen_dining', 'ramen fideos'],
+    ['icecream', 'helado'],
+    ['bakery_dining', 'pan'],
+    ['local_cafe', 'cafe'],
+    ['coffee', 'cafe taza'],
+    ['local_bar', 'bebida trago'],
+    ['wine_bar', 'vino'],
+    ['cookie', 'galleta'],
+    ['kitchen', 'cocina heladera'],
+    ['set_meal', 'pescado'],
+    ['nutrition', 'fruta'],
+    ['egg', 'huevo'],
+    ['brunch_dining', 'desayuno'],
+    ['shopping_cart', 'compras'],
+    ['shopping_bag', 'bolsa compras'],
+    ['storefront', 'tienda'],
+    ['flight', 'avion viaje'],
+    ['flight_takeoff', 'despegue viaje'],
+    ['luggage', 'valija viaje'],
+    ['beach_access', 'playa'],
+    ['hotel', 'hotel'],
+    ['map', 'mapa'],
+    ['explore', 'explorar brujula'],
+    ['directions_car', 'auto'],
+    ['directions_bike', 'bicicleta'],
+    ['train', 'tren'],
+    ['sailing', 'barco'],
+    ['landscape', 'paisaje montana'],
+    ['forest', 'bosque'],
+    ['park', 'parque'],
+    ['camping', 'camping carpa'],
+    ['hiking', 'caminata'],
+    ['travel_explore', 'mundo'],
+    ['public', 'mundo planeta'],
+    ['location_on', 'lugar ubicacion'],
+    ['home', 'casa'],
+    ['cottage', 'cabana'],
+    ['apartment', 'edificio'],
+    ['movie', 'pelicula cine'],
+    ['theaters', 'cine'],
+    ['tv', 'television serie'],
+    ['live_tv', 'television'],
+    ['music_note', 'musica'],
+    ['headphones', 'auriculares'],
+    ['library_music', 'musica'],
+    ['mic', 'microfono'],
+    ['piano', 'piano'],
+    ['queue_music', 'playlist'],
+    ['sports_esports', 'videojuegos'],
+    ['casino', 'dados juego'],
+    ['extension', 'rompecabezas'],
+    ['toys', 'juguete'],
+    ['sports_soccer', 'futbol'],
+    ['sports_basketball', 'basquet'],
+    ['sports_tennis', 'tenis'],
+    ['fitness_center', 'gimnasio pesas'],
+    ['pool', 'natacion pileta'],
+    ['sports_martial_arts', 'artes marciales'],
+    ['skateboarding', 'skate'],
+    ['school', 'escuela estudio'],
+    ['menu_book', 'libro'],
+    ['book', 'libro'],
+    ['auto_stories', 'libro lectura'],
+    ['edit_note', 'apuntes notas'],
+    ['description', 'documento'],
+    ['folder', 'carpeta'],
+    ['work', 'trabajo'],
+    ['laptop_mac', 'computadora'],
+    ['computer', 'computadora'],
+    ['code', 'codigo'],
+    ['terminal', 'consola'],
+    ['science', 'ciencia'],
+    ['psychology', 'mente psicologia'],
+    ['calculate', 'calculadora'],
+    ['lightbulb', 'idea'],
+    ['history_edu', 'historia'],
+    ['draw', 'dibujo'],
+    ['brush', 'pincel arte'],
+    ['palette', 'paleta colores'],
+    ['design_services', 'diseno'],
+    ['translate', 'traducir idioma'],
+    ['language', 'idioma'],
+    ['event', 'evento'],
+    ['calendar_month', 'calendario'],
+    ['schedule', 'reloj hora'],
+    ['alarm', 'alarma'],
+    ['notifications', 'notificacion'],
+    ['bookmark', 'marcador'],
+    ['label', 'etiqueta'],
+    ['sell', 'etiqueta precio'],
+    ['flag', 'bandera'],
+    ['checklist', 'lista'],
+    ['task_alt', 'tarea'],
+    ['list_alt', 'lista'],
+    ['savings', 'ahorro'],
+    ['payments', 'pagos'],
+    ['account_balance_wallet', 'billetera'],
+    ['attach_money', 'dinero'],
+    ['health_and_safety', 'salud'],
+    ['medical_services', 'medico'],
+    ['spa', 'spa relax'],
+    ['self_improvement', 'meditacion'],
+    ['bedtime', 'dormir noche'],
+    ['wb_sunny', 'sol'],
+    ['dark_mode', 'luna'],
+    ['cloud', 'nube'],
+    ['thunderstorm', 'tormenta'],
+    ['ac_unit', 'nieve frio'],
+    ['water_drop', 'agua gota'],
+    ['eco', 'hoja eco'],
+    ['local_florist', 'flor'],
+    ['grass', 'pasto'],
+    ['photo_camera', 'foto camara'],
+    ['videocam', 'video'],
+    ['image', 'imagen'],
+    ['link', 'enlace'],
+    ['share', 'compartir'],
+    ['chat', 'chat mensaje'],
+    ['forum', 'conversacion'],
+    ['mail', 'correo'],
+    ['call', 'llamada telefono'],
+    ['key', 'llave'],
+    ['lock', 'candado'],
+    ['security', 'seguridad'],
+    ['shield', 'escudo'],
+    ['build', 'herramientas'],
+    ['handyman', 'reparar'],
+    ['cleaning_services', 'limpieza'],
+    ['local_laundry_service', 'lavarropas ropa'],
+    ['bed', 'cama'],
+    ['chair', 'silla'],
+    ['weekend', 'sillon'],
+    ['directions_walk', 'caminar'],
+    ['ad', 'anuncio'],
+    ['campaign', 'campana'],
+    ['newspaper', 'noticias diario'],
+    ['podcasts', 'podcast'],
+    ['radio', 'radio'],
+    ['sticky_note_2', 'nota'],
+    ['ballot', 'encuesta'],
+    ['dashboard_customize', 'tablero'],
+    ['apps', 'apps'],
+    ['category', 'categoria'],
+    ['inventory_2', 'caja'],
+    ['archive', 'archivo'],
+    ['bookmarks', 'guardados'],
+    ['thumb_up', 'me gusta'],
+    ['rocket_launch', 'cohete'],
+    ['travel', 'viaje'],
+    ['memory', 'chip'],
+    ['smart_toy', 'robot'],
+    ['stadia_controller', 'control'],
+    ['steps', 'pasos'],
+    ['visibility', 'ojo'],
+    ['dry_cleaning', 'ropa'],
+    ['checkroom', 'ropa'],
+    ['styler', 'ropa'],
+    ['shoppingmode', 'compras'],
+    ['nightlife', 'noche fiesta'],
+    ['sunny', 'sol'],
+    ['wb_twilight', 'atardecer'],
+    ['rainy', 'lluvia'],
+    ['filter_vintage', 'flor'],
+    ['yard', 'jardin'],
+    ['potted_plant', 'planta'],
+    ['pest_control', 'bicho'],
+    ['sports', 'juegos deporte'],
+    ['hotel_class', 'estrella'],
+    ['heart_plus', 'corazon'],
+    ['handshake', 'acuerdo'],
+    ['family_restroom', 'familia'],
+    ['elderly', 'abuelo'],
+    ['boy', 'nino'],
+    ['girl', 'nina'],
+    ['woman', 'mujer'],
+    ['man', 'hombre'],
+    ['pregnant_woman', 'embarazo'],
+    ['monitor_heart', 'salud corazon'],
+    ['vaccines', 'vacuna'],
+    ['medication', 'pastilla'],
+    ['stethoscope', 'medico'],
+    ['dentistry', 'dentista'],
+    ['fitness_tracker', 'pulsera'],
+    ['directions_run', 'correr'],
+    ['sports_gymnastics', 'gimnasia'],
+    ['sports_kabaddi', 'lucha'],
+    ['surfing', 'surf'],
+    ['downhill_skiing', 'esqui'],
+    ['kayaking', 'kayak'],
+    ['golf_course', 'golf'],
+    ['sports_baseball', 'beisbol'],
+    ['sports_volleyball', 'voley'],
+    ['sports_football', 'futbol americano'],
+    ['sports_rugby', 'rugby'],
+    ['sports_cricket', 'cricket'],
+    ['sports_motorsports', 'motos'],
+    ['two_wheeler', 'moto'],
+    ['local_taxi', 'taxi'],
+    ['directions_bus', 'colectivo bus'],
+    ['subway', 'subte'],
+    ['local_gas_station', 'nafta'],
+    ['ev_station', 'electrico'],
+    ['local_parking', 'estacionamiento'],
+    ['garage', 'garage'],
+    ['trophy', 'trofeo copa'],
+    ['mobile', 'celular telefono'],
+    ['photo_library', 'fotos galeria'],
+    ['keep', 'chincheta fijar'],
+    ['star_shine', 'magia brillo'],
+    ['emoji_objects', 'idea'],
+    ['sentiment_very_satisfied', 'contento risa'],
+    ['tag', 'etiqueta numeral'],
+    ['pin_drop', 'ubicacion'],
+    ['heart_check', 'corazon'],
+    ['new_label', 'etiqueta nueva'],
+    ['bookmark_star', 'favorito'],
+    ['local_activity', 'entrada ticket'],
+    ['attractions', 'parque diversiones'],
+    ['stadium', 'estadio'],
+    ['sports_bar', 'cerveza'],
+    ['tapas', 'tapas'],
+    ['liquor', 'licor'],
+    ['nest_eco_leaf', 'hoja'],
+    ['sunny_snowing', 'clima'],
+    ['travel_luggage_and_bags', 'valija'],
+    ['spatial_audio', 'musica'],
+    ['artist', 'artista'],
+    ['trending_up', 'crecimiento'],
+    ['flag_circle', 'bandera'],
+    ['hourglass_top', 'tiempo'],
+    ['timer', 'temporizador'],
+    ['alarm_on', 'alarma']
+  ];
+  let iconoCat = 'label';                 // icono elegido en la ventana de nueva categoría
+  let alCrearCategoria = null;            // qué hacer cuando se crea (ej.: marcarla en el formulario de publicar)
+
+  /* Dibuja la lista de categorías del formulario con sus casillas */
+  function pintarCatsComposer() {
+    const lista = $('catLista'), ninguna = !catsElegidas.size;
+    const fila = (ic, texto, marcada, alTocar, extra) => h('div', { class: 'cat-fila' },
+      h('button', { class: 'cat-fila__tog', type: 'button', 'aria-pressed': String(marcada), onclick: alTocar },
+        icono(marcada ? 'check_box' : 'check_box_outline_blank', marcada), icono(ic), h('span', { class: 'cat-fila__nombre', text: texto })), extra);
+    lista.replaceChildren(
+      fila('label_off', 'Sin categoría', ninguna, () => { catsElegidas.clear(); pintarCatsComposer(); }),
+      ...categorias.map((c) => fila(c.icono, c.nombre, catsElegidas.has(c.id),
+        () => { if (catsElegidas.has(c.id)) catsElegidas.delete(c.id); else catsElegidas.add(c.id); pintarCatsComposer(); },
+        c.autor === yo ? h('button', { class: 'btn-icono cat-fila__borrar', type: 'button', 'aria-label': `Borrar la categoría ${c.nombre}`, title: 'Borrar categoría', onclick: () => borrarCategoria(c) }, icono('delete')) : null)));
+  }
+  async function borrarCategoria(c) {
+    if (!(await confirmar({ titulo: 'Borrar categoría', texto: `Se borrará «${c.nombre}». Las publicaciones no se borran: solo dejan de tener esta categoría.`, boton: 'Borrar' }))) return;
+    try {
+      await api(`/categorias/${c.id}`, { metodo: 'DELETE' });
+      categorias = categorias.filter((x) => x.id !== c.id); ultimaFirmaCats = JSON.stringify(categorias);
+      catsElegidas.delete(c.id); pintarCatsComposer(); pintar(); avisar('Categoría borrada.', 'ok');
+    } catch (e) { avisar(e.message, 'error'); }
+  }
+
+  /* Ventana "Nueva categoría" */
+  const modalCat = $('modalCategoria');
+  /* Muestra cómo quedará la ficha (icono + nombre) mientras se escribe */
+  function previaCategoria() {
+    $('catPrevia').replaceChildren(icono(iconoCat), h('span', { text: $('catNombre').value.trim() || 'Nombre' }));
+  }
+  function elegirIconoCat(nombre) {
+    iconoCat = nombre;
+    $('catIconos').querySelectorAll('.icono-op').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.n === nombre)));
+    previaCategoria();
+  }
+  /* Crea la grilla de iconos la primera vez que se abre la ventana (son ~250 botones) */
+  function crearGrillaIconos() {
+    if ($('catIconos').children.length) return;
+    $('catIconos').replaceChildren(...ICONOS_CAT.map(([n, alias]) => h('button', {
+      class: 'icono-op', type: 'button', title: n.replace(/_/g, ' '), 'aria-label': n.replace(/_/g, ' '), 'aria-pressed': 'false',
+      'data-n': n, 'data-b': normalizar(`${n.replace(/_/g, ' ')} ${alias}`), onclick: () => elegirIconoCat(n) }, icono(n))));
+  }
+  /* Buscador de iconos: oculta los que no coinciden con lo escrito (nombre o palabras en español) */
+  $('catBuscarIcono').addEventListener('input', () => {
+    const palabras = normalizar($('catBuscarIcono').value.trim()).split(/\s+/).filter(Boolean);
+    let hay = 0;
+    $('catIconos').querySelectorAll('.icono-op').forEach((b) => { const ok = palabras.every((w) => b.dataset.b.includes(w)); b.hidden = !ok; if (ok) hay++; });
+    $('catSinIconos').hidden = hay > 0;
+  });
+  $('catNombre').addEventListener('input', previaCategoria);
+  /* Abre la ventana. alCrear = función a llamar con la categoría creada (opcional) */
+  function abrirNuevaCategoria(alCrear) {
+    alCrearCategoria = alCrear || null;
+    $('formCategoria').reset(); $('errorCat').textContent = ''; $('catSinIconos').hidden = true;
+    crearGrillaIconos(); $('catIconos').querySelectorAll('.icono-op').forEach((b) => { b.hidden = false; });
+    elegirIconoCat('label');
+    abrirModal(modalCat); setTimeout(() => $('catNombre').focus(), 80);
+  }
+  $('btnNuevaCat').addEventListener('click', () => abrirNuevaCategoria((c) => { catsElegidas.add(c.id); pintarCatsComposer(); }));
+  document.querySelectorAll('#modalCategoria [data-cerrar]').forEach((b) => b.addEventListener('click', () => cerrarModal(modalCat)));
+  modalCat.addEventListener('mousedown', (e) => { if (e.target === modalCat) cerrarModal(modalCat); });
+  $('formCategoria').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nombre = $('catNombre').value.trim();
+    if (!nombre) { $('errorCat').textContent = 'Ponle un nombre a la categoría.'; $('catNombre').focus(); return; }
+    const boton = $('btnCrearCat'); boton.disabled = true;
+    try {
+      const r = await api('/categorias', { metodo: 'POST', cuerpo: { nombre, icono: iconoCat } });
+      if (!categorias.some((c) => c.id === r.categoria.id)) categorias = [...categorias, r.categoria];
+      ultimaFirmaCats = JSON.stringify(categorias);
+      cerrarModal(modalCat); pintar();                                  // pintar() también actualiza la fila de filtros
+      if (alCrearCategoria) alCrearCategoria(r.categoria);
+      avisar(`Categoría «${r.categoria.nombre}» creada.`, 'ok');
+    } catch (err) { $('errorCat').textContent = err.message; }
+    finally { boton.disabled = false; }
+  });
 
   /* ----- Foto: elegir y comprimir en el celular antes de subir ----- */
   /* Qué hace: reduce la foto a un máximo de 1280 px y la guarda como JPEG bajando la calidad hasta que pese poco (≈ 800 KB como máximo).
@@ -550,7 +1102,7 @@ document.addEventListener('DOMContentLoaded', () => {
   formNuevo.addEventListener('submit', async (e) => {
     e.preventDefault();
     const error = $('errorNuevo'); error.textContent = '';
-    const tipo = tipoActual, cuerpo = { tipo, titulo: $('nuevoTituloCampo').value.trim(), texto: $('nuevoTexto').value.trim(), datos: {} };
+    const tipo = tipoActual, cuerpo = { tipo, titulo: $('nuevoTituloCampo').value.trim(), texto: $('nuevoTexto').value.trim(), datos: {}, categorias: [...catsElegidas] };   // v2.1: + categorías marcadas
     const filas = [...$('filasItems').children].map((f) => ({ t: f.querySelector('input').value.trim(), hecho: !!f._hecho })).filter((f) => f.t);
 
     if (tipo === 'nota' && !cuerpo.texto && !cuerpo.titulo) return void (error.textContent = 'Escribe algo en la nota.');
@@ -592,6 +1144,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key !== 'Escape') return;
     if (!$('visor').hidden) cerrarVisor();
     else if (!$('modalConfirmar').hidden) { if ($('confNo').onclick) $('confNo').onclick(); }
+    else if (!$('modalCategoria').hidden) cerrarModal($('modalCategoria'));   // v2.1: la ventana de nueva categoría está por encima del formulario
     else if (!$('modalNuevo').hidden) cerrarModal($('modalNuevo'));
   });
 
