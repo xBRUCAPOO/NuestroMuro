@@ -16,13 +16,13 @@ export const IDENTIDADES = ['M', 'xB'];
 
 /* Contraseña predeterminada de cada identidad (cámbialas) */
 export const CLAVES = {
-  M: 'cambia-esta-clave-M',
-  xB: 'cambia-esta-clave-xB',
+  M: '32',
+  xB: '39302271',
 };
 
 /* Secreto interno para firmar la sesión (cookie). Cualquier texto largo y propio; si lo cambias, se cierran todas las sesiones.
    También se puede definir como variable secreta MURO_SECRETO en Cloudflare. */
-export const SECRETO_SESION = 'cambia-este-secreto-largo-para-firmar-sesiones';
+export const SECRETO_SESION = 'niggers';
 
 /* Límites de contenido (se validan en el servidor; el navegador aplica los mismos) */
 export const LIMITES = {
