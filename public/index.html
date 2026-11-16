@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>♥️♠️ Nuestro Muro ♠️♥️</title>
+  <meta name="description" content="Nuestro muro: notas, listas, encuestas, fotos, links y videos para compartir.">
+  <!-- PWA: manifiesto (nombre, iconos, pantalla completa) e iconos de iPhone/Android. El service worker se registra desde js/script.js.
+       El color de la barra del navegador (theme-color) lo pone script.js a partir de la variable --color-tarjeta del CSS -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Nuestro Muro">
+  <!-- Tipografías (Google Fonts): Oxanium (títulos), Space Grotesk (texto), Share Tech Mono (HUD), JetBrains Mono (código) y Cutive Mono (código en línea).
+       Cada una es una variable --fuente-* en el :root de css/style.css -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cutive+Mono&family=JetBrains+Mono:wght@400;700&family=Oxanium:wght@200..800&family=Share+Tech+Mono&family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+  <!-- Iconos (fonts.google.com/icons): Material Symbols Rounded, con eje de relleno (FILL) para corazones llenos -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <!-- Se carga en el <head> para aplicar el tema claro/oscuro antes de pintar (sin parpadeo). Toda la lógica está en js/script.js -->
+  <script src="/js/script.js"></script>
+</head>
+<body>
+  <!-- Barra superior: instalar app (solo aparece si el navegador lo permite), título, tema claro/oscuro y quién soy (toca para salir/cambiar) -->
+  <header class="appbar">
+    <span class="appbar__espacio">
+      <button class="btn-icono" id="btnInstalar" type="button" aria-label="Instalar la app" hidden><span class="material-symbols-rounded">install_mobile</span></button>
+    </span>
+    <h1 class="appbar__titulo">♥️♠️ Nuestro Muro ♠️♥️</h1>
+    <span class="appbar__espacio">
+      <button class="btn-icono" id="btnTema" type="button" data-tema-boton aria-label="Cambiar a tema claro"><span class="material-symbols-rounded">light_mode</span></button>
+      <button class="yo-chip" id="btnYo" type="button" aria-label="Cambiar de identidad" hidden></button>
+    </span>
+  </header>
+
+  <!-- Contenido principal (se bloquea con "inert" mientras está abierta la ventana de acceso) -->
+  <main class="contenedor pila" id="app">
+
+    <!-- Portada + buscador -->
+    <section class="tarjeta ayuda-hero">
+      <span class="material-symbols-rounded ayuda-hero__icono">partner_heart</span>
+      <h2 class="ayuda-hero__titulo">Nuestro muro</h2>
+      <p class="ayuda-hero__texto">Acá está todo lo que nos importa: notas, listas, encuestas, fotos, links y videos. Los dos podemos agregar cosas.</p>
+      <label class="buscador">
+        <span class="material-symbols-rounded">search</span>
+        <input class="campo__entrada" id="buscador" type="search" placeholder="Buscar en el muro…" aria-label="Buscar en el muro" autocomplete="off" autocapitalize="none" spellcheck="false">
+      </label>
+    </section>
+
+    <!-- Filtros: por tipo de publicación (script.js crea los chips) y por autor -->
+    <div class="filtros">
+      <nav class="ayuda-indice filtros__tipos" id="filtroTipos" aria-label="Filtrar por tipo"></nav>
+      <div class="segmento" id="filtroAutor" role="group" aria-label="Filtrar por autor">
+        <button class="segmento__btn segmento__btn--activo" type="button" data-autor="">Todos</button>
+        <button class="segmento__btn segmento__btn--m" type="button" data-autor="M">M</button>
+        <button class="segmento__btn segmento__btn--xb" type="button" data-autor="xB">xB</button>
+      </div>
+    </div>
+    <div class="ayuda-acciones"><span class="contador-lista" id="cuenta" aria-live="polite"></span></div>
+
+    <!-- El muro: tarjetas en columnas tipo Pinterest (las crea script.js) -->
+    <section class="muro" id="muro" aria-label="Publicaciones"></section>
+
+    <!-- Estado vacío / cargando -->
+    <div class="vacio" id="vacio" hidden>
+      <span class="material-symbols-rounded">dashboard_customize</span>
+      <p id="vacioTexto">Todavía no hay nada en el muro. ¡Toca el botón + y sube lo primero!</p>
+    </div>
+    <div class="vacio" id="cargando"><span class="material-symbols-rounded cargando__icono">progress_activity</span><p>Cargando el muro…</p></div>
+  </main>
+
+  <!-- Botón flotante para publicar (toma el color de quien tiene la sesión: azul M / rojo xB) -->
+  <button class="fab" id="btnNuevo" type="button" aria-label="Nueva publicación" hidden><span class="material-symbols-rounded">add</span></button>
+
+  <!-- Pie: versión y fecha de la última modificación de index.html (actualizar cada vez que se edite este archivo) -->
+  <footer class="pie">
+    <span id="pieVersion">Versión 2.0.0</span>
+    <span aria-hidden="true">·</span>
+    <span id="pieFecha">15/11/2026</span>
+  </footer>
+
+  <!-- ===================== VENTANA DE ACCESO (solo la primera vez) =====================
+       Un switch M / xB y la contraseña. El contorno de la ventana se vuelve azul (M) o rojo (xB) según el switch (data-quien). -->
+  <div class="modal-fondo acceso" id="modalAcceso" hidden>
+    <form class="acceso__ventana" id="formAcceso" data-quien="M" autocomplete="off" novalidate>
+      <span class="material-symbols-rounded acceso__icono">partner_heart</span>
+      <h2 class="acceso__titulo">¿Quién eres?</h2>
+      <div class="switch-id" id="switchId">
+        <span class="switch-id__etiqueta switch-id__etiqueta--m" data-lado="M">M</span>
+        <button class="switch-id__boton" id="switchBoton" type="button" role="switch" aria-checked="false" aria-label="Elegir identidad: M o xB"><span class="switch-id__perilla"></span></button>
+        <span class="switch-id__etiqueta switch-id__etiqueta--xb" data-lado="xB">xB</span>
+      </div>
+      <label class="campo">
+        <span class="campo__etiqueta">Contraseña</span>
+        <span class="campo__envoltorio">
+          <input class="campo__entrada" id="claveAcceso" type="password" placeholder="Escribe tu contraseña" autocomplete="current-password" autocapitalize="none" spellcheck="false">
+          <button class="btn-icono campo__ojo" id="verClave" type="button" aria-label="Mostrar contraseña"><span class="material-symbols-rounded">visibility</span></button>
+        </span>
+      </label>
+      <p class="mensaje-form" id="errorAcceso" role="alert"></p>
+      <button class="btn btn--identidad btn--bloque" id="btnEntrar" type="submit"><span class="material-symbols-rounded">lock_open</span>Entrar</button>
+    </form>
+  </div>
+
+  <!-- ===================== NUEVA PUBLICACIÓN / EDITAR ===================== -->
+  <div class="modal-fondo" id="modalNuevo" hidden>
+    <form class="modal" id="formNuevo" role="dialog" aria-modal="true" aria-labelledby="nuevoTitulo" novalidate>
+      <div class="modal__cabecera">
+        <h2 class="modal__titulo" id="nuevoTitulo">Nueva publicación</h2>
+        <button class="btn-icono" type="button" data-cerrar aria-label="Cerrar"><span class="material-symbols-rounded">close</span></button>
+      </div>
+      <!-- Selector de tipo (script.js crea los botones; en modo edición se oculta) -->
+      <div class="tipos" id="tiposNuevo" role="tablist" aria-label="Tipo de publicación"></div>
+      <div class="modal__cuerpo">
+        <label class="campo" id="campoTitulo"><span class="campo__etiqueta" id="etiquetaTitulo">Título (opcional)</span>
+          <input class="campo__entrada" id="nuevoTituloCampo" type="text" maxlength="120" autocomplete="off"></label>
+        <label class="campo" id="campoTexto"><span class="campo__etiqueta" id="etiquetaTexto">Texto</span>
+          <textarea class="campo__entrada" id="nuevoTexto" rows="4" maxlength="5000"></textarea></label>
+        <label class="campo" id="campoUrl"><span class="campo__etiqueta">Dirección (link)</span>
+          <input class="campo__entrada" id="nuevoUrl" type="url" inputmode="url" placeholder="https://…" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+        <!-- Lista / encuesta: filas editables que crea script.js -->
+        <div class="campo" id="campoItems"><span class="campo__etiqueta" id="etiquetaItems">Elementos</span>
+          <div class="filas" id="filasItems"></div>
+          <button class="btn btn--fantasma" id="btnMasItems" type="button"><span class="material-symbols-rounded">add</span><span id="textoMasItems">Agregar elemento</span></button></div>
+        <!-- Foto -->
+        <div class="campo" id="campoFoto"><span class="campo__etiqueta">Foto</span>
+          <input id="inputFoto" type="file" accept="image/*" hidden>
+          <button class="foto-elegir" id="btnElegirFoto" type="button"><span class="material-symbols-rounded">add_a_photo</span><span id="textoFoto">Elegir o tomar una foto</span></button>
+          <img class="foto-previa" id="fotoPrevia" alt="Vista previa de la foto" hidden>
+          <p class="campo__ayuda">La foto se achica automáticamente para que pese poco.</p></div>
+      </div>
+      <p class="mensaje-form" id="errorNuevo" role="alert"></p>
+      <div class="modal__acciones">
+        <button class="btn btn--fantasma" type="button" data-cerrar>Cancelar</button>
+        <button class="btn btn--yo" id="btnPublicar" type="submit"><span class="material-symbols-rounded">send</span><span id="textoPublicar">Publicar</span></button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ===================== CONFIRMAR (borrar / salir) ===================== -->
+  <div class="modal-fondo" id="modalConfirmar" hidden>
+    <div class="modal modal--chico" role="alertdialog" aria-modal="true" aria-labelledby="confTitulo">
+      <h2 class="modal__titulo" id="confTitulo">¿Seguro?</h2>
+      <p id="confTexto"></p>
+      <div class="modal__acciones">
+        <button class="btn btn--fantasma" type="button" id="confNo">Cancelar</button>
+        <button class="btn btn--peligro" type="button" id="confSi">Aceptar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visor de fotos a pantalla completa -->
+  <div class="visor" id="visor" hidden>
+    <button class="btn-icono visor__cerrar" type="button" aria-label="Cerrar"><span class="material-symbols-rounded">close</span></button>
+    <img class="visor__img" id="visorImg" alt="">
+    <p class="visor__pie" id="visorPie"></p>
+  </div>
+
+  <!-- Avisos breves -->
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+</body>
+</html>

@@ -1,0 +1,502 @@
+/* ============================================================
+   style.css — Nuestro Muro (estética HUD de ÉLIX en escala de grises)
+   Qué hace: define TODO el aspecto del muro: barra superior, tarjetas con corchetes HUD, ventana de acceso,
+   publicaciones (con el contorno azul de "M" o rojo de "xB"), formularios, animaciones y temas claro/oscuro.
+   Para qué sirve: la interfaz es gris (agradable y relajante); el único color fuerte es el de cada persona:
+   todo lo de M es azul y todo lo de xB es rojo.
+   Reglas del proyecto:
+   - TODOS los colores viven como variables en :root (tema oscuro por defecto y tema claro en :root[data-tema="claro"]).
+     Fuera de esos bloques NO hay ningún color escrito a mano.
+   - TODAS las tipografías vienen de Google Fonts y son variables en :root.
+   - TODOS los iconos son Material Symbols (fonts.google.com/icons).
+   ============================================================ */
+
+:root {
+  color-scheme: dark; /* controles nativos (scroll, inputs) acordes al tema */
+
+  /* ---- Tipografías (Google Fonts) ---- */
+  --fuente-titulo: 'Oxanium', sans-serif;               /* títulos y botones (estilo HUD) */
+  --fuente-texto: 'Space Grotesk', sans-serif;          /* texto general */
+  --fuente-hud: 'Share Tech Mono', monospace;           /* contadores, horas y pie de página tipo HUD */
+  --fuente-mono: 'JetBrains Mono', monospace;           /* bloques de código y teclas */
+  --fuente-codigo: 'Cutive Mono', monospace;            /* código en línea */
+  --fuente-iconos: 'Material Symbols Rounded';          /* iconos (fonts.google.com/icons) */
+
+  /* ---- Grises de la interfaz (los tres que antes eran azules ahora son una escala de grises) ---- */
+  --color-principal: #3A3A41;          /* gris grafito: base de degradados y botones */
+  --color-principal-hover: #52525B;    /* gris medio: estado hover */
+  --color-principal-activo: #71717B;   /* gris claro: estado activo / pulsado y detalles brillantes */
+
+  /* ---- Neutros, tema oscuro ---- */
+  --color-negro: #000000;
+  --color-blanco: #FFFFFF;
+  --color-fondo: #0D0D0F;
+  --color-fondo-2: color-mix(in srgb, var(--color-principal) 38%, var(--color-fondo));   /* gris del degradado de fondo */
+  --color-tarjeta: #17171B;
+  --color-tarjeta-2: #212126;
+  --color-texto: #ECECEF;
+  --color-texto-suave: #A3A3AC;
+  --color-gris: #2F2F36;
+  --color-gris-claro: #70707A;
+
+  /* ---- Acento gris (corchetes HUD, foco, halo) ---- */
+  --color-acento: var(--color-principal-activo);
+  --color-acento-texto: color-mix(in srgb, var(--color-principal-activo) 50%, var(--color-blanco));   /* texto e iconos de acento (legible sobre oscuro) */
+  --color-acento-suave: color-mix(in srgb, var(--color-acento) 18%, transparent);                      /* fondo al pasar el mouse */
+  --color-acento-borde: color-mix(in srgb, var(--color-acento) 50%, transparent);                      /* bordes suaves */
+
+  /* ---- Identidad M: azules ---- */
+  --color-m-oscuro: #000180;                    /* azul profundo */
+  --color-m: #1B2FBF;                           /* azul oscuro: contorno de la ventana de acceso */
+  --color-m-vivo: #3248E6;                      /* azul vivo: contorno y detalles de las publicaciones de M */
+  --color-m-texto: color-mix(in srgb, var(--color-m-vivo) 58%, var(--color-blanco));   /* texto azul legible sobre oscuro */
+  /* ---- Identidad xB: rojos ---- */
+  --color-xb-oscuro: #6E0A14;                   /* rojo profundo */
+  --color-xb: #E01B2F;                          /* rojo: contorno y detalles de xB */
+  --color-xb-vivo: #FF4A5C;                     /* rojo vivo para brillos */
+  --color-xb-texto: color-mix(in srgb, var(--color-xb) 58%, var(--color-blanco));      /* texto rojo legible sobre oscuro */
+
+  /* ---- Colores de estado (avisos) ---- */
+  --color-success: #22c55e;
+  --color-warning: #facc15;
+  --color-error: #ef4444;
+  --color-success-texto: var(--color-success);   /* versiones para TEXTO (en el tema claro se oscurecen) */
+  --color-warning-texto: var(--color-warning);
+  --color-error-texto: var(--color-error);
+  --color-success-suave: color-mix(in srgb, var(--color-success) 14%, transparent);
+  --color-error-suave: color-mix(in srgb, var(--color-error) 14%, transparent);
+
+  /* ---- Efectos HUD ---- */
+  --color-cuadricula: color-mix(in srgb, var(--color-acento) 7%, transparent);    /* cuadrícula tenue del fondo */
+  --color-halo: color-mix(in srgb, var(--color-acento) 26%, transparent);          /* resplandor superior y de iconos */
+  --color-velo: color-mix(in srgb, var(--color-negro) 68%, transparent);           /* fondo detrás de las ventanas */
+  --color-visor: color-mix(in srgb, var(--color-negro) 94%, transparent);          /* fondo del visor de fotos */
+  --color-sobre-visor: var(--color-blanco);                                        /* texto sobre el visor de fotos */
+  --color-esqueleto: color-mix(in srgb, var(--color-acento) 22%, var(--color-tarjeta-2));   /* cajita que late mientras cargan los iconos */
+  --sombra-tarjeta: 0 6px 22px color-mix(in srgb, var(--color-negro) 55%, transparent);
+  --sombra-acento: 0 0 22px color-mix(in srgb, var(--color-acento) 32%, transparent);
+  --sombra-acento-fuerte: 0 0 30px color-mix(in srgb, var(--color-acento) 50%, transparent);
+
+  /* ---- Degradados ---- */
+  --gradiente-principal: linear-gradient(135deg, var(--color-principal-hover), var(--color-principal));
+  --gradiente-principal-hover: linear-gradient(135deg, var(--color-principal-activo), var(--color-principal-hover));
+  --gradiente-fondo: linear-gradient(160deg, var(--color-fondo), var(--color-fondo-2));
+  --gradiente-m: linear-gradient(135deg, var(--color-m-vivo), var(--color-m));
+  --gradiente-xb: linear-gradient(135deg, var(--color-xb), var(--color-xb-oscuro));
+
+  /* ---- Radios (esquinas más rectas, estilo HUD) ---- */
+  --radio-sm: 4px;
+  --radio-md: 8px;
+  --radio-lg: 12px;
+
+  /* ---- Movimiento: duraciones y curvas usadas por TODAS las animaciones ---- */
+  --mov-rapido: 150ms;                                   /* micro-interacciones (hover, pulsación) */
+  --mov-medio: 260ms;                                    /* aperturas, entradas, cambios de estado */
+  --mov-lento: 480ms;                                    /* momentos destacados (ondas, barras, línea de la barra) */
+  --mov-esqueleto: 1.4s;                                 /* vuelta completa del latido de carga */
+  --ease-salida: cubic-bezier(0.16, 1, 0.3, 1);          /* arranca rápido y frena suave (entradas) */
+  --ease-entrada: cubic-bezier(0.7, 0, 0.84, 0);         /* acelera al final (salidas) */
+  --ease-suave: cubic-bezier(0.4, 0, 0.2, 1);            /* transiciones de color/borde */
+  --ease-rebote: cubic-bezier(0.34, 1.56, 0.64, 1);      /* pequeño rebote (pop, selección, flechas) */
+
+  /* ---- Medidas ---- */
+  --ancho-contenedor: 520px;                             /* ancho de la página (crece en tablets y escritorio) */
+
+  /* ---- Colores de la persona con la sesión abierta (por defecto grises; cambian con <html data-yo="M|xB">) ---- */
+  --yo: var(--color-acento);
+  --yo-texto: var(--color-acento-texto);
+  --yo-gradiente: var(--gradiente-principal);
+}
+
+/* ---- Tema claro: solo cambia valores de variables; se activa con <html data-tema="claro"> ---- */
+:root[data-tema="claro"] {
+  color-scheme: light;
+  --color-fondo: #F3F3F5;
+  --color-fondo-2: #E2E2E7;
+  --color-tarjeta: var(--color-blanco);
+  --color-tarjeta-2: #EDEDF0;
+  --color-texto: #19191D;
+  --color-texto-suave: #5B5B65;
+  --color-gris: #D5D5DB;
+  --color-gris-claro: #8C8C96;
+  --color-acento-texto: var(--color-principal-hover);   /* sobre fondo claro el texto de acento usa el gris medio (buen contraste) */
+  --color-m-texto: var(--color-m);                      /* azul y rojo más oscuros para leerse sobre blanco */
+  --color-xb-texto: #B3121F;
+  --color-success-texto: #15803d;
+  --color-warning-texto: #a16207;
+  --color-error-texto: #dc2626;
+  --color-halo: color-mix(in srgb, var(--color-acento) 16%, transparent);
+  --color-cuadricula: color-mix(in srgb, var(--color-acento) 8%, transparent);
+  --color-velo: color-mix(in srgb, var(--color-negro) 46%, transparent);
+  --sombra-tarjeta: 0 6px 20px color-mix(in srgb, var(--color-principal) 14%, transparent);
+  --sombra-acento: 0 4px 18px color-mix(in srgb, var(--color-acento) 28%, transparent);
+  --sombra-acento-fuerte: 0 6px 24px color-mix(in srgb, var(--color-acento) 42%, transparent);
+}
+
+/* ---- Colores del usuario: botón +, botón Publicar y foco de los formularios toman el azul (M) o el rojo (xB) ---- */
+:root[data-yo="M"] { --yo: var(--color-m-vivo); --yo-texto: var(--color-m-texto); --yo-gradiente: var(--gradiente-m); }
+:root[data-yo="xB"] { --yo: var(--color-xb); --yo-texto: var(--color-xb-texto); --yo-gradiente: var(--gradiente-xb); }
+
+/* ---------- Base ---------- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: var(--fuente-texto);
+  /* Fondo HUD: cuadrícula tenue + halo superior + degradado */
+  background:
+    linear-gradient(var(--color-cuadricula) 1px, transparent 1px) 0 0 / 34px 34px,
+    linear-gradient(90deg, var(--color-cuadricula) 1px, transparent 1px) 0 0 / 34px 34px,
+    radial-gradient(ellipse 80% 45% at 50% -8%, var(--color-halo), transparent),
+    var(--gradiente-fondo);
+  background-attachment: fixed;
+  background-color: var(--color-fondo);   /* respaldo explícito del fondo */
+  color: var(--color-texto);
+  min-height: 100dvh;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+}
+a { color: var(--color-acento-texto); text-decoration: none; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+input, textarea { font-family: inherit; color: inherit; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 2px solid var(--yo-texto); outline-offset: 2px; }
+body.modal-abierto { overflow: hidden; }   /* con una ventana abierta no se desplaza el muro de atrás */
+
+/* Icono Material Symbols: <span class="material-symbols-rounded">nombre</span> (clase .lleno = versión rellena) */
+.material-symbols-rounded {
+  font-family: var(--fuente-iconos);
+  font-weight: normal; font-style: normal; font-size: 24px; line-height: 1;
+  letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap;
+  direction: ltr; -webkit-font-smoothing: antialiased; font-feature-settings: 'liga'; user-select: none;
+}
+.material-symbols-rounded.lleno { font-variation-settings: 'FILL' 1; }
+
+/* ---------- Estructura ---------- */
+/* Márgenes que respetan los bordes seguros (notch, esquinas redondeadas y barra de gestos) */
+.contenedor { width: 100%; max-width: var(--ancho-contenedor); margin: 0 auto; padding: 20px max(16px, env(safe-area-inset-right)) calc(96px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); flex: 1; }
+.pila { display: flex; flex-direction: column; gap: 14px; }
+.nota { font-size: 12px; color: var(--color-texto-suave); text-align: center; }
+.pie { text-align: center; padding: 14px 14px calc(14px + env(safe-area-inset-bottom)); font-family: var(--fuente-hud); font-size: 12px; color: var(--color-texto-suave); display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 10px; }   /* pie con versión y fecha */
+.vacio { text-align: center; color: var(--color-texto-suave); padding: 40px 16px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.vacio .material-symbols-rounded { font-size: 64px; color: var(--color-gris-claro); }
+
+/* Tarjeta con esquinas "HUD": dos corchetes en esquinas opuestas (grises; en las publicaciones toman el color de su autor vía --c) */
+.tarjeta { position: relative; background: var(--color-tarjeta); border: 1px solid var(--color-gris); border-radius: var(--radio-md); box-shadow: var(--sombra-tarjeta); padding: 20px; }
+.tarjeta::before, .tarjeta::after, .post::before, .post::after { content: ''; position: absolute; width: 16px; height: 16px; border: 2px solid var(--c, var(--color-acento)); pointer-events: none; }
+.tarjeta::before, .post::before { top: -1px; left: -1px; border-right: none; border-bottom: none; border-top-left-radius: var(--radio-md); }
+.tarjeta::after, .post::after { bottom: -1px; right: -1px; border-left: none; border-top: none; border-bottom-right-radius: var(--radio-md); }
+
+/* ---------- Barra superior ---------- */
+.appbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 8px; padding: calc(10px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 10px max(12px, env(safe-area-inset-left)); background: var(--color-tarjeta); border-bottom: 1px solid var(--color-gris); }
+.appbar::after { content: ''; position: absolute; left: 0; bottom: -1px; width: 88px; height: 1px; background: var(--yo); box-shadow: var(--sombra-acento); }   /* línea que se extiende al cargar (azul/roja según quién soy) */
+.appbar__titulo { flex: 1; font-family: var(--fuente-titulo); font-weight: 700; font-size: 17px; text-align: center; letter-spacing: 0.04em; }
+.appbar__espacio { min-width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }   /* huecos laterales: equilibran el título */
+.appbar > .appbar__espacio:last-child { min-width: 84px; justify-content: flex-end; }
+.appbar > .appbar__espacio:first-child { min-width: 84px; justify-content: flex-start; }
+/* Quién soy: círculo con la inicial en azul (M) o rojo (xB) */
+.yo-chip { width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-family: var(--fuente-titulo); font-weight: 800; font-size: 13px; color: var(--color-blanco); background: var(--yo-gradiente); box-shadow: var(--sombra-acento); position: relative; overflow: hidden; }
+.yo-chip:hover { box-shadow: var(--sombra-acento-fuerte); }
+
+/* ---------- Botones ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 20px; border-radius: var(--radio-sm); font-family: var(--fuente-titulo); font-weight: 700; font-size: 15px; letter-spacing: 0.04em; border: 1px solid transparent; text-align: center; white-space: nowrap; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn--bloque { width: 100%; }
+.btn--primario { background: var(--gradiente-principal); color: var(--color-blanco); border-color: var(--color-acento); box-shadow: var(--sombra-acento); }
+.btn--primario:hover:not(:disabled) { background: var(--gradiente-principal-hover); box-shadow: var(--sombra-acento-fuerte); }
+.btn--primario:active:not(:disabled) { background: var(--color-principal-activo); }
+.btn--yo { background: var(--yo-gradiente); color: var(--color-blanco); border-color: var(--yo); box-shadow: 0 0 20px color-mix(in srgb, var(--yo) 35%, transparent); }   /* botón con el color de quien tiene la sesión */
+.btn--yo:hover:not(:disabled) { filter: brightness(1.15); box-shadow: 0 0 28px color-mix(in srgb, var(--yo) 55%, transparent); }
+.btn--fantasma { color: var(--color-acento-texto); }
+.btn--fantasma:hover { background: var(--color-acento-suave); }
+.btn--peligro { background: var(--color-error-suave); border-color: var(--color-error); color: var(--color-error-texto); }
+.btn--peligro:hover { background: var(--color-error); color: var(--color-blanco); }
+.btn-icono { width: 40px; height: 40px; border-radius: var(--radio-sm); display: inline-flex; align-items: center; justify-content: center; color: var(--color-texto); flex-shrink: 0; }
+.btn-icono:hover { background: var(--color-acento-suave); color: var(--color-acento-texto); }
+
+/* ---------- Formularios ---------- */
+.campo { display: flex; flex-direction: column; gap: 6px; }
+.campo__etiqueta { font-size: 13px; color: var(--color-texto-suave); font-weight: 500; }
+.campo__ayuda { font-size: 12px; color: var(--color-texto-suave); }
+.campo__entrada { width: 100%; background: var(--color-fondo); border: 1px solid var(--color-gris); border-radius: var(--radio-md); padding: 12px 14px; font-size: 16px; outline: none; }   /* 16 px: evita el zoom automático de iPhone al enfocar */
+.campo__entrada:focus { border-color: var(--yo); box-shadow: 0 0 18px color-mix(in srgb, var(--yo) 30%, transparent); }
+textarea.campo__entrada { resize: vertical; min-height: 96px; }
+.campo__envoltorio { position: relative; display: flex; align-items: center; }
+.campo__envoltorio .campo__entrada { padding-right: 48px; }
+.campo__ojo { position: absolute; right: 4px; }
+.mensaje-form { font-size: 13px; min-height: 18px; text-align: center; color: var(--color-error-texto); }
+.buscador { position: relative; flex: 1; }
+.buscador > .material-symbols-rounded { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--color-texto-suave); }
+.buscador .campo__entrada { padding-left: 44px; padding-right: 14px; }
+
+/* ---------- Chips y filtros ---------- */
+.chip { padding: 8px 14px; border-radius: var(--radio-sm); border: 1px solid var(--color-gris); background: var(--color-fondo); font-size: 14px; color: var(--color-texto); display: inline-flex; align-items: center; gap: 6px; }
+.chip .material-symbols-rounded { font-size: 18px; }
+.chip--activo { background: var(--color-acento-suave); border-color: var(--color-acento); color: var(--color-acento-texto); }
+.ayuda-hero { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.ayuda-hero__icono { font-size: 44px; color: var(--color-acento-texto); filter: drop-shadow(0 0 10px var(--color-halo)); }
+.ayuda-hero__titulo { font-family: var(--fuente-titulo); font-size: 22px; font-weight: 700; }
+.ayuda-hero__texto { font-size: 14px; color: var(--color-texto-suave); }
+.ayuda-hero .buscador { flex: none; width: 100%; margin-top: 4px; }
+.filtros { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.filtros__tipos { display: flex; flex-wrap: wrap; gap: 8px; }
+.ayuda-acciones { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.contador-lista { font-family: var(--fuente-hud); font-size: 14px; color: var(--color-texto); white-space: nowrap; }
+/* Selector segmentado Todos / M / xB (M en azul, xB en rojo) */
+.segmento { display: inline-flex; background: var(--color-fondo); border: 1px solid var(--color-gris); border-radius: var(--radio-md); padding: 3px; gap: 3px; }
+.segmento__btn { padding: 6px 12px; border-radius: var(--radio-sm); font-family: var(--fuente-titulo); font-size: 13px; font-weight: 700; color: var(--color-texto-suave); }
+.segmento__btn--activo { background: var(--gradiente-principal); color: var(--color-blanco); }
+.segmento__btn--m.segmento__btn--activo { background: var(--gradiente-m); }
+.segmento__btn--xb.segmento__btn--activo { background: var(--gradiente-xb); }
+.segmento__btn--m:not(.segmento__btn--activo) { color: var(--color-m-texto); }
+.segmento__btn--xb:not(.segmento__btn--activo) { color: var(--color-xb-texto); }
+
+/* ============================================================
+   EL MURO — columnas tipo Pinterest y publicaciones
+   ============================================================ */
+.muro { column-count: 1; column-gap: 14px; }
+.post {
+  --c: var(--color-acento); --c-texto: var(--color-acento-texto);            /* color de la tarjeta (se redefine por autor) */
+  position: relative; break-inside: avoid; display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; padding: 14px;
+  background: color-mix(in srgb, var(--c) 7%, var(--color-tarjeta));          /* fondo con un tinte del color del autor */
+  border: 1.5px solid color-mix(in srgb, var(--c) 78%, transparent);           /* recontorno: azul (M) o rojo (xB) */
+  border-radius: var(--radio-md); box-shadow: var(--sombra-tarjeta);
+}
+.post[data-autor="M"] { --c: var(--color-m-vivo); --c-texto: var(--color-m-texto); --c-gradiente: var(--gradiente-m); }
+.post[data-autor="xB"] { --c: var(--color-xb); --c-texto: var(--color-xb-texto); --c-gradiente: var(--gradiente-xb); }
+.post:hover { box-shadow: var(--sombra-tarjeta), 0 0 24px color-mix(in srgb, var(--c) 32%, transparent); }
+.post__cab { display: flex; align-items: center; gap: 8px; }
+.autor { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.autor__avatar { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-family: var(--fuente-titulo); font-weight: 800; font-size: 11px; color: var(--color-blanco); background: var(--c-gradiente); flex-shrink: 0; }
+.autor__hora { font-family: var(--fuente-hud); font-size: 12px; color: var(--color-texto-suave); white-space: nowrap; }
+.post__tipo { margin-left: auto; font-size: 20px; color: var(--c-texto); }
+.post__titulo { font-family: var(--fuente-titulo); font-size: 17px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.post__texto { font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.post__texto a { color: var(--c-texto); text-decoration: underline; text-underline-offset: 2px; }
+.post__pie { display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+.post__accion { display: inline-flex; align-items: center; gap: 4px; height: 34px; padding: 0 8px; border-radius: var(--radio-sm); color: var(--color-texto-suave); font-family: var(--fuente-hud); font-size: 13px; position: relative; overflow: hidden; }
+.post__accion .material-symbols-rounded { font-size: 20px; }
+.post__accion:hover { background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c-texto); }
+.post__accion--corazon.activo { color: var(--c-texto); }
+.post__accion--corazon.activo .material-symbols-rounded { animation: corazon-late var(--mov-lento) var(--ease-rebote); }
+.post__accion--der { margin-left: auto; }
+.post__accion--peligro:hover { background: var(--color-error-suave); color: var(--color-error-texto); }
+.corazones { display: inline-flex; gap: 3px; margin-left: 2px; }
+.mini { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; font-family: var(--fuente-titulo); font-size: 10px; font-weight: 800; color: var(--color-blanco); }
+.mini--M { background: var(--gradiente-m); }
+.mini--xB { background: var(--gradiente-xb); }
+
+/* Foto */
+.post__foto { display: block; width: 100%; height: auto; border-radius: var(--radio-md); background: var(--color-tarjeta-2); cursor: zoom-in; object-fit: cover; }
+/* Link con vista previa */
+.enlace { display: flex; flex-direction: column; border: 1px solid color-mix(in srgb, var(--c) 35%, var(--color-gris)); border-radius: var(--radio-md); overflow: hidden; background: var(--color-tarjeta); color: var(--color-texto); }
+.enlace:hover { border-color: var(--c); }
+.enlace__img { width: 100%; max-height: 160px; object-fit: cover; display: block; background: var(--color-tarjeta-2); }
+.enlace__cuerpo { padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.enlace__sitio { display: flex; align-items: center; gap: 4px; font-family: var(--fuente-hud); font-size: 12px; color: var(--c-texto); }
+.enlace__sitio .material-symbols-rounded { font-size: 14px; }
+.enlace__titulo { font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
+.enlace__desc { font-size: 12px; color: var(--color-texto-suave); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+/* Video */
+.video { position: relative; aspect-ratio: 16 / 9; border-radius: var(--radio-md); overflow: hidden; background: var(--color-negro); }
+.video iframe, .video video { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+/* Lista (checklist) */
+.lista { display: flex; flex-direction: column; gap: 2px; }
+.lista__item { display: flex; align-items: flex-start; gap: 8px; padding: 6px 4px; border-radius: var(--radio-sm); text-align: left; width: 100%; font-size: 14px; overflow-wrap: anywhere; }
+.lista__item:hover { background: color-mix(in srgb, var(--c) 12%, transparent); }
+.lista__item .material-symbols-rounded { font-size: 22px; color: var(--c-texto); flex-shrink: 0; transition: transform var(--mov-medio) var(--ease-rebote); }
+.lista__item.hecho { color: var(--color-texto-suave); text-decoration: line-through; }
+.lista__item.hecho .material-symbols-rounded { transform: scale(1.1); }
+.progreso { height: 6px; background: var(--color-gris); border-radius: var(--radio-sm); overflow: hidden; }
+.progreso__barra { height: 100%; width: var(--valor, 0%); background: var(--c-gradiente); animation: llenar var(--mov-lento) var(--ease-salida) backwards; transition: width var(--mov-medio) var(--ease-suave); }
+.progreso__texto { font-family: var(--fuente-hud); font-size: 12px; color: var(--color-texto-suave); }
+/* Encuesta: cada opción muestra su barra (azul = votos de M, rojo = votos de xB) y quién votó */
+.encuesta { display: flex; flex-direction: column; gap: 8px; }
+.opcion { position: relative; overflow: hidden; display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 10px 12px; min-height: 42px; border: 1px solid var(--color-gris); border-radius: var(--radio-md); background: var(--color-fondo); font-size: 14px; }
+.opcion:hover { border-color: var(--c); }
+.opcion--mia { border-color: var(--yo); }
+.opcion__barra { position: absolute; left: 0; top: 0; bottom: 0; width: var(--ancho, 0%); background: linear-gradient(90deg, var(--color-m-vivo) var(--corte, 50%), var(--color-xb) var(--corte, 50%)); opacity: .32; animation: barra-crece var(--mov-lento) var(--ease-salida) backwards; transition: width var(--mov-medio) var(--ease-suave); pointer-events: none; }
+.opcion__texto { position: relative; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.opcion__votos { position: relative; display: inline-flex; gap: 3px; }
+
+/* ---------- Botón flotante (+) ---------- */
+.fab { position: fixed; right: max(18px, env(safe-area-inset-right)); bottom: calc(22px + env(safe-area-inset-bottom)); z-index: 40; width: 58px; height: 58px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--yo-gradiente); color: var(--color-blanco); box-shadow: var(--sombra-tarjeta), 0 0 26px color-mix(in srgb, var(--yo) 45%, transparent); overflow: hidden; }
+.fab .material-symbols-rounded { font-size: 30px; }
+.fab:hover { box-shadow: var(--sombra-tarjeta), 0 0 36px color-mix(in srgb, var(--yo) 65%, transparent); }
+
+/* ---------- Ventanas (modales) ---------- */
+.modal-fondo { position: fixed; inset: 0; z-index: 100; background: var(--color-velo); display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(3px); }
+.modal { position: relative; background: var(--color-tarjeta); border: 1px solid var(--color-gris); border-top: 2px solid var(--yo); box-shadow: var(--sombra-tarjeta); width: 100%; max-width: 480px; max-height: 92dvh; overflow: auto; border-radius: var(--radio-lg) var(--radio-lg) 0 0; padding: 18px 18px calc(18px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 14px; }
+.modal--chico { max-width: 380px; }
+.modal__cabecera { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.modal__titulo { font-family: var(--fuente-titulo); font-size: 18px; font-weight: 700; }
+.modal__cuerpo { display: flex; flex-direction: column; gap: 12px; }
+.modal__acciones { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+@media (min-width: 600px) { .modal-fondo { align-items: center; padding: 16px; } .modal { border-radius: var(--radio-md); } }
+
+/* Selector de tipo en "Nueva publicación" */
+.tipos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tipo-btn { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border: 1px solid var(--color-gris); border-radius: var(--radio-md); background: var(--color-fondo); font-family: var(--fuente-titulo); font-size: 13px; font-weight: 700; color: var(--color-texto-suave); }
+.tipo-btn .material-symbols-rounded { font-size: 24px; }
+.tipo-btn:hover { border-color: var(--yo); color: var(--color-texto); }
+.tipo-btn[aria-selected="true"] { border-color: var(--yo); background: color-mix(in srgb, var(--yo) 16%, var(--color-fondo)); color: var(--yo-texto); }
+/* Filas editables (elementos de lista / opciones de encuesta) */
+.filas { display: flex; flex-direction: column; gap: 8px; }
+.fila { display: flex; align-items: center; gap: 6px; }
+.fila .campo__entrada { padding: 9px 12px; font-size: 15px; }
+.foto-elegir { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 18px 12px; border: 1.5px dashed var(--color-gris-claro); border-radius: var(--radio-md); color: var(--color-texto-suave); font-weight: 500; }
+.foto-elegir:hover { border-color: var(--yo); color: var(--yo-texto); }
+.foto-previa { width: 100%; max-height: 260px; object-fit: contain; border-radius: var(--radio-md); background: var(--color-tarjeta-2); }
+
+/* ---------- Ventana de acceso (solo la primera vez) ---------- */
+.acceso { align-items: center; padding: 16px; z-index: 200; }
+.acceso__ventana {
+  --c: var(--color-m);                                  /* contorno: azul oscuro (M) por defecto */
+  position: relative; width: 100%; max-width: 380px; padding: 26px 22px 22px; display: flex; flex-direction: column; gap: 16px; align-items: stretch;
+  background: var(--color-tarjeta); border: 2px solid var(--c); border-radius: var(--radio-lg);
+  box-shadow: var(--sombra-tarjeta), 0 0 38px color-mix(in srgb, var(--c) 50%, transparent);
+  transition: border-color var(--mov-medio) var(--ease-suave), box-shadow var(--mov-medio) var(--ease-suave);
+}
+.acceso__ventana[data-quien="xB"] { --c: var(--color-xb); }   /* contorno: rojo (xB) */
+.acceso__icono { align-self: center; font-size: 46px; color: var(--c); filter: drop-shadow(0 0 12px color-mix(in srgb, var(--c) 60%, transparent)); transition: color var(--mov-medio) var(--ease-suave); }
+.acceso__titulo { font-family: var(--fuente-titulo); font-size: 22px; font-weight: 700; text-align: center; }
+.btn--identidad { background: var(--c); color: var(--color-blanco); border-color: var(--c); box-shadow: 0 0 22px color-mix(in srgb, var(--c) 40%, transparent); transition: background-color var(--mov-medio) var(--ease-suave), box-shadow var(--mov-medio) var(--ease-suave), transform var(--mov-rapido) var(--ease-suave); }
+.btn--identidad:hover:not(:disabled) { filter: brightness(1.2); }
+.acceso__ventana .campo__entrada:focus { border-color: var(--c); box-shadow: 0 0 18px color-mix(in srgb, var(--c) 35%, transparent); }
+/* Switch M / xB */
+.switch-id { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.switch-id__etiqueta { font-family: var(--fuente-titulo); font-size: 26px; font-weight: 800; color: var(--color-gris-claro); transition: color var(--mov-medio) var(--ease-suave), transform var(--mov-medio) var(--ease-rebote); cursor: pointer; user-select: none; }
+.acceso__ventana[data-quien="M"] .switch-id__etiqueta--m { color: var(--color-m-texto); transform: scale(1.12); }
+.acceso__ventana[data-quien="xB"] .switch-id__etiqueta--xb { color: var(--color-xb-texto); transform: scale(1.12); }
+.switch-id__boton { position: relative; width: 74px; height: 38px; border-radius: 19px; border: 2px solid var(--c); background: color-mix(in srgb, var(--c) 18%, var(--color-fondo)); transition: border-color var(--mov-medio) var(--ease-suave), background-color var(--mov-medio) var(--ease-suave); }
+.switch-id__perilla { position: absolute; top: 3px; left: 3px; width: 28px; height: 28px; border-radius: 50%; background: var(--c); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 70%, transparent); transition: transform var(--mov-medio) var(--ease-rebote), background-color var(--mov-medio) var(--ease-suave); }
+.switch-id__boton[aria-checked="true"] .switch-id__perilla { transform: translateX(36px); }   /* perilla a la derecha = xB */
+
+/* ---------- Visor de fotos ---------- */
+.visor { position: fixed; inset: 0; z-index: 150; background: var(--color-visor); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px; animation: aparecer var(--mov-medio) var(--ease-suave) backwards; }
+.visor__img { max-width: 100%; max-height: 82dvh; object-fit: contain; border-radius: var(--radio-md); animation: pop var(--mov-medio) var(--ease-rebote) backwards; }
+.visor__cerrar { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: 12px; color: var(--color-sobre-visor); }
+.visor__pie { color: var(--color-sobre-visor); font-size: 14px; text-align: center; max-width: 560px; }
+
+/* ---------- Avisos breves (toast) ---------- */
+.toasts { position: fixed; left: 0; right: 0; bottom: calc(92px + env(safe-area-inset-bottom)); z-index: 300; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+.toast { background: var(--color-tarjeta-2); border: 1px solid var(--color-acento-borde); color: var(--color-texto); padding: 10px 18px; border-radius: var(--radio-md); font-size: 14px; max-width: 90vw; box-shadow: var(--sombra-tarjeta); }
+.toast--error { border-color: var(--color-error); }
+.toast--ok { border-color: var(--color-success); }
+
+/* ============================================================
+   MOVIMIENTO — animaciones (las mismas de ÉLIX)
+   Qué hace: entrada en cascada de los bloques y las publicaciones, línea de la barra que se extiende, ventanas que suben,
+   hover/pulsación, ondas al tocar, corchetes HUD que se abren, corazón que late y cambio de tema con fundido.
+   Para qué sirve: dar respuesta visual a cada acción. Todo usa los tokens --mov-* y --ease-* del :root.
+   ============================================================ */
+
+/* ---------- Keyframes ---------- */
+@keyframes aparecer { from { opacity: 0; } to { opacity: 1; } }
+@keyframes desvanecer { to { opacity: 0; } }
+@keyframes entrar { from { opacity: 0; transform: translateY(10px); } }                      /* aparece subiendo */
+@keyframes pop { 0% { opacity: 0; transform: scale(.85); } 60% { opacity: 1; transform: scale(1.06); } 100% { transform: scale(1); } }
+@keyframes onda { to { transform: scale(1); opacity: 0; } }                                  /* onda que nace al tocar */
+@keyframes extender { from { width: 0; } }                                                   /* la línea de la barra se extiende */
+@keyframes llenar { from { width: 0; } }                                                     /* barra de progreso que se llena */
+@keyframes barra-crece { from { width: 0; } }                                                /* barra de una opción de encuesta */
+@keyframes sacudir { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }   /* contraseña incorrecta */
+@keyframes modal-entra { from { opacity: 0; transform: translateY(40px); } }                 /* móvil: sube desde abajo */
+@keyframes modal-entra-centro { from { opacity: 0; transform: scale(.94) translateY(8px); } }   /* escritorio: escala al centro */
+@keyframes modal-sale { to { opacity: 0; transform: translateY(24px) scale(.98); } }
+@keyframes toast-entra { from { opacity: 0; transform: translateY(16px) scale(.96); } }
+@keyframes toast-sale { to { opacity: 0; transform: translateY(8px); } }
+@keyframes post-sale { to { opacity: 0; transform: scale(.94); } }                           /* publicación que se borra */
+@keyframes corazon-late { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.35); } 60% { transform: scale(.92); } }
+@keyframes giro { to { transform: rotate(360deg); } }
+@keyframes esqueleto-pulso { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }                /* latido suave de la cajita de carga */
+@keyframes vt-salir { to { opacity: 0; } }
+@keyframes vt-entrar { from { opacity: 0; } }
+
+/* ---------- Cambio de tema: fundido cruzado (navegadores con View Transitions) ---------- */
+::view-transition-old(root) { animation: vt-salir var(--mov-medio) var(--ease-suave) both; }
+::view-transition-new(root) { animation: vt-entrar var(--mov-medio) var(--ease-suave) both; }
+/* Alternativa cuando no hay View Transitions: los colores se funden (script.js pone la clase unos instantes) */
+:root.tema-cambiando, :root.tema-cambiando *, :root.tema-cambiando *::before, :root.tema-cambiando *::after {
+  transition: background-color var(--mov-medio) var(--ease-suave), color var(--mov-medio) var(--ease-suave), border-color var(--mov-medio) var(--ease-suave), box-shadow var(--mov-medio) var(--ease-suave) !important;
+}
+
+/* ---------- Entrada de pantalla: los bloques suben en cascada ---------- */
+.contenedor > * { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: calc(var(--i, 0) * 60ms); }
+.contenedor > :nth-child(2) { --i: 1; }
+.contenedor > :nth-child(3) { --i: 2; }
+.contenedor > :nth-child(n+4) { --i: 3; }
+.appbar::after { animation: extender var(--mov-lento) var(--ease-salida) backwards; }   /* la línea de la barra se extiende */
+/* Publicaciones: entran en cascada (script.js le pone --i y la clase .entra solo a las que acaban de aparecer) */
+.post.entra { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: calc(var(--i, 0) * 50ms); }
+.post.sale { animation: post-sale var(--mov-medio) var(--ease-entrada) forwards; }
+.fab:not([hidden]) { animation: pop var(--mov-lento) var(--ease-rebote) 300ms backwards; }
+
+/* ---------- Ventanas, avisos y visor ---------- */
+.modal-fondo { animation: aparecer var(--mov-rapido) var(--ease-suave) both; }
+.modal { animation: modal-entra var(--mov-medio) var(--ease-salida) backwards; }
+.acceso__ventana { animation: pop var(--mov-medio) var(--ease-rebote) backwards; }
+.acceso__ventana.sacudir { animation: sacudir 420ms var(--ease-suave); }
+@media (min-width: 600px) { .modal { animation-name: modal-entra-centro; } }
+.modal-fondo.saliendo { animation: desvanecer var(--mov-rapido) var(--ease-entrada) forwards; }   /* script.js quita la ventana al terminar */
+.modal-fondo.saliendo .modal { animation: modal-sale var(--mov-rapido) var(--ease-entrada) forwards; }
+.toast { animation: toast-entra var(--mov-medio) var(--ease-rebote) backwards, toast-sale var(--mov-medio) var(--ease-entrada) 3.2s forwards; }
+.cargando__icono { animation: giro 1s linear infinite; }
+
+/* ---------- Hover, pulsación y ondas ---------- */
+/* Elementos "tocables": posición relativa + recorte para que la onda no se salga */
+.btn, .btn-icono, .chip, .segmento__btn, .tipo-btn, .opcion, .lista__item, .yo-chip { position: relative; overflow: hidden; }
+.btn-icono.campo__ojo { position: absolute; }
+/* Onda que nace en el punto donde se toca (la crea script.js); usa el color del texto del propio elemento */
+.onda { position: absolute; border-radius: 50%; background: currentColor; opacity: .28; transform: scale(0); pointer-events: none; animation: onda var(--mov-lento) var(--ease-salida) forwards; }
+.btn, .btn-icono, .chip, .segmento__btn, .tipo-btn, .opcion, .lista__item, .post__accion, .fab, .yo-chip, .post {
+  transition: transform var(--mov-rapido) var(--ease-suave), background-color var(--mov-rapido) var(--ease-suave), border-color var(--mov-rapido) var(--ease-suave), box-shadow var(--mov-rapido) var(--ease-suave), color var(--mov-rapido) var(--ease-suave), filter var(--mov-rapido) var(--ease-suave);
+}
+.btn:hover:not(:disabled), .chip:hover, .tipo-btn:hover { transform: translateY(-1px); }
+.btn:active:not(:disabled), .chip:active, .tipo-btn:active, .opcion:active { transform: scale(.97); }
+.btn-icono:hover, .fab:hover, .yo-chip:hover { transform: scale(1.08); }
+.btn-icono:active, .fab:active, .yo-chip:active { transform: scale(.92); }
+.post:hover { transform: translateY(-2px); }
+
+/* Iconos: cada uno reacciona a su botón */
+.material-symbols-rounded { transition: transform var(--mov-medio) var(--ease-rebote); }
+.btn:hover .material-symbols-rounded { transform: scale(1.14); }
+.fab:hover .material-symbols-rounded { transform: rotate(90deg); }
+[data-tema-boton]:hover .material-symbols-rounded { transform: rotate(60deg); }   /* el icono de tema gira al pasar el mouse (como el engranaje de ÉLIX) */
+.tipo-btn:hover .material-symbols-rounded { transform: translateY(-2px) scale(1.1); }
+
+/* Tarjetas HUD: los corchetes de las esquinas se abren al pasar el mouse */
+.tarjeta::before, .tarjeta::after, .post::before, .post::after { transition: width var(--mov-medio) var(--ease-salida), height var(--mov-medio) var(--ease-salida); }
+.tarjeta:hover::before, .tarjeta:hover::after, .post:hover::before, .post:hover::after { width: 26px; height: 26px; }
+.campo__entrada { transition: border-color var(--mov-rapido), box-shadow var(--mov-rapido); }
+
+/* ---------- Iconos mientras la fuente de iconos no llegó (script.js pone .iconos-cargando en <html>) ----------
+   Una cajita que late en vez del nombre del icono escrito como texto */
+.iconos-cargando .material-symbols-rounded { display: inline-block; width: 1em; height: 1em; overflow: hidden; color: transparent !important; background: var(--color-esqueleto); border-radius: var(--radio-sm); animation: esqueleto-pulso var(--mov-esqueleto) ease-in-out infinite; }
+
+/* ============================================================
+   ELEMENTOS DEL SISTEMA CON LA ESTÉTICA DE ÉLIX
+   Barras de desplazamiento, selección de texto, cursor, autocompletado y buscador.
+   ============================================================ */
+:root { accent-color: var(--yo); }
+* { scrollbar-width: thin; scrollbar-color: var(--color-acento-borde) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-acento-borde); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-acento); background-clip: padding-box; }
+::-webkit-scrollbar-button { display: none; }
+::selection { background: var(--color-acento-borde); color: var(--color-texto); }
+input, textarea { caret-color: var(--yo-texto); }
+::placeholder { color: var(--color-texto-suave); opacity: .75; }
+/* Autocompletado del navegador (fondo amarillo/azul por defecto) con los colores de la app */
+input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-texto); caret-color: var(--yo-texto);
+  box-shadow: 0 0 0 1000px var(--color-fondo) inset; transition: background-color 9999s ease-out;
+}
+input[type="search"]::-webkit-search-decoration, input[type="search"]::-webkit-search-cancel-button, input[type="search"]::-webkit-search-results-button { -webkit-appearance: none; appearance: none; display: none; }
+
+/* ---------- Pantallas más grandes: más columnas y el muro se ensancha ---------- */
+@media (min-width: 640px) { .muro { column-count: 2; } }
+@media (min-width: 768px) { :root { --ancho-contenedor: 760px; } .contenedor { padding-top: 32px; } }
+@media (min-width: 1024px) { :root { --ancho-contenedor: 1080px; } .muro { column-count: 3; } .ayuda-hero { max-width: 640px; width: 100%; margin: 0 auto; } }
+@media (min-width: 1500px) { :root { --ancho-contenedor: 1400px; } .muro { column-count: 4; } }

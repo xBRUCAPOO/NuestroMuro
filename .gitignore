@@ -1,0 +1,4 @@
+# Archivos que no se suben a GitHub (los crea wrangler al probar en local)
+node_modules/
+.wrangler/
+.dev.vars

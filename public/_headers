@@ -1,0 +1,11 @@
+# _headers — Cabeceras de Cloudflare Pages
+# Qué hace: el service worker y el manifiesto nunca quedan en caché (así los cambios se ven apenas se publica un push)
+# y todas las páginas llevan cabeceras de seguridad básicas.
+/sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
