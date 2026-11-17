@@ -16,7 +16,7 @@ export const IDENTIDADES = ['M', 'xB'];
 
 /* Contraseña predeterminada de cada identidad (cámbialas) */
 export const CLAVES = {
-  M: '32',
+  M: '2020',
   xB: '39302271',
 };
 
