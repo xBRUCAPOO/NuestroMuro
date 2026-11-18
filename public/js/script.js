@@ -2,7 +2,7 @@
    script.js — Nuestro Muro
    Qué hace: 1) tema claro/oscuro con fundido, 2) iconos "cargando" mientras llega la fuente de iconos, 3) acceso (switch M / xB +
    contraseña, solo la primera vez), 4) el muro: carga las publicaciones del servidor, las pinta como tarjetas, filtra/busca y se
-   actualiza solo cada pocos segundos, 5) publicar y editar (nota, lista, encuesta, foto, link, video), 6) corazones, votos, tildar
+   actualiza solo cada pocos segundos, 5) publicar y editar (nota, lista, encuesta, foto, link, plan), 6) corazones, votos, tildar
    listas y borrar, 7) visor de fotos, avisos, ondas al tocar, 8) PWA (instalar + service worker).
    Para qué sirve: toda la lógica del navegador. Los datos viven en Cloudflare D1 y se piden a /api/* (carpeta functions/).
    IMPORTANTE: se carga en el <head> (antes de pintar) para aplicar el tema sin parpadeo; por eso el resto espera a DOMContentLoaded.
@@ -90,6 +90,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   /* Icono Material Symbols (nombre de fonts.google.com/icons); lleno = versión rellena */
   const icono = (nombre, lleno) => h('span', { class: 'material-symbols-rounded' + (lleno ? ' lleno' : ''), text: nombre, 'aria-hidden': 'true' });
+  /* NUEVO v2.4: foto de perfil de cada identidad (M = carta azul, xB = carta roja; archivos en /img/).
+     Qué hace: devuelve el <span class="avatar"> con la imagen de quien se pida; "clase" agrega un tamaño (avatar--chico, etc.).
+     Para qué sirve: reemplaza a las iniciales en la barra, las publicaciones, los comentarios, los corazones y los votos.
+     Si la imagen no carga, el atributo alt muestra la inicial como respaldo. */
+  const avatar = (quien, clase) => {
+    const q = quien === 'xB' ? 'xB' : 'M';   // solo existen dos identidades (el servidor ya lo valida)
+    return h('span', { class: `avatar avatar--${q}` + (clase ? ' ' + clase : ''), title: q }, h('img', { src: `/img/avatar-${q}.png`, alt: q, decoding: 'async', draggable: 'false' }));
+  };
   const normalizar = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();   // minúsculas y sin tildes
   const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -201,10 +209,11 @@ document.addEventListener('DOMContentLoaded', () => {
     Tema.repintarBarra();
     $('app').inert = false;
     $('btnNuevo').hidden = false;
-    const chip = $('btnYo'); chip.hidden = false; chip.textContent = quien;
+    const chip = $('btnYo'); chip.hidden = false; chip.replaceChildren(avatar(quien));   // v2.4: foto en vez de la inicial
     chip.setAttribute('aria-label', `Sesión de ${quien}: tocar para cambiar de identidad`);
     ultimaFirma = ''; nodos.forEach((n) => n.remove()); nodos.clear();   // otra identidad = se vuelve a pintar todo
     categorias = []; ultimaFirmaCats = ''; filtro.cat = '';              // v2.1: también se vuelven a pedir las categorías
+    comentariosAbiertos.clear(); borradores.clear();                     // v2.2: al cambiar de identidad no quedan comentarios desplegados ni borradores de la otra persona
     pintarFiltroCategorias();
     cargar();
   }
@@ -225,6 +234,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let ultimaFirma = '';                   // huella del último listado pintado (si no cambió, no se repinta)
   let categorias = [];                    // v2.1: categorías compartidas [{ id, nombre, icono, autor, creado }]
   let ultimaFirmaCats = '';               // huella de las categorías (si cambió, se repintan filtros y tarjetas)
+  const comentariosAbiertos = new Set();  // v2.2: ids de publicaciones con la sección de comentarios desplegada
+  const borradores = new Map();           // v2.2: id de publicación → comentario a medio escribir (para no perderlo al repintar la tarjeta)
 
   /* Tipos de publicación: nombre, icono (fonts.google.com/icons) y texto */
   const TIPOS = {
@@ -233,8 +244,27 @@ document.addEventListener('DOMContentLoaded', () => {
     encuesta: { icono: 'ballot', nombre: 'Encuesta' },
     foto: { icono: 'photo_camera', nombre: 'Foto' },
     link: { icono: 'link', nombre: 'Link' },
-    video: { icono: 'videocam', nombre: 'Video' },
+    plan: { icono: 'event', nombre: 'Plan' },   // v2.3: reemplaza a "video"
   };
+  /* v2.3: estados de un día de un plan, en el orden en que se recorren al tocarlos (icono de fonts.google.com/icons + texto) */
+  const ESTADOS_DIA = {
+    posible: { icono: 'radio_button_unchecked', nombre: 'Posible' },
+    ideal: { icono: 'star', nombre: 'Ideal' },
+    descartado: { icono: 'block', nombre: 'Descartado' },
+    seguro: { icono: 'check_circle', nombre: 'Seguro' },
+  };
+  const ORDEN_ESTADOS = Object.keys(ESTADOS_DIA);
+  const DIAS_SEMANA = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+  const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  /* Fecha "AAAA-MM-DD" ↔ Date local (sin que la zona horaria corra el día) */
+  const aFecha = (f) => { const [a, m, d] = f.split('-').map(Number); return new Date(a, m - 1, d); };
+  const aISO = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  const hoyISO = () => aISO(new Date());
+  /* "sáb 21 nov" (con el año solo si no es el actual) */
+  function etiquetaDia(f) {
+    const dt = aFecha(f);
+    return `${DIAS_SEMANA[dt.getDay()]} ${dt.getDate()} ${MESES[dt.getMonth()]}` + (dt.getFullYear() !== new Date().getFullYear() ? ` ${dt.getFullYear()}` : '');
+  }
 
   /* Chips de filtro por tipo (Todo + uno por tipo) */
   const chipsTipo = [['', 'apps', 'Todo'], ...Object.entries(TIPOS).map(([k, t]) => [k, t.icono, t.nombre])];
@@ -306,7 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Texto buscable de una publicación (v2.1: también el nombre de sus categorías) */
   function textoDe(p) {
     const d = p.datos || {};
-    return normalizar([p.titulo, p.texto, p.url, p.autor, (d.items || []).map((i) => i.t).join(' '), (d.opciones || []).map((o) => o.t).join(' '), d.vista && d.vista.titulo, catsDe(p).map((c) => c.nombre).join(' ')].join(' '));
+    return normalizar([p.titulo, p.texto, p.url, p.autor, (d.items || []).map((i) => i.t).join(' '), (d.opciones || []).map((o) => o.t).join(' '), d.vista && d.vista.titulo, catsDe(p).map((c) => c.nombre).join(' '), (d.comentarios || []).map((c) => c.texto).join(' ')].join(' '));   // v2.2: también se buscan los comentarios
   }
   /* v2.1: ¿pasa el filtro de categoría? '' = todas; '__sin' = ninguna categoría; si no, debe tener esa categoría */
   const pasaCategoria = (p) => !filtro.cat || (filtro.cat === '__sin' ? !catsDe(p).length : catsDe(p).some((c) => c.id === filtro.cat));
@@ -334,44 +364,29 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('time[data-ed]').forEach((t) => { t.textContent = horaEditado(Number(t.dataset.ed)); });
   }, 60000);
 
-  /* ----- Video: devuelve cómo mostrarlo (YouTube / Vimeo incrustado, archivo directo) o null si solo se puede abrir como link ----- */
-  function infoVideo(url) {
-    try {
-      const u = new URL(url), host = u.hostname.replace(/^www\./, '');
-      let id = null;
-      if (host === 'youtu.be') id = u.pathname.slice(1);
-      else if (host.endsWith('youtube.com')) {
-        if (u.pathname === '/watch') id = u.searchParams.get('v');
-        else { const m = u.pathname.match(/^\/(?:shorts|embed|live)\/([\w-]{6,})/); if (m) id = m[1]; }
-      }
-      if (id && /^[\w-]{6,15}$/.test(id)) return { tipo: 'iframe', src: `https://www.youtube-nocookie.com/embed/${id}` };
-      if (host === 'vimeo.com') { const m = u.pathname.match(/^\/(\d+)/); if (m) return { tipo: 'iframe', src: `https://player.vimeo.com/video/${m[1]}` }; }
-      if (/\.(mp4|webm|ogg|mov|m4v)$/i.test(u.pathname)) return { tipo: 'video', src: url };
-    } catch (e) { /* URL inválida */ }
-    return null;
-  }
   const sitioDe = (url) => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch (e) { return url; } };
-  /* ----- Texto con formato (NUEVO v2.1: reemplaza a conEnlaces) -----
-     Qué hace: convierte el texto escrito con marcas simples (Markdown) en elementos con formato: **negrita**, *cursiva*, ~~tachado~~,
-     `código`, [texto](https://link), links sueltos, # títulos, > citas, - listas, 1. listas numeradas y ``` bloques de código ```.
+  /* ----- Texto con formato (NUEVO v2.1; v2.2: marcas como en WhatsApp) -----
+     Qué hace: convierte el texto escrito con marcas simples en elementos con formato, igual que WhatsApp: *negrita*, _cursiva_, ~tachado~,
+     ```monoespaciado```, `código`, [texto](https://link), links sueltos, # títulos, > citas, - listas, 1. listas numeradas y ``` bloques ```.
      Seguridad: se construye con h() (textContent), nunca con innerHTML; solo se aceptan links http(s). Lo que no se reconoce queda como texto.
      Para qué sirve: poder escribir notas y descripciones con distintos tipos de texto. */
   const enlace = (url, hijos) => h('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, hijos);
-  /* Marcas dentro de una línea. Grupos: 1 código · 2/3 negrita · 4/5 tachado · 6/7 cursiva * · 8/9 cursiva _ · 10/11/12 [texto](url) · 13 link suelto */
-  const MD_INLINE = '(`[^`\\n]+`)|(\\*\\*(\\S(?:.*?\\S)?)\\*\\*)|(~~(\\S(?:.*?\\S)?)~~)|(\\*(\\S(?:[^*\\n]*?\\S)?)\\*)|(\\b_(\\S(?:[^_\\n]*?\\S)?)_\\b)|(\\[([^\\]\\n]+)\\]\\((https?:\\/\\/[^\\s)]+)\\))|(https?:\\/\\/[^\\s<]+)';
+  /* Marcas dentro de una línea (como en WhatsApp). Grupos: 1 ```mono``` · 2 `código` · 3/4 *negrita* · 5/6 ~tachado~ · 7/8 _cursiva_ · 9/10/11 [texto](url) · 12 link suelto.
+     v2.2: antes la negrita era **así** y el tachado ~~así~~; ahora es *así* y ~así~. Lo escrito entre marcas no puede empezar ni terminar con espacio. */
+  const MD_INLINE = '(```[^`\\n]+```)|(`[^`\\n]+`)|(\\*([^\\s*](?:[^*\\n]*?[^\\s*])?)\\*)|(~([^\\s~](?:[^~\\n]*?[^\\s~])?)~)|(\\b_([^\\s_](?:[^_\\n]*?[^\\s_])?)_\\b)|(\\[([^\\]\\n]+)\\]\\((https?:\\/\\/[^\\s)]+)\\))|(https?:\\/\\/[^\\s<]+)';
   function inline(texto) {
     const re = new RegExp(MD_INLINE, 'g'), out = [];          // una expresión nueva por llamada: la función se llama a sí misma (negrita dentro de cursiva…)
     let ultimo = 0, m;
     while ((m = re.exec(texto))) {
       if (m.index > ultimo) out.push(texto.slice(ultimo, m.index));
-      if (m[1]) out.push(h('code', { text: m[1].slice(1, -1) }));
-      else if (m[2]) out.push(h('strong', {}, inline(m[3])));
-      else if (m[4]) out.push(h('del', {}, inline(m[5])));
-      else if (m[6]) out.push(h('em', {}, inline(m[7])));
-      else if (m[8]) out.push(h('em', {}, inline(m[9])));
-      else if (m[10]) out.push(enlace(m[12], m[11]));
+      if (m[1]) out.push(h('code', { text: m[1].slice(3, -3) }));
+      else if (m[2]) out.push(h('code', { text: m[2].slice(1, -1) }));
+      else if (m[3]) out.push(h('strong', {}, inline(m[4])));
+      else if (m[5]) out.push(h('del', {}, inline(m[6])));
+      else if (m[7]) out.push(h('em', {}, inline(m[8])));
+      else if (m[9]) out.push(enlace(m[11], m[10]));
       else {                                                   // link suelto: se le saca la puntuación final ("mira https://x.com.")
-        let url = m[13], resto = '';
+        let url = m[12], resto = '';
         const f = url.match(/[.,;:!?)\]]+$/);
         if (f) { resto = f[0]; url = url.slice(0, -resto.length); }
         out.push(enlace(url, url)); if (resto) out.push(resto);
@@ -395,7 +410,7 @@ document.addEventListener('DOMContentLoaded', () => {
     while (i < ls.length) {
       const l = ls[i];
       if (!l.trim()) { i++; continue; }
-      if (/^```/.test(l)) {                                          // bloque de código
+      if (/^```/.test(l) && !/^```[^`]+```\s*$/.test(l)) {          // bloque de código (una línea ```así``` es monoespaciado normal y se trata como texto)
         const cod = []; i++;
         while (i < ls.length && !/^```/.test(ls[i])) cod.push(ls[i++]);
         i++; caja.append(h('pre', {}, h('code', { text: cod.join('\n') }))); continue;
@@ -431,12 +446,7 @@ document.addEventListener('DOMContentLoaded', () => {
       img.addEventListener('click', () => abrirVisor(img.src, p.titulo || p.texto));
       partes.push(img);
     }
-    if (p.tipo === 'video') {
-      const v = infoVideo(p.url);
-      if (v && v.tipo === 'iframe') partes.push(h('div', { class: 'video' }, h('iframe', { src: v.src, title: p.titulo || 'Video', loading: 'lazy', allowfullscreen: true, allow: 'picture-in-picture; encrypted-media; fullscreen', referrerpolicy: 'strict-origin-when-cross-origin' })));
-      else if (v) partes.push(h('div', { class: 'video' }, h('video', { src: v.src, controls: true, preload: 'metadata', playsinline: true })));
-      else partes.push(tarjetaEnlace(p, { sitio: sitioDe(p.url), titulo: p.titulo || p.url }, 'play_circle'));
-    }
+    if (p.tipo === 'plan') partes.push(cuerpoPlan(p));   // v2.3: días con estados, hora y lugar
     if (p.tipo === 'link') partes.push(tarjetaEnlace(p, d.vista || {}, 'open_in_new'));
 
     if (p.tipo === 'lista') {
@@ -453,12 +463,49 @@ document.addEventListener('DOMContentLoaded', () => {
         return h('button', { class: 'opcion' + (o.votos.includes(yo) ? ' opcion--mia' : ''), type: 'button', 'aria-pressed': String(o.votos.includes(yo)), onclick: () => accion(p, { accion: 'voto', opcion: i }) },
           h('span', { class: 'opcion__barra', style: `--ancho:${ancho}%;--corte:${corte}%` }),
           h('span', { class: 'opcion__texto', text: o.t }),
-          h('span', { class: 'opcion__votos' }, o.votos.map((v) => h('span', { class: `mini mini--${v}`, text: v }))));
+          h('span', { class: 'opcion__votos' }, o.votos.map((v) => avatar(v, 'avatar--mini'))));
       })));
       partes.push(h('span', { class: 'progreso__texto', text: total ? `${total} ${total === 1 ? 'voto' : 'votos'}` : 'Todavía nadie votó' }));
     }
     if (p.texto) partes.push(md(p.texto, 'post__texto'));   // v2.1: texto con formato (negrita, cursiva, listas, links…)
     return partes;
+  }
+  /* ----- Plan (NUEVO v2.3) -----
+     Qué hace: muestra el plan con sus días ordenados por fecha. Cada día es un botón con su estado (posible, ideal, descartado, seguro);
+     al tocarlo cualquiera de los dos pasa al siguiente estado: posible → ideal → descartado → seguro. Solo puede haber UN día seguro:
+     al marcarlo, el plan queda "Confirmado" y los demás días se descartan; tocar el día seguro lo quita y todo vuelve a como estaba.
+     Con el plan confirmado, tocar otro día lo pasa a ser el seguro. Hora y lugar se muestran solo si se cargaron.
+     Para qué sirve: decidir juntos en qué día se hace un plan (ej.: sábado o domingo según el clima). */
+  function cuerpoPlan(p) {
+    const d = p.datos || {}, dias = Array.isArray(d.dias) ? d.dias : [], seguro = dias.find((x) => x.e === 'seguro'), hoy = hoyISO();
+    const partes = [];
+    /* Estado general del plan y cuenta regresiva (solo si hay un día seguro) */
+    if (seguro) {
+      const faltan = Math.round((aFecha(seguro.f) - aFecha(hoy)) / 86400000);
+      const cuando = faltan < 0 ? 'Ya pasó' : faltan === 0 ? 'Es hoy' : faltan === 1 ? 'Es mañana' : `Faltan ${faltan} días`;
+      partes.push(h('div', { class: 'plan__estado plan__estado--confirmado' }, icono('event_available', true), h('span', { text: `Confirmado: ${etiquetaDia(seguro.f)}` }), h('span', { class: 'plan__cuando', text: cuando })));
+    } else {
+      partes.push(h('div', { class: 'plan__estado' }, icono('pending'), h('span', { text: dias.length > 1 ? 'Por definir el día' : 'Por confirmar' })));
+    }
+    /* Hora y lugar (opcionales): si el lugar es un link se abre tal cual; si es un texto, se ofrece buscarlo en el mapa */
+    if (d.hora || d.lugar) {
+      const esUrl = /^https?:\/\/\S+$/i.test(d.lugar || '');
+      partes.push(h('div', { class: 'plan__datos' },
+        d.hora ? h('span', { class: 'plan__dato' }, icono('schedule'), h('span', { text: d.hora })) : null,
+        d.lugar ? h('span', { class: 'plan__dato' }, icono('location_on'),
+          esUrl ? enlace(d.lugar, sitioDe(d.lugar)) : h('span', { text: d.lugar }),
+          esUrl ? null : h('a', { class: 'plan__mapa', href: 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(d.lugar), target: '_blank', rel: 'noopener noreferrer', title: 'Ver en el mapa', 'aria-label': 'Ver en el mapa' }, icono('map'))) : null));
+    }
+    /* Días: botones que cambian de estado al tocarlos */
+    partes.push(h('div', { class: 'plan__dias' + (seguro ? ' plan__dias--confirmado' : ''), role: 'group', 'aria-label': 'Días del plan' }, dias.map((dia) => {
+      const est = ESTADOS_DIA[dia.e] || ESTADOS_DIA.posible;
+      const sig = seguro ? (dia.e === 'seguro' ? 'posible' : 'seguro') : ORDEN_ESTADOS[(ORDEN_ESTADOS.indexOf(dia.e) + 1) % ORDEN_ESTADOS.length];
+      const ayuda = seguro ? (dia.e === 'seguro' ? 'Quitar el día seguro' : 'Elegir este como día seguro') : `Pasar a "${ESTADOS_DIA[sig].nombre.toLowerCase()}"`;
+      return h('button', { class: `dia dia--${dia.e}` + (dia.f < hoy ? ' dia--pasado' : ''), type: 'button', title: ayuda, 'aria-label': `${etiquetaDia(dia.f)}: ${est.nombre.toLowerCase()}. ${ayuda}`, onclick: () => accion(p, { accion: 'dia', fecha: dia.f, estado: sig }) },
+        icono(est.icono, dia.e === 'seguro' || dia.e === 'ideal'), h('span', { class: 'dia__fecha', text: etiquetaDia(dia.f) }), h('span', { class: 'dia__estado', text: est.nombre }));
+    })));
+    if (!seguro && dias.length) partes.push(h('span', { class: 'progreso__texto', text: 'Toca un día para cambiar su estado: posible, ideal, descartado o seguro.' }));
+    return h('div', { class: 'plan' }, partes);
   }
   /* Tarjeta de link con vista previa (imagen, sitio, título y descripción del sitio si se pudieron leer) */
   function tarjetaEnlace(p, vista, ic) {
@@ -470,14 +517,52 @@ document.addEventListener('DOMContentLoaded', () => {
         vista.descripcion ? h('span', { class: 'enlace__desc', text: vista.descripcion }) : null));
   }
 
+  /* ----- Comentarios (NUEVO v2.2) -----
+     Qué hace: bajo cada publicación se puede desplegar una sección de comentarios; cada comentario lleva el color de quien lo escribió
+     (azul M / rojo xB), acepta el mismo formato de texto de WhatsApp y solo su autor puede borrarlo.
+     Para qué sirve: conversar sobre las publicaciones, también las del otro. */
+  function seccionComentarios(p) {
+    const coms = (p.datos && p.datos.comentarios) || [];
+    const campo = h('textarea', { class: 'campo__entrada comentar__campo', rows: '1', maxlength: '500', placeholder: 'Escribe un comentario…', 'aria-label': 'Escribir un comentario' });
+    campo.value = borradores.get(p.id) || '';
+    const enviar = async () => {
+      const texto = campo.value.trim(); if (!texto) return;
+      campo.disabled = true;
+      try { await api(`/posts/${p.id}/accion`, { metodo: 'POST', cuerpo: { accion: 'comentar', texto } }).then((r) => { borradores.delete(p.id); reemplazar(r.post); }); }
+      catch (e) { avisar(e.message, 'error'); campo.disabled = false; campo.focus(); }
+    };
+    campo.addEventListener('input', () => { borradores.set(p.id, campo.value); campo.style.height = 'auto'; campo.style.height = Math.min(campo.scrollHeight, 120) + 'px'; });
+    campo.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviar(); } });   // Enter envía; Shift+Enter hace un salto de línea
+    return h('div', { class: 'comentarios' },
+      coms.map((c) => h('div', { class: 'comentario', 'data-autor': c.autor },
+        h('div', { class: 'comentario__cab' },
+          avatar(c.autor, 'avatar--mini'),
+          h('time', { class: 'comentario__hora', 'data-ts': c.creado, text: hora(c.creado), title: new Date(c.creado).toLocaleString('es-AR') }),
+          c.autor === yo ? h('button', { class: 'comentario__borrar', type: 'button', 'aria-label': 'Borrar comentario', title: 'Borrar comentario', onclick: () => borrarComentario(p, c) }, icono('close')) : null),
+        md(c.texto, 'comentario__texto'))),
+      h('div', { class: 'comentar' }, campo,
+        h('button', { class: 'btn-icono comentar__enviar', type: 'button', 'aria-label': 'Enviar comentario', title: 'Enviar', onclick: enviar }, icono('send'))));
+  }
+  async function borrarComentario(p, c) {
+    if (!(await confirmar({ titulo: 'Borrar comentario', texto: 'Se borrará tu comentario y no se puede deshacer.', boton: 'Borrar' }))) return;
+    accion(p, { accion: 'borrar_comentario', id: c.id });
+  }
+  /* Despliega / pliega los comentarios de una publicación (el cambio de huella en pintar() repinta la tarjeta) */
+  function alternarComentarios(p) {
+    if (comentariosAbiertos.has(p.id)) comentariosAbiertos.delete(p.id); else comentariosAbiertos.add(p.id);
+    pintar();
+    if (comentariosAbiertos.has(p.id)) { const c = nodos.get(p.id) && nodos.get(p.id).querySelector('.comentar__campo'); if (c) c.focus(); }
+  }
+
   /* ----- Tarjeta completa ----- */
   function crearTarjeta(p) {
     const mia = p.autor === yo, cor = (p.datos && p.datos.corazones) || [], meGusta = cor.includes(yo);
+    const nComs = ((p.datos && p.datos.comentarios) || []).length, abiertos = comentariosAbiertos.has(p.id);   // v2.2
     const editado = (p.datos && p.datos.editado) || 0, cats = catsDe(p);
     const tarjeta = h('article', { class: 'post', 'data-autor': p.autor, 'data-id': p.id },
       h('div', { class: 'post__cab' },
-        h('span', { class: 'autor' }, h('span', { class: 'autor__avatar', text: p.autor }), h('time', { class: 'autor__hora', 'data-ts': p.creado, text: hora(p.creado), title: new Date(p.creado).toLocaleString('es-AR') })),
-        h('span', { class: 'material-symbols-rounded post__tipo', text: TIPOS[p.tipo].icono, 'aria-hidden': 'true' })),   // icono del tipo (nota, lista…) a la derecha
+        h('span', { class: 'autor' }, avatar(p.autor, 'avatar--autor'), h('time', { class: 'autor__hora', 'data-ts': p.creado, text: hora(p.creado), title: new Date(p.creado).toLocaleString('es-AR') })),
+        h('span', { class: 'material-symbols-rounded post__tipo', text: (TIPOS[p.tipo] || TIPOS.nota).icono, 'aria-hidden': 'true' })),   // icono del tipo (nota, lista…) a la derecha
       /* v2.1: "editado hace…" solo si la publicación fue modificada después de subirla */
       editado ? h('span', { class: 'post__editado' }, icono('edit'), h('time', { 'data-ed': editado, text: horaEditado(editado), title: new Date(editado).toLocaleString('es-AR') })) : null,
       ...cuerpoPost(p),
@@ -485,9 +570,13 @@ document.addEventListener('DOMContentLoaded', () => {
       cats.length ? h('div', { class: 'post__cats' }, cats.map((c) => h('button', { class: 'post__cat', type: 'button', title: `Ver la categoría ${c.nombre}`, onclick: () => elegirCategoria(c.id, true) }, icono(c.icono), h('span', { text: c.nombre })))) : null,
       h('div', { class: 'post__pie' },
         h('button', { class: 'post__accion post__accion--corazon' + (meGusta ? ' activo' : ''), type: 'button', 'aria-pressed': String(meGusta), 'aria-label': 'Me gusta', onclick: () => accion(p, { accion: 'corazon' }) },
-          icono('favorite', meGusta), cor.length ? h('span', { class: 'corazones' }, cor.map((q) => h('span', { class: `mini mini--${q}`, text: q }))) : null),
+          icono('favorite', meGusta), cor.length ? h('span', { class: 'corazones' }, cor.map((q) => avatar(q, 'avatar--mini'))) : null),
+        /* v2.2: botón de comentarios con su cantidad; despliega/pliega la sección */
+        h('button', { class: 'post__accion post__accion--comentar' + (abiertos ? ' activo' : ''), type: 'button', 'aria-expanded': String(abiertos), 'aria-label': nComs ? `Comentarios (${nComs})` : 'Comentar', onclick: () => alternarComentarios(p) },
+          icono('chat_bubble', abiertos || nComs > 0), nComs ? h('span', { class: 'contador', text: String(nComs) }) : null),
         mia && p.tipo !== 'encuesta' ? h('button', { class: 'post__accion post__accion--der', type: 'button', 'aria-label': 'Editar', onclick: () => abrirEditor(p) }, icono('edit')) : null,
-        mia ? h('button', { class: 'post__accion post__accion--peligro' + (p.tipo === 'encuesta' ? ' post__accion--der' : ''), type: 'button', 'aria-label': 'Eliminar', onclick: () => borrar(p) }, icono('delete')) : null));
+        mia ? h('button', { class: 'post__accion post__accion--peligro' + (p.tipo === 'encuesta' ? ' post__accion--der' : ''), type: 'button', 'aria-label': 'Eliminar', onclick: () => borrar(p) }, icono('delete')) : null),
+      abiertos ? seccionComentarios(p) : null);                        // v2.2: sección de comentarios (solo si está desplegada)
     return tarjeta;
   }
 
@@ -500,14 +589,20 @@ document.addEventListener('DOMContentLoaded', () => {
     let orden = 0;
     lista.forEach((p, i) => {
       /* v2.1: la huella incluye las categorías (nombre e icono) para que la tarjeta se repinte si se crea/borra una categoría */
-      const firma = JSON.stringify([p.actualizado, yo, catsDe(p).map((c) => [c.id, c.nombre, c.icono])]);
+      const firma = JSON.stringify([p.actualizado, yo, catsDe(p).map((c) => [c.id, c.nombre, c.icono]), comentariosAbiertos.has(p.id), p.tipo === 'plan' ? hoyISO() : 0]);   // v2.2: + comentarios desplegados; v2.3: los planes se repintan al cambiar el día (cuenta regresiva)
       let el = nodos.get(p.id);
       if (!el || el._firma !== firma) {
+        /* v2.2: si se estaba escribiendo un comentario en esta tarjeta, se conserva el foco y el cursor al repintarla */
+        const activo = el && document.activeElement && document.activeElement.classList.contains('comentar__campo') && el.contains(document.activeElement) ? document.activeElement : null;
         const nuevo = crearTarjeta(p); nuevo._firma = firma;
         if (!el) {                                                     // tarjeta que recién aparece: entra con animación en cascada
           nuevo.classList.add('entra'); nuevo.style.setProperty('--i', Math.min(orden++, 10));
           nuevo.addEventListener('animationend', () => nuevo.classList.remove('entra'), { once: true });   // para que no se repita si se mueve de lugar
-        } else el.replaceWith(nuevo);
+        } else {
+          el.replaceWith(nuevo);
+          const campoNuevo = activo && nuevo.querySelector('.comentar__campo');
+          if (campoNuevo) { campoNuevo.focus(); campoNuevo.setSelectionRange(campoNuevo.value.length, campoNuevo.value.length); }
+        }
         el = nuevo; nodos.set(p.id, el);
       }
       if (muro.children[i] !== el) muro.insertBefore(el, muro.children[i] || null);
@@ -583,7 +678,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let foto = null;                        // { dataUrl, w, h } de la foto elegida
   let catsElegidas = new Set();           // v2.1: ids de las categorías marcadas en el formulario (vacío = "sin categoría")
 
-  /* Botones de tipo (Nota, Lista, Encuesta, Foto, Link, Video) */
+  /* Botones de tipo (Nota, Lista, Encuesta, Foto, Link, Plan) */
   Object.entries(TIPOS).forEach(([clave, t]) => $('tiposNuevo').append(
     h('button', { class: 'tipo-btn', type: 'button', role: 'tab', 'data-tipo': clave, onclick: () => elegirTipo(clave) }, icono(t.icono), h('span', { text: t.nombre }))));
 
@@ -606,10 +701,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('#tiposNuevo .tipo-btn').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tipo === tipo)));
     const esEnc = tipo === 'encuesta';
     $('campoTitulo').hidden = false;
-    $('etiquetaTitulo').textContent = esEnc ? 'Pregunta' : (tipo === 'nota' ? 'Título (opcional)' : 'Título (opcional)');
-    $('campoTexto').hidden = !['nota', 'foto', 'link', 'video'].includes(tipo);
-    $('etiquetaTexto').textContent = tipo === 'nota' ? 'Texto' : (tipo === 'foto' ? 'Descripción (opcional)' : 'Comentario (opcional)');
-    $('campoUrl').hidden = !['link', 'video'].includes(tipo);
+    $('etiquetaTitulo').textContent = esEnc ? 'Pregunta' : (tipo === 'plan' ? 'Nombre del plan' : 'Título (opcional)');
+    $('campoTexto').hidden = !['nota', 'foto', 'link', 'plan'].includes(tipo);
+    $('etiquetaTexto').textContent = tipo === 'nota' ? 'Texto' : (tipo === 'foto' || tipo === 'plan' ? 'Descripción (opcional)' : 'Comentario (opcional)');
+    $('campoUrl').hidden = tipo !== 'link';
+    $('campoPlan').hidden = tipo !== 'plan';                              // v2.3: calendario de días + hora y lugar opcionales
+    if (tipo === 'plan') pintarCalendario();
     $('campoItems').hidden = !['lista', 'encuesta'].includes(tipo);
     $('etiquetaItems').textContent = esEnc ? 'Opciones (mínimo 2)' : 'Elementos de la lista';
     $('textoMasItems').textContent = esEnc ? 'Agregar opción' : 'Agregar elemento';
@@ -618,12 +715,48 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!$('filasItems').children.length && !$('campoItems').hidden) { agregarFila(); agregarFila(); }
   }
 
+  /* ----- v2.3: calendario para elegir los días de un plan -----
+     Qué hace: mini calendario mensual (semana desde el lunes). Tocar un día lo suma o lo quita del plan; abajo se listan los elegidos.
+     Los días ya pasados no se pueden sumar (pero uno que ya estaba en el plan se puede quitar). Máximo 31 días.
+     Para qué sirve: marcar uno o varios días posibles de forma rápida desde el celular. */
+  let diasElegidos = new Set();            // fechas "AAAA-MM-DD" marcadas en el formulario
+  const primerDiaDelMes = (dt) => new Date(dt.getFullYear(), dt.getMonth(), 1);
+  let mesCalendario = primerDiaDelMes(new Date());
+  const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  const LETRAS_SEMANA = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+  $('calSemana').append(...LETRAS_SEMANA.map((l) => h('span', { text: l })));
+  function alternarDia(f) {
+    if (diasElegidos.has(f)) diasElegidos.delete(f);
+    else if (diasElegidos.size >= 31) return void avisar('Un plan puede tener hasta 31 días.', 'error');
+    else diasElegidos.add(f);
+    pintarCalendario();
+  }
+  function pintarCalendario() {
+    const hoy = hoyISO(), anio = mesCalendario.getFullYear(), mes = mesCalendario.getMonth();
+    $('calMes').textContent = `${NOMBRES_MES[mes]} ${anio}`;
+    const celdas = [], vacias = (mesCalendario.getDay() + 6) % 7;        // huecos antes del día 1 (la semana empieza el lunes)
+    for (let i = 0; i < vacias; i++) celdas.push(h('span', { class: 'cal-vacio', 'aria-hidden': 'true' }));
+    for (let n = 1, total = new Date(anio, mes + 1, 0).getDate(); n <= total; n++) {
+      const f = aISO(new Date(anio, mes, n)), elegido = diasElegidos.has(f);
+      celdas.push(h('button', { class: 'cal-dia' + (elegido ? ' cal-dia--elegido' : '') + (f === hoy ? ' cal-dia--hoy' : ''), type: 'button', 'aria-pressed': String(elegido), 'aria-label': etiquetaDia(f), disabled: f < hoy && !elegido, onclick: () => alternarDia(f) }, h('span', { text: String(n) })));
+    }
+    $('calDias').replaceChildren(...celdas);
+    /* Lista de días elegidos (ordenados), cada uno con su botón para quitarlo */
+    const orden = [...diasElegidos].sort();
+    $('diasElegidos').replaceChildren(...(orden.length
+      ? orden.map((f) => h('button', { class: 'chip chip--activo', type: 'button', title: 'Quitar este día', 'aria-label': `Quitar ${etiquetaDia(f)}`, onclick: () => alternarDia(f) }, icono('event'), h('span', { text: etiquetaDia(f) }), icono('close')))
+      : [h('span', { class: 'campo__ayuda', text: 'Todavía no elegiste ningún día.' })]));
+  }
+  $('calAnterior').addEventListener('click', () => { mesCalendario = new Date(mesCalendario.getFullYear(), mesCalendario.getMonth() - 1, 1); pintarCalendario(); });
+  $('calSiguiente').addEventListener('click', () => { mesCalendario = new Date(mesCalendario.getFullYear(), mesCalendario.getMonth() + 1, 1); pintarCalendario(); });
+
   /* Abre el formulario vacío (publicación nueva) */
   function abrirNuevo() {
     editando = null; foto = null;
     formNuevo.reset(); $('filasItems').replaceChildren(); $('fotoPrevia').hidden = true; $('textoFoto').textContent = 'Elegir o tomar una foto';
     $('nuevoTitulo').textContent = 'Nueva publicación'; $('textoPublicar').textContent = 'Publicar';
     $('tiposNuevo').hidden = false;
+    diasElegidos = new Set(); mesCalendario = primerDiaDelMes(new Date());   // v2.3: plan nuevo sin días elegidos, calendario en el mes actual
     elegirTipo('nota');
     catsElegidas = new Set(); pintarCatsComposer(); reiniciarVistaTexto();   // v2.1: sin categoría y sin vista previa al empezar
     abrirModal($('modalNuevo')); setTimeout(() => $('nuevoTexto').focus(), 80);
@@ -634,7 +767,11 @@ document.addEventListener('DOMContentLoaded', () => {
     formNuevo.reset(); $('filasItems').replaceChildren(); $('fotoPrevia').hidden = true;
     $('nuevoTitulo').textContent = `Editar ${TIPOS[p.tipo].nombre.toLowerCase()}`; $('textoPublicar').textContent = 'Guardar';
     $('tiposNuevo').hidden = true;                                       // el tipo no se cambia al editar
+    /* v2.3: al editar un plan se cargan sus días, hora y lugar (el calendario abre en el primer día del plan) */
+    diasElegidos = new Set(p.tipo === 'plan' ? (p.datos.dias || []).map((x) => x.f) : []);
+    mesCalendario = primerDiaDelMes(diasElegidos.size ? aFecha([...diasElegidos].sort()[0]) : new Date());
     elegirTipo(p.tipo);
+    if (p.tipo === 'plan') { $('planHora').value = p.datos.hora || ''; $('planLugar').value = p.datos.lugar || ''; }
     $('nuevoTituloCampo').value = p.titulo; $('nuevoTexto').value = p.texto; $('nuevoUrl').value = p.url;
     if (p.tipo === 'lista') { $('filasItems').replaceChildren(); (p.datos.items || []).forEach((i) => agregarFila(i.t, i.hecho)); }
     catsElegidas = new Set(catsDe(p).map((c) => c.id)); pintarCatsComposer(); reiniciarVistaTexto();   // v2.1: sus categorías actuales quedan marcadas
@@ -652,10 +789,11 @@ document.addEventListener('DOMContentLoaded', () => {
      Para qué sirve: escribir notas y descripciones con distintos tipos de texto sin saber Markdown.
      ============================================================ */
   const FORMATOS = {
-    negrita: { env: ['**', '**', 'texto en negrita'] },
-    cursiva: { env: ['*', '*', 'texto en cursiva'] },
-    tachado: { env: ['~~', '~~', 'texto tachado'] },
-    codigo: { env: ['`', '`', 'código'] },
+    /* v2.2: marcas como en WhatsApp */
+    negrita: { env: ['*', '*', 'texto en negrita'] },
+    cursiva: { env: ['_', '_', 'texto en cursiva'] },
+    tachado: { env: ['~', '~', 'texto tachado'] },
+    codigo: { env: ['```', '```', 'código'] },
     titulo: { pre: '## ' },
     cita: { pre: '> ' },
     lista: { pre: '- ' },
@@ -1112,9 +1250,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (filas.length < 2) return void (error.textContent = 'Agrega al menos 2 opciones.');
       cuerpo.datos.opciones = filas.map((f) => f.t);
     }
-    if (tipo === 'link' || tipo === 'video') {
+    if (tipo === 'plan') {                                              // v2.3: nombre + al menos un día; hora y lugar son opcionales
+      if (!cuerpo.titulo) return void (error.textContent = 'Ponle un nombre al plan.');
+      if (!diasElegidos.size) return void (error.textContent = 'Elige al menos un día en el calendario.');
+      cuerpo.datos = { dias: [...diasElegidos].sort(), hora: $('planHora').value, lugar: $('planLugar').value.trim() };
+    }
+    if (tipo === 'link') {
       cuerpo.url = arreglarUrl($('nuevoUrl').value);
-      if (!cuerpo.url) return void (error.textContent = 'Pega la dirección del ' + (tipo === 'link' ? 'link.' : 'video.'));
+      if (!cuerpo.url) return void (error.textContent = 'Pega la dirección del link.');
       try { new URL(cuerpo.url); } catch (x) { return void (error.textContent = 'Esa dirección no es válida.'); }
     }
     if (tipo === 'foto' && !editando) {

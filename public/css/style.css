@@ -65,6 +65,11 @@
   --color-error-texto: var(--color-error);
   --color-success-suave: color-mix(in srgb, var(--color-success) 14%, transparent);
   --color-error-suave: color-mix(in srgb, var(--color-error) 14%, transparent);
+  /* v2.3: colores de los estados de un día de plan (todos derivados de los de arriba para que el tema claro también funcione) */
+  --color-dia-posible: var(--color-texto-suave);          /* posible: neutro */
+  --color-dia-ideal: var(--color-warning-texto);          /* ideal: amarillo (estrella) */
+  --color-dia-descartado: var(--color-error-texto);       /* descartado: rojo apagado y tachado */
+  --color-dia-seguro: var(--color-success-texto);         /* seguro: verde */
 
   /* ---- Efectos HUD ---- */
   --color-cuadricula: color-mix(in srgb, var(--color-acento) 7%, transparent);    /* cuadrícula tenue del fondo */
@@ -207,9 +212,10 @@ body.modal-abierto { overflow: hidden; }   /* con una ventana abierta no se desp
 .appbar__espacio { min-width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }   /* huecos laterales: equilibran el título */
 .appbar > .appbar__espacio:last-child { min-width: 84px; justify-content: flex-end; }
 .appbar > .appbar__espacio:first-child { min-width: 84px; justify-content: flex-start; }
-/* Quién soy: círculo con la inicial en azul (M) o rojo (xB) */
-.yo-chip { width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-family: var(--fuente-titulo); font-weight: 800; font-size: 13px; color: var(--color-blanco); background: var(--yo-gradiente); box-shadow: var(--sombra-acento); position: relative; overflow: hidden; }
-.yo-chip:hover { box-shadow: var(--sombra-acento-fuerte); }
+/* Quién soy: la foto de mi carta (azul M / roja xB). v2.4: antes era un círculo con la inicial; ahora solo hay imagen, con un brillo del color de quien soy */
+.yo-chip { width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; padding: 0; position: relative; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--yo) 55%, transparent)); transition: transform var(--mov-rapido) var(--ease-suave), filter var(--mov-rapido) var(--ease-suave); }
+.yo-chip:hover { transform: scale(1.08) rotate(-2deg); filter: drop-shadow(0 0 10px var(--yo)); }
+.yo-chip .avatar { width: 100%; height: 100%; }
 
 /* ---------- Botones ---------- */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 20px; border-radius: var(--radio-sm); font-family: var(--fuente-titulo); font-weight: 700; font-size: 15px; letter-spacing: 0.04em; border: 1px solid transparent; text-align: center; white-space: nowrap; }
@@ -280,7 +286,8 @@ textarea.campo__entrada { resize: vertical; min-height: 96px; }
 .post:hover { box-shadow: var(--sombra-tarjeta), 0 0 24px color-mix(in srgb, var(--c) 32%, transparent); }
 .post__cab { display: flex; align-items: center; gap: 8px; }
 .autor { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-.autor__avatar { width: 26px; height: 26px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-family: var(--fuente-titulo); font-weight: 800; font-size: 11px; color: var(--color-blanco); background: var(--c-gradiente); flex-shrink: 0; }
+/* v2.4: el avatar del autor es su foto (antes un círculo con la inicial) */
+.avatar--autor { width: 32px; height: 32px; }
 .autor__hora { font-family: var(--fuente-hud); font-size: 12px; color: var(--color-texto-suave); white-space: nowrap; }
 .post__tipo { margin-left: auto; font-size: 20px; color: var(--c-texto); }
 .post__titulo { font-family: var(--fuente-titulo); font-size: 17px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
@@ -295,9 +302,10 @@ textarea.campo__entrada { resize: vertical; min-height: 96px; }
 .post__accion--der { margin-left: auto; }
 .post__accion--peligro:hover { background: var(--color-error-suave); color: var(--color-error-texto); }
 .corazones { display: inline-flex; gap: 3px; margin-left: 2px; }
-.mini { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; font-family: var(--fuente-titulo); font-size: 10px; font-weight: 800; color: var(--color-blanco); }
-.mini--M { background: var(--gradiente-m); }
-.mini--xB { background: var(--gradiente-xb); }
+/* v2.4: foto de perfil (reemplaza a las iniciales). La imagen mantiene su proporción dentro de un cuadrado; .avatar--mini es la versión chica de corazones, votos y comentarios */
+.avatar { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; line-height: 0; }
+.avatar img { width: 100%; height: 100%; object-fit: contain; display: block; user-select: none; -webkit-user-drag: none; }
+.avatar--mini { width: 22px; height: 22px; }
 
 /* Foto */
 .post__foto { display: block; width: 100%; height: auto; border-radius: var(--radio-md); background: var(--color-tarjeta-2); cursor: zoom-in; object-fit: cover; }
@@ -309,10 +317,8 @@ textarea.campo__entrada { resize: vertical; min-height: 96px; }
 .enlace__sitio { display: flex; align-items: center; gap: 4px; font-family: var(--fuente-hud); font-size: 12px; color: var(--c-texto); }
 .enlace__sitio .material-symbols-rounded { font-size: 14px; }
 .enlace__titulo { font-weight: 700; font-size: 14px; overflow-wrap: anywhere; }
-/* v2.1: limita la descripción de la vista previa de un link a 3 líneas; se agrega "line-clamp" (estándar) junto a la versión con prefijo -webkit- para máxima compatibilidad */
-.enlace__desc { font-size: 12px; color: var(--color-texto-suave); display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }/* Video */
-.video { position: relative; aspect-ratio: 16 / 9; border-radius: var(--radio-md); overflow: hidden; background: var(--color-negro); }
-.video iframe, .video video { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.enlace__desc { font-size: 12px; color: var(--color-texto-suave); display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; /* v2.3: propiedad estándar junto a la con prefijo (compatibilidad) */ -webkit-box-orient: vertical; overflow: hidden; }
+/* v2.3: el tipo "video" se eliminó (sus estilos .video ya no existen); en su lugar va el plan, más abajo */
 /* Lista (checklist) */
 .lista { display: flex; flex-direction: column; gap: 2px; }
 .lista__item { display: flex; align-items: flex-start; gap: 8px; padding: 6px 4px; border-radius: var(--radio-sm); text-align: left; width: 100%; font-size: 14px; overflow-wrap: anywhere; }
@@ -377,8 +383,11 @@ textarea.campo__entrada { resize: vertical; min-height: 96px; }
 .btn--identidad:hover:not(:disabled) { filter: brightness(1.2); }
 .acceso__ventana .campo__entrada:focus { border-color: var(--c); box-shadow: 0 0 18px color-mix(in srgb, var(--c) 35%, transparent); }
 /* Switch M / xB */
+.switch-id__foto { width: 64px; height: 64px; object-fit: contain; opacity: 0.45; filter: grayscale(0.6); transition: opacity var(--mov-medio) var(--ease-suave), filter var(--mov-medio) var(--ease-suave); -webkit-user-drag: none; }
+.acceso__ventana[data-quien="M"] .switch-id__etiqueta--m .switch-id__foto, .acceso__ventana[data-quien="xB"] .switch-id__etiqueta--xb .switch-id__foto { opacity: 1; filter: none; }
 .switch-id { display: flex; align-items: center; justify-content: center; gap: 14px; }
-.switch-id__etiqueta { font-family: var(--fuente-titulo); font-size: 26px; font-weight: 800; color: var(--color-gris-claro); transition: color var(--mov-medio) var(--ease-suave), transform var(--mov-medio) var(--ease-rebote); cursor: pointer; user-select: none; }
+/* v2.4: la etiqueta ahora lleva la foto arriba y la letra abajo; la foto se ve apagada hasta que ese lado queda elegido */
+.switch-id__etiqueta { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; font-family: var(--fuente-titulo); font-size: 26px; font-weight: 800; color: var(--color-gris-claro); transition: color var(--mov-medio) var(--ease-suave), transform var(--mov-medio) var(--ease-rebote); cursor: pointer; user-select: none; }
 .acceso__ventana[data-quien="M"] .switch-id__etiqueta--m { color: var(--color-m-texto); transform: scale(1.12); }
 .acceso__ventana[data-quien="xB"] .switch-id__etiqueta--xb { color: var(--color-xb-texto); transform: scale(1.12); }
 .switch-id__boton { position: relative; width: 74px; height: 38px; border-radius: 19px; border: 2px solid var(--c); background: color-mix(in srgb, var(--c) 18%, var(--color-fondo)); transition: border-color var(--mov-medio) var(--ease-suave), background-color var(--mov-medio) var(--ease-suave); }
@@ -616,3 +625,85 @@ input[type="search"]::-webkit-search-decoration, input[type="search"]::-webkit-s
 .buscador .campo__entrada:focus { box-shadow: 0 0 22px color-mix(in srgb, var(--yo) 38%, transparent); }
 /* Mis publicaciones brillan un poco más que las de la otra persona */
 :root[data-yo="M"] .post[data-autor="M"], :root[data-yo="xB"] .post[data-autor="xB"] { box-shadow: var(--sombra-tarjeta), 0 0 20px color-mix(in srgb, var(--c) 24%, transparent); }
+
+
+/* ============================================================
+   v2.2 — Separadores de filtros y comentarios
+   ============================================================ */
+
+/* Los tres grupos de filtros ahora van uno debajo del otro, separados por líneas finas (con el color de quien tiene la sesión que se desvanece en los bordes) */
+.filtros { flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: flex-start; gap: 12px; min-width: 0; }   /* nowrap: si no, la fila ancha de categorías ensancharía todo el bloque */
+.filtros > * { min-width: 0; }
+.filtros .segmento { align-self: flex-start; }
+.separador { width: 100%; height: 1px; margin: 0; border: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--yo) 40%, var(--color-gris)) 12%, color-mix(in srgb, var(--yo) 40%, var(--color-gris)) 88%, transparent); }
+.filtros .cat-barra { margin-bottom: -4px; }
+.filtros__tipos { flex: 0 0 auto; align-content: flex-start; }                 /* en columna, las fichas de tipo no se estiran a lo alto: cada una mantiene su tamaño y se acomoda en varias filas */
+
+/* Botón de comentarios en el pie de la tarjeta */
+.post__accion--comentar .contador { font-family: var(--fuente-hud); font-size: 13px; }
+.post__accion--comentar.activo { color: var(--yo-texto); }
+.post__accion--comentar .material-symbols-rounded.lleno { color: inherit; }
+
+/* Sección de comentarios */
+.comentarios { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--color-gris); }
+.comentario { --c: var(--color-acento); --c-texto: var(--color-acento-texto); display: flex; flex-direction: column; gap: 4px; padding: 7px 10px; background: color-mix(in srgb, var(--c) 9%, transparent); border-left: 3px solid var(--c); border-radius: 0 var(--radio-sm) var(--radio-sm) 0; }
+.comentario[data-autor="M"] { --c: var(--color-m-vivo); --c-texto: var(--color-m-texto); }       /* los comentarios de M van en azul… */
+.comentario[data-autor="xB"] { --c: var(--color-xb); --c-texto: var(--color-xb-texto); }          /* …y los de xB en rojo */
+.comentario__cab { display: flex; align-items: center; gap: 6px; font-family: var(--fuente-hud); font-size: 11.5px; color: var(--color-texto-suave); }
+.comentario__borrar { margin-left: auto; display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center; color: var(--color-texto-suave); border-radius: var(--radio-sm); }
+.comentario__borrar .material-symbols-rounded { font-size: 16px; }
+.comentario__borrar:hover { background: var(--color-error-suave); color: var(--color-error-texto); }
+.comentario__texto { font-size: 13.5px; }
+.comentario__texto.md { gap: 3px; }
+.comentar { display: flex; align-items: flex-end; gap: 6px; }
+textarea.comentar__campo { flex: 1; min-width: 0; min-height: 38px; max-height: 120px; padding: 8px 12px; font-size: 13.5px; resize: none; }
+.comentar__enviar { flex-shrink: 0; color: var(--yo-texto); }
+
+/* ============================================================
+   v2.3 — PLAN (días con estados, hora y lugar) y calendario del formulario
+   Todos los colores salen de variables de :root (estados --color-dia-*, y el color del autor --c / --c-texto de cada tarjeta).
+   ============================================================ */
+.plan { display: flex; flex-direction: column; gap: 8px; }
+/* Estado general: "Por definir" o "Confirmado: sáb 21 nov · Faltan 4 días" */
+.plan__estado { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-family: var(--fuente-hud); font-size: 13px; color: var(--color-texto-suave); }
+.plan__estado .material-symbols-rounded { font-size: 20px; }
+.plan__estado--confirmado { color: var(--color-dia-seguro); font-weight: 700; }
+.plan__cuando { margin-left: auto; padding: 1px 8px; border-radius: var(--radio-sm); background: color-mix(in srgb, var(--color-dia-seguro) 16%, transparent); font-size: 12px; }
+/* Hora y lugar (solo si se cargaron) */
+.plan__datos { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; }
+.plan__dato { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.plan__dato .material-symbols-rounded { font-size: 18px; color: var(--c-texto); flex-shrink: 0; }
+.plan__dato a { color: var(--c-texto); text-decoration: underline; text-underline-offset: 2px; }
+.plan__mapa { display: inline-flex; text-decoration: none !important; }
+/* Días: una ficha por día, ordenadas por fecha; el borde y el icono cambian según el estado */
+.plan__dias { display: flex; flex-wrap: wrap; gap: 6px; }
+.dia { --e: var(--color-dia-posible); position: relative; overflow: hidden; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px 6px 8px; min-height: 40px; border: 1px solid color-mix(in srgb, var(--e) 55%, var(--color-gris)); border-radius: var(--radio-md); background: color-mix(in srgb, var(--e) 9%, var(--color-fondo)); color: var(--color-texto); text-align: left; transition: background var(--mov-rapido) var(--ease-suave), border-color var(--mov-rapido) var(--ease-suave), opacity var(--mov-medio) var(--ease-suave), transform var(--mov-rapido) var(--ease-suave); }
+.dia:hover { border-color: var(--e); }
+.dia:active { transform: scale(0.97); }
+.dia .material-symbols-rounded { font-size: 20px; color: var(--e); }
+.dia__fecha { font-family: var(--fuente-hud); font-size: 14px; }
+.dia__estado { font-size: 11px; color: var(--e); text-transform: uppercase; letter-spacing: 0.04em; }
+.dia--ideal { --e: var(--color-dia-ideal); }
+.dia--descartado { --e: var(--color-dia-descartado); }
+.dia--descartado .dia__fecha { text-decoration: line-through; color: var(--color-texto-suave); }
+.dia--seguro { --e: var(--color-dia-seguro); background: color-mix(in srgb, var(--e) 18%, var(--color-fondo)); border-color: var(--e); font-weight: 700; }
+.dia--pasado:not(.dia--seguro) { opacity: 0.6; }
+/* Con el plan confirmado, los demás días se ven atenuados (siguen siendo tocables para cambiar de día seguro) */
+.plan__dias--confirmado .dia:not(.dia--seguro) { opacity: 0.55; }
+.plan__dias--confirmado .dia:not(.dia--seguro):hover { opacity: 1; }
+
+/* Calendario del formulario (elegir los días) */
+.calendario { padding: 8px; background: var(--color-fondo); border: 1px solid var(--color-gris); border-radius: var(--radio-md); }
+.calendario__cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.calendario__mes { font-family: var(--fuente-titulo); font-size: 15px; }
+.calendario__semana, .calendario__dias { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.calendario__semana span { text-align: center; font-family: var(--fuente-hud); font-size: 12px; color: var(--color-texto-suave); padding: 2px 0; }
+.cal-dia { position: relative; aspect-ratio: 1; min-height: 36px; display: flex; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: var(--radio-md); font-family: var(--fuente-hud); font-size: 14px; color: var(--color-texto); transition: background var(--mov-rapido) var(--ease-suave), border-color var(--mov-rapido) var(--ease-suave), color var(--mov-rapido) var(--ease-suave); }
+.cal-dia:hover:not(:disabled) { background: var(--color-acento-suave); }
+.cal-dia:disabled { color: var(--color-gris-claro); opacity: 0.45; cursor: default; }
+.cal-dia--hoy { border-color: var(--color-acento-borde); }
+.cal-dia--elegido, .cal-dia--elegido:hover:not(:disabled) { background: var(--yo); border-color: var(--yo); color: var(--color-blanco); font-weight: 700; }
+.dias-elegidos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.dias-elegidos .chip .material-symbols-rounded:last-child { font-size: 16px; }
+.plan-extra { display: grid; grid-template-columns: minmax(0, 120px) minmax(0, 1fr); gap: 10px; margin-top: 6px; }
+@media (max-width: 380px) { .plan-extra { grid-template-columns: 1fr; } }
