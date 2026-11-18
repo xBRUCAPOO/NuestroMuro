@@ -8,7 +8,7 @@
    IMPORTANTE: se carga en el <head> (antes de pintar) para aplicar el tema sin parpadeo; por eso el resto espera a DOMContentLoaded.
    Seguridad: todo el contenido que escriben las personas se pinta con textContent (nunca como HTML).
    NUEVO v2.1: 9) texto con formato (barra de botones + Markdown seguro), 10) categorías (selector tipo "guardar en lista", creación
-   con nombre e icono y fila de filtros que se desliza), 11) "editado hace…" en las publicaciones modificadas, 12) corazón relleno.
+   con nombre e icono y fila de filtros que se desliza), 11) "editado hace…" en las publicaciones modificadas, 12) corazón relleno, 13) notificaciones (v2.5).
    ============================================================ */
 
 /* ---------- 1) Tema claro / oscuro ---------- */
@@ -178,7 +178,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* Muestra la ventana de acceso y bloquea el muro de atrás */
   function mostrarAcceso() {
-    $('app').inert = true; $('btnNuevo').hidden = true; $('btnYo').hidden = true;
+    $('app').inert = true; $('btnNuevo').hidden = true; $('btnYo').hidden = true; $('btnNotif').hidden = true;   // v2.5: sin sesión no hay campanita
+    noLeidas = 0; pintarContador(); cerrarModal($('modalNotif'));
     document.documentElement.removeAttribute('data-yo');
     let ultimo = 'M'; try { ultimo = localStorage.getItem('muro_quien') === 'xB' ? 'xB' : 'M'; } catch (e) { /* sin almacenamiento */ }
     elegirQuien(ultimo);
@@ -213,6 +214,8 @@ document.addEventListener('DOMContentLoaded', () => {
     chip.setAttribute('aria-label', `Sesión de ${quien}: tocar para cambiar de identidad`);
     ultimaFirma = ''; nodos.forEach((n) => n.remove()); nodos.clear();   // otra identidad = se vuelve a pintar todo
     categorias = []; ultimaFirmaCats = ''; filtro.cat = '';              // v2.1: también se vuelven a pedir las categorías
+    avisos = []; noLeidas = 0; avisosVistos.clear(); primeraCargaAvisos = true; pintarContador();   // v2.5: notificaciones de la otra identidad
+    $('btnNotif').hidden = false; sincronizarPush();
     comentariosAbiertos.clear(); borradores.clear();                     // v2.2: al cambiar de identidad no quedan comentarios desplegados ni borradores de la otra persona
     pintarFiltroCategorias();
     cargar();
@@ -220,6 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Tocar la inicial de quien soy: confirmar y salir (vuelve a aparecer la ventana de acceso) */
   $('btnYo').addEventListener('click', async () => {
     if (!(await confirmar({ titulo: `Sesión de ${yo}`, texto: '¿Quieres cerrar la sesión para entrar como otra identidad?', boton: 'Cerrar sesión' }))) return;
+    await bajaPushDeEstaSesion();                                          // v2.5: este dispositivo deja de recibir los avisos de esta persona
     try { await api('/salir', { metodo: 'POST' }); } catch (e) { /* aunque falle, se muestra el acceso */ }
     yo = null; mostrarAcceso();
   });
@@ -620,6 +624,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function cargar() {
     if (!yo || cargando) return;
     cargando = true;
+    cargarAvisos();                      // v2.5: cada vez que se actualiza el muro también se piden las notificaciones
     try {
       /* v2.1: se piden juntas las publicaciones y las categorías; si las categorías fallan (ej. sin conexión) se siguen usando las que ya había */
       const [r, rc] = await Promise.all([api('/posts'), api('/categorias').catch(() => null)]);
@@ -627,12 +632,144 @@ document.addEventListener('DOMContentLoaded', () => {
       if (rc) { const fc = JSON.stringify(rc.categorias); if (fc !== ultimaFirmaCats) { ultimaFirmaCats = fc; categorias = rc.categorias; cambioCats = true; } }
       const firma = JSON.stringify(r.posts.map((p) => [p.id, p.actualizado]));
       if (firma !== ultimaFirma || cambioCats) { ultimaFirma = firma; posts = r.posts; pintar(); }
+      if (postPendiente) { const id = postPendiente; postPendiente = null; setTimeout(() => irAPost(id), 300); }   // v2.5: se abrió desde un aviso del celular
     } catch (e) {
       if (e.status !== 401) { $('cargando').hidden = true; if (!posts.length) { $('vacio').hidden = false; $('vacioTexto').textContent = 'No se pudo cargar el muro. Revisa tu conexión.'; } }
     } finally { cargando = false; }
   }
   setInterval(() => { if (document.visibilityState === 'visible') cargar(); }, 12000);      // actualización automática
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') cargar(); });
+
+  /* ============================================================
+     NOTIFICACIONES (NUEVO v2.5)
+     Qué hace: muestra los avisos que genera lo que hace la OTRA persona ("M comentó en tu link", "M votó «Cine» en tu encuesta"…):
+     campanita con contador, panel con la lista, aviso emergente cuando llega uno nuevo con la app abierta, y (opcional) avisos del
+     celular aunque la app esté cerrada (Web Push; los recibe sw.js).
+     Para qué sirve: enterarse de lo que pasa en el muro sin tener que revisarlo todo.
+     ============================================================ */
+  let avisos = [];                         // avisos tal como los devolvió el servidor (más nuevo primero)
+  let noLeidas = 0;                        // cuántos no leí (contador de la campanita)
+  const avisosVistos = new Set();          // ids que ya se conocían: solo los nuevos muestran el aviso emergente
+  let primeraCargaAvisos = true;           // la primera vez no se muestran emergentes (serían los viejos pendientes)
+  let resaltarAvisos = new Set();          // ids no leídos al abrir el panel (se ven resaltados aunque ya se marquen como leídos)
+  const tituloBase = document.title;
+  const ICONO_AVISO = { post: 'add_circle', corazon: 'favorite', comentario: 'chat_bubble', voto: 'ballot', tarea: 'check_circle', dia: 'event', editar: 'edit', borrar: 'delete', categoria: 'label' };
+
+  /* Contador de la campanita, número en el título de la pestaña y globito en el icono de la app (si el navegador lo permite) */
+  function pintarContador() {
+    const b = $('notifBadge'); b.hidden = !noLeidas; b.textContent = noLeidas > 99 ? '99+' : String(noLeidas);
+    $('btnNotif').setAttribute('aria-label', noLeidas ? `Notificaciones: ${noLeidas} sin leer` : 'Notificaciones');
+    document.title = noLeidas ? `(${noLeidas}) ${tituloBase}` : tituloBase;
+    try { if (noLeidas && navigator.setAppBadge) navigator.setAppBadge(noLeidas); else if (navigator.clearAppBadge) navigator.clearAppBadge(); } catch (e) { /* sin globito */ }
+  }
+  /* Pide los avisos al servidor; los nuevos (que no estaban antes) salen como aviso emergente */
+  let cargandoAvisos = false;
+  async function cargarAvisos() {
+    if (!yo || cargandoAvisos) return;
+    cargandoAvisos = true;
+    try {
+      const r = await api('/notificaciones');
+      const nuevos = r.notificaciones.filter((a) => !a.leida && !avisosVistos.has(a.id));
+      r.notificaciones.forEach((a) => avisosVistos.add(a.id));
+      if (!primeraCargaAvisos && document.visibilityState === 'visible' && $('modalNotif').hidden) nuevos.slice(0, 3).reverse().forEach((a) => avisar(a.texto));
+      primeraCargaAvisos = false;
+      avisos = r.notificaciones; noLeidas = r.noLeidas;
+      pintarContador();
+      if (!$('modalNotif').hidden) { avisos.forEach((a) => { if (!a.leida) resaltarAvisos.add(a.id); }); pintarPanelAvisos(); marcarLeidas(); }
+    } catch (e) { /* sin conexión: se reintenta en el próximo ciclo */ }
+    finally { cargandoAvisos = false; }
+  }
+  /* Marca todos como leídos (en el servidor y aquí) */
+  async function marcarLeidas() {
+    if (!noLeidas) return;
+    avisos.forEach((a) => { a.leida = true; }); noLeidas = 0; pintarContador();
+    try { await api('/notificaciones', { metodo: 'POST', cuerpo: { accion: 'leer' } }); } catch (e) { /* se marcará la próxima vez */ }
+  }
+  /* Lleva a una publicación del muro: si un filtro la esconde se limpian los filtros; se desplaza hasta ella y la resalta un momento */
+  function irAPost(id) {
+    const p = posts.find((x) => x.id === id);
+    if (!p) return void avisar('Esa publicación ya no existe.');
+    if (!pasaFiltro(p)) {
+      $('filtroTipos').querySelector('.chip').click();                                      // tipo: "Todo"
+      $('filtroAutor').querySelector('.segmento__btn').click();                              // autor: "Todos"
+      if (filtro.q) { $('buscador').value = ''; filtro.q = ''; }
+      elegirCategoria('');                                                                   // categoría: "Todas"
+      pintar();
+    }
+    const el = nodos.get(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('post--resalta'); setTimeout(() => el.classList.remove('post--resalta'), 2400);
+  }
+  /* Dibuja la lista del panel */
+  function pintarPanelAvisos() {
+    $('notifVaciar').disabled = !avisos.length;
+    $('notifLista').replaceChildren(...(avisos.length ? avisos.map((a) => h('li', { class: 'notif' + (resaltarAvisos.has(a.id) ? ' notif--nueva' : '') + (a.post ? ' notif--enlace' : '') },
+      h('button', { class: 'notif__boton', type: 'button', disabled: !a.post, onclick: () => { cerrarModal($('modalNotif')); irAPost(a.post); } },
+        avatar(a.de, 'avatar--chico'),
+        h('span', { class: 'notif__texto' }, h('span', { class: 'notif__msg', text: a.texto }), h('span', { class: 'notif__hora', text: hora(a.creado) })),
+        icono(ICONO_AVISO[a.tipo] || 'notifications', a.tipo === 'corazon')))) : [h('li', { class: 'notif__vacio', text: 'Todavía no hay notificaciones. Acá van a aparecer los comentarios, corazones, votos y demás que haga la otra persona.' })]));
+  }
+  async function abrirPanelAvisos() {
+    resaltarAvisos = new Set(avisos.filter((a) => !a.leida).map((a) => a.id));
+    pintarPanelAvisos(); pintarEstadoPush(); abrirModal($('modalNotif'));
+    marcarLeidas();
+    cargarAvisos();                                                       // por si llegó algo recién
+  }
+  $('btnNotif').addEventListener('click', abrirPanelAvisos);
+  document.querySelectorAll('#modalNotif [data-cerrar]').forEach((b) => b.addEventListener('click', () => cerrarModal($('modalNotif'))));
+  $('modalNotif').addEventListener('click', (e) => { if (e.target === $('modalNotif')) cerrarModal($('modalNotif')); });   // tocar fuera cierra
+  $('notifVaciar').addEventListener('click', async () => {
+    try { await api('/notificaciones', { metodo: 'POST', cuerpo: { accion: 'vaciar' } }); avisos = []; noLeidas = 0; resaltarAvisos.clear(); pintarContador(); pintarPanelAvisos(); }
+    catch (e) { avisar(e.message, 'error'); }
+  });
+
+  /* ----- Avisos del celular (Web Push) -----
+     Activar pide permiso al navegador (tiene que ser con un toque), se suscribe con la clave que da el servidor y le avisa al servidor
+     qué dispositivo es. El servidor manda un "toque" y sw.js muestra el aviso. */
+  const hayPush = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const claveABytes = (b64) => Uint8Array.from(atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (b64.length % 4)) % 4)), (c) => c.charCodeAt(0));
+  async function suscripcionPush() { try { return hayPush ? await (await navigator.serviceWorker.ready).pushManager.getSubscription() : null; } catch (e) { return null; } }
+  async function activarPush() {
+    if ((await Notification.requestPermission()) !== 'granted') return void avisar('No se dio el permiso para los avisos.', 'error');
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: claveABytes((await api('/push/clave')).clave) });
+      await api('/push/suscribir', { metodo: 'POST', cuerpo: { endpoint: sub.endpoint } });
+      avisar('Avisos del celular activados.', 'ok');
+    } catch (e) { avisar('No se pudieron activar los avisos: ' + e.message, 'error'); }
+    pintarEstadoPush();
+  }
+  async function desactivarPush() {
+    const sub = await suscripcionPush();
+    if (sub) { try { await api('/push/baja', { metodo: 'POST', cuerpo: { endpoint: sub.endpoint } }); } catch (e) { /* igual se desuscribe aquí */ } try { await sub.unsubscribe(); } catch (e) { /* nada */ } }
+    pintarEstadoPush();
+  }
+  /* Al iniciar sesión: si este dispositivo ya tenía los avisos activados, se registra a nombre de quien entró (puede haber cambiado de M a xB) */
+  async function sincronizarPush() {
+    if (!hayPush || Notification.permission !== 'granted') return;
+    const sub = await suscripcionPush();
+    if (sub) { try { await api('/push/suscribir', { metodo: 'POST', cuerpo: { endpoint: sub.endpoint } }); } catch (e) { /* se reintenta en el próximo inicio */ } }
+  }
+  /* Al cerrar sesión: este dispositivo deja de recibir los avisos de esa persona */
+  async function bajaPushDeEstaSesion() {
+    const sub = await suscripcionPush();
+    if (sub) { try { await api('/push/baja', { metodo: 'POST', cuerpo: { endpoint: sub.endpoint } }); } catch (e) { /* nada */ } }
+  }
+  /* Bloque de arriba del panel: explica el estado y ofrece activar o desactivar */
+  async function pintarEstadoPush() {
+    const caja = $('notifPush');
+    if (!hayPush) return void caja.replaceChildren(icono('notifications_off'), h('span', { text: 'Este navegador no permite avisos del celular. En iPhone hay que instalar la app en la pantalla de inicio.' }));
+    if (Notification.permission === 'denied') return void caja.replaceChildren(icono('notifications_off'), h('span', { text: 'Bloqueaste los avisos para este sitio. Para activarlos, permite las notificaciones en los ajustes del navegador.' }));
+    const activo = Notification.permission === 'granted' && !!(await suscripcionPush());
+    caja.replaceChildren(icono(activo ? 'notifications_active' : 'notifications', activo),
+      h('span', { text: activo ? 'Avisos del celular activados en este dispositivo.' : 'Recibe los avisos aunque la app esté cerrada.' }),
+      h('button', { class: 'btn btn--fantasma notif-push__btn', type: 'button', onclick: activo ? desactivarPush : activarPush, text: activo ? 'Desactivar' : 'Activar' }));
+  }
+  /* Tocar un aviso del celular: sw.js enfoca la app y manda el id de la publicación; si la app estaba cerrada llega como ?post=ID */
+  let postPendiente = new URLSearchParams(location.search).get('post');
+  if (postPendiente) { try { history.replaceState(null, '', location.pathname); } catch (e) { /* nada */ } }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.tipo === 'ir-post') { cargar().then(() => irAPost(e.data.id)); cargarAvisos(); } });
 
   /* ----- Acciones sobre una publicación (corazón, voto, tildar lista) ----- */
   async function accion(p, cuerpo) {
@@ -1293,6 +1430,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!$('visor').hidden) cerrarVisor();
     else if (!$('modalConfirmar').hidden) { if ($('confNo').onclick) $('confNo').onclick(); }
     else if (!$('modalCategoria').hidden) cerrarModal($('modalCategoria'));   // v2.1: la ventana de nueva categoría está por encima del formulario
+    else if (!$('modalNotif').hidden) cerrarModal($('modalNotif'));          // v2.5
     else if (!$('modalNuevo').hidden) cerrarModal($('modalNuevo'));
   });
 

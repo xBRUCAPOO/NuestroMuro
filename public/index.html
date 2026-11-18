@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>♥️♠️ Nuestro Muro ♠️♥️</title>
-  <meta name="description" content="Nuestro muro: notas, listas, encuestas, fotos, links y videos para compartir.">
+  <meta name="description" content="Nuestro muro: notas, listas, encuestas, fotos, links y planes para compartir.">
   <!-- PWA: manifiesto (nombre, iconos, pantalla completa) e iconos de iPhone/Android. El service worker se registra desde js/script.js.
        El color de la barra del navegador (theme-color) lo pone script.js a partir de la variable --color-tarjeta del CSS -->
   <link rel="manifest" href="/manifest.webmanifest">
@@ -29,6 +29,8 @@
   <header class="appbar">
     <span class="appbar__espacio">
       <button class="btn-icono" id="btnInstalar" type="button" aria-label="Instalar la app" hidden><span class="material-symbols-rounded">install_mobile</span></button>
+      <!-- NUEVO v2.5: campanita de notificaciones (con contador de no leídas); script.js la muestra al iniciar sesión -->
+      <button class="btn-icono notif-btn" id="btnNotif" type="button" aria-label="Notificaciones" hidden><span class="material-symbols-rounded">notifications</span><span class="notif-btn__badge" id="notifBadge" hidden>0</span></button>
     </span>
     <h1 class="appbar__titulo">♥️♠️ Nuestro Muro ♠️♥️</h1>
     <span class="appbar__espacio">
@@ -44,7 +46,7 @@
     <section class="tarjeta ayuda-hero">
       <span class="material-symbols-rounded ayuda-hero__icono">partner_heart</span>
       <h2 class="ayuda-hero__titulo">Nuestro muro</h2>
-      <p class="ayuda-hero__texto">Acá está todo lo que nos importa: notas, listas, encuestas, fotos, links y videos. Los dos podemos agregar cosas.</p>
+      <p class="ayuda-hero__texto">Acá está todo lo que nos importa: notas, listas, encuestas, fotos, links y planes. Los dos podemos agregar cosas.</p>
       <label class="buscador">
         <span class="material-symbols-rounded">search</span>
         <input class="campo__entrada" id="buscador" type="search" placeholder="Buscar en el muro…" aria-label="Buscar en el muro" autocomplete="off" autocapitalize="none" spellcheck="false">
@@ -52,17 +54,20 @@
     </section>
 
     <!-- Filtros: por tipo de publicación (script.js crea los chips) y por autor -->
+    <!-- v2.2: los tres grupos de filtros (tipo de publicación · quién la subió · categoría) quedan separados por líneas finas horizontales -->
     <div class="filtros">
       <nav class="ayuda-indice filtros__tipos" id="filtroTipos" aria-label="Filtrar por tipo"></nav>
+      <hr class="separador" aria-hidden="true">
       <div class="segmento" id="filtroAutor" role="group" aria-label="Filtrar por autor">
         <button class="segmento__btn segmento__btn--activo" type="button" data-autor="">Todos</button>
         <button class="segmento__btn segmento__btn--m" type="button" data-autor="M">M</button>
         <button class="segmento__btn segmento__btn--xb" type="button" data-autor="xB">xB</button>
       </div>
+      <hr class="separador" aria-hidden="true">
+      <!-- NUEVO v2.1: fila de categorías (script.js crea los botones: Todas, Sin categoría, cada categoría y "Nueva").
+           Va en horizontal y, si no entran todas, se desliza hacia los lados (dedo, rueda del mouse o barra) -->
+      <nav class="cat-barra" id="filtroCategorias" aria-label="Filtrar por categoría"></nav>
     </div>
-    <!-- NUEVO v2.1: fila de categorías (script.js crea los botones: Todas, Sin categoría, cada categoría y "Nueva").
-         Va en horizontal y, si no entran todas, se desliza hacia los lados (dedo, rueda del mouse o barra) -->
-    <nav class="cat-barra" id="filtroCategorias" aria-label="Filtrar por categoría"></nav>
     <div class="ayuda-acciones"><span class="contador-lista" id="cuenta" aria-live="polite"></span></div>
 
     <!-- El muro: tarjetas en columnas tipo Pinterest (las crea script.js) -->
@@ -81,9 +86,10 @@
 
   <!-- Pie: versión y fecha de la última modificación de index.html (actualizar cada vez que se edite este archivo) -->
   <footer class="pie">
-    <span id="pieVersion">Versión 2.1.0</span>
+    <!-- v2.5.0: notificaciones (campanita + avisos del celular); v2.4.0: fotos de perfil (carta azul M / roja xB) en vez de las iniciales; v2.3.0: tipo "plan" en lugar de "video" -->
+    <span id="pieVersion">Versión 2.5.0</span>
     <span aria-hidden="true">·</span>
-    <span id="pieFecha">15/11/2026</span>
+    <span id="pieFecha">18/11/2026</span>
   </footer>
 
   <!-- ===================== VENTANA DE ACCESO (solo la primera vez) =====================
@@ -93,9 +99,10 @@
       <span class="material-symbols-rounded acceso__icono">partner_heart</span>
       <h2 class="acceso__titulo">¿Quién eres?</h2>
       <div class="switch-id" id="switchId">
-        <span class="switch-id__etiqueta switch-id__etiqueta--m" data-lado="M">M</span>
+        <!-- v2.4: cada lado del switch muestra la foto de su identidad sobre la letra -->
+        <span class="switch-id__etiqueta switch-id__etiqueta--m" data-lado="M"><img class="switch-id__foto" src="/img/avatar-M.png" alt="" draggable="false">M</span>
         <button class="switch-id__boton" id="switchBoton" type="button" role="switch" aria-checked="false" aria-label="Elegir identidad: M o xB"><span class="switch-id__perilla"></span></button>
-        <span class="switch-id__etiqueta switch-id__etiqueta--xb" data-lado="xB">xB</span>
+        <span class="switch-id__etiqueta switch-id__etiqueta--xb" data-lado="xB"><img class="switch-id__foto" src="/img/avatar-xB.png" alt="" draggable="false">xB</span>
       </div>
       <label class="campo">
         <span class="campo__etiqueta">Contraseña</span>
@@ -140,9 +147,29 @@
           </div>
           <textarea class="campo__entrada" id="nuevoTexto" rows="4" maxlength="5000"></textarea>
           <div class="md-previa" id="textoPrevia" hidden aria-live="polite"></div>
-          <p class="campo__ayuda">Selecciona texto y toca un botón. También: **negrita**, *cursiva*, ~~tachado~~, - listas, &gt; citas, [texto](https://…)</p></div>
+          <p class="campo__ayuda">Selecciona texto y toca un botón. Como en WhatsApp: *negrita*, _cursiva_, ~tachado~, ```mono```, - listas, &gt; citas, [texto](https://…)</p></div>
         <label class="campo" id="campoUrl"><span class="campo__etiqueta">Dirección (link)</span>
           <input class="campo__entrada" id="nuevoUrl" type="url" inputmode="url" placeholder="https://…" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+        <!-- NUEVO v2.3: plan. Mini calendario para elegir uno o varios días + hora y lugar (opcionales). Los días los dibuja script.js.
+             Después de publicar, los dos pueden marcar cada día como posible, ideal, descartado o seguro -->
+        <div class="campo" id="campoPlan" hidden><span class="campo__etiqueta">Días del plan</span>
+          <div class="calendario">
+            <div class="calendario__cab">
+              <button class="btn-icono" type="button" id="calAnterior" aria-label="Mes anterior"><span class="material-symbols-rounded">chevron_left</span></button>
+              <strong class="calendario__mes" id="calMes" aria-live="polite"></strong>
+              <button class="btn-icono" type="button" id="calSiguiente" aria-label="Mes siguiente"><span class="material-symbols-rounded">chevron_right</span></button>
+            </div>
+            <div class="calendario__semana" id="calSemana" aria-hidden="true"></div>
+            <div class="calendario__dias" id="calDias"></div>
+          </div>
+          <div class="dias-elegidos" id="diasElegidos" aria-live="polite"></div>
+          <p class="campo__ayuda">Toca los días en que el plan podría hacerse. Después, los dos pueden marcarlos como posible, ideal, descartado o seguro.</p>
+          <div class="plan-extra">
+            <label class="campo"><span class="campo__etiqueta">Hora (opcional)</span>
+              <input class="campo__entrada" id="planHora" type="time"></label>
+            <label class="campo"><span class="campo__etiqueta">Lugar (opcional)</span>
+              <input class="campo__entrada" id="planLugar" type="text" maxlength="120" placeholder="Nombre o link del mapa" autocomplete="off"></label>
+          </div></div>
         <!-- Lista / encuesta: filas editables que crea script.js -->
         <div class="campo" id="campoItems"><span class="campo__etiqueta" id="etiquetaItems">Elementos</span>
           <div class="filas" id="filasItems"></div>
@@ -196,6 +223,22 @@
   </div>
 
   <!-- ===================== CONFIRMAR (borrar / salir) ===================== -->
+  <!-- NUEVO v2.5: panel de notificaciones. Arriba el estado de los avisos del celular; abajo la lista (script.js la dibuja) -->
+  <div class="modal-fondo" id="modalNotif" hidden>
+    <div class="modal modal--notif" role="dialog" aria-modal="true" aria-labelledby="notifTitulo">
+      <div class="modal__cabecera">
+        <h2 class="modal__titulo" id="notifTitulo">Notificaciones</h2>
+        <button class="btn-icono" type="button" data-cerrar aria-label="Cerrar"><span class="material-symbols-rounded">close</span></button>
+      </div>
+      <div class="notif-push" id="notifPush"></div>
+      <ul class="notif-lista" id="notifLista"></ul>
+      <div class="modal__acciones">
+        <button class="btn btn--peligro" type="button" id="notifVaciar"><span class="material-symbols-rounded">delete_sweep</span>Vaciar</button>
+        <button class="btn btn--fantasma" type="button" data-cerrar>Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-fondo" id="modalConfirmar" hidden>
     <div class="modal modal--chico" role="alertdialog" aria-modal="true" aria-labelledby="confTitulo">
       <h2 class="modal__titulo" id="confTitulo">¿Seguro?</h2>

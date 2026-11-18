@@ -707,3 +707,32 @@ textarea.comentar__campo { flex: 1; min-width: 0; min-height: 38px; max-height: 
 .dias-elegidos .chip .material-symbols-rounded:last-child { font-size: 16px; }
 .plan-extra { display: grid; grid-template-columns: minmax(0, 120px) minmax(0, 1fr); gap: 10px; margin-top: 6px; }
 @media (max-width: 380px) { .plan-extra { grid-template-columns: 1fr; } }
+
+/* ============================================================
+   v2.5 — NOTIFICACIONES (campanita, panel y resaltado de la publicación)
+   Todos los colores salen de variables de :root (--yo = color de quien tiene la sesión).
+   ============================================================ */
+/* Campanita con globito de no leídas (el globito sobresale, por eso se desactiva el recorte del botón) */
+.btn-icono.notif-btn { overflow: visible; }
+.notif-btn__badge { position: absolute; top: 2px; right: 0; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--yo-gradiente); color: var(--color-blanco); font-family: var(--fuente-hud); font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--color-tarjeta), var(--sombra-acento); animation: aparecer var(--mov-rapido) var(--ease-rebote) both; }
+/* Panel */
+.modal--notif { max-width: 520px; }
+.notif-push { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px dashed var(--color-acento-borde); border-radius: var(--radio-md); background: var(--color-acento-suave); font-size: 13px; color: var(--color-texto-suave); }
+.notif-push .material-symbols-rounded { color: var(--yo); font-size: 22px; flex-shrink: 0; }
+.notif-push span:not(.material-symbols-rounded) { flex: 1; min-width: 0; }
+.notif-push__btn { flex-shrink: 0; }
+.notif-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 48dvh; overflow-y: auto; overscroll-behavior: contain; }
+.notif__boton { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; text-align: left; border: 1px solid var(--color-gris); border-radius: var(--radio-md); background: var(--color-fondo); color: var(--color-texto); transition: background var(--mov-rapido) var(--ease-suave), border-color var(--mov-rapido) var(--ease-suave); }
+.notif--enlace .notif__boton:hover { background: var(--color-acento-suave); border-color: var(--color-acento-borde); }
+.notif__boton:disabled { cursor: default; opacity: 0.85; }
+.notif--nueva .notif__boton { border-color: var(--yo); background: color-mix(in srgb, var(--yo) 12%, var(--color-fondo)); }
+.notif__texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.notif__msg { font-size: 14px; overflow-wrap: anywhere; }
+.notif__hora { font-family: var(--fuente-mono); font-size: 11px; color: var(--color-texto-suave); }
+.notif__boton > .material-symbols-rounded { font-size: 20px; color: var(--color-texto-suave); flex-shrink: 0; }
+.notif--nueva .notif__boton > .material-symbols-rounded { color: var(--yo); }
+.notif__vacio { padding: 18px 8px; text-align: center; font-size: 13px; color: var(--color-texto-suave); }
+.avatar--chico { width: 34px; height: 34px; }
+/* La publicación a la que lleva un aviso parpadea con el color de su autor */
+@keyframes resaltar { 0%, 100% { box-shadow: var(--sombra-tarjeta); } 25%, 75% { box-shadow: 0 0 0 3px var(--c), 0 0 28px color-mix(in srgb, var(--c) 60%, transparent); } }
+.post.post--resalta { animation: resaltar 1.2s var(--ease-suave) 2; }

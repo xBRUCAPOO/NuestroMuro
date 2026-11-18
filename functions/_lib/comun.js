@@ -68,6 +68,15 @@ const TABLAS = [
      Para qué sirve: clasificar publicaciones y filtrar el muro. Es CREATE IF NOT EXISTS: en una base ya desplegada solo agrega la tabla nueva. */
   `CREATE TABLE IF NOT EXISTS categorias (
      id TEXT PRIMARY KEY, nombre TEXT NOT NULL, icono TEXT NOT NULL, autor TEXT NOT NULL, creado INTEGER NOT NULL)`,
+  /* NUEVO v2.5: notificaciones. Cada interacción de una persona genera un aviso para la otra.
+     para = quién lo recibe, de = quién lo causó, tipo = clase de evento, post_id = publicación (si sigue existiendo),
+     leida = ya lo vio en la campanita, empujada = ya se entregó (o se descartó) como aviso del celular, clave = para evitar repetidos. */
+  `CREATE TABLE IF NOT EXISTS notificaciones (
+     id TEXT PRIMARY KEY, para TEXT NOT NULL, de TEXT NOT NULL, tipo TEXT NOT NULL, post_id TEXT, texto TEXT NOT NULL,
+     creado INTEGER NOT NULL, leida INTEGER NOT NULL DEFAULT 0, empujada INTEGER NOT NULL DEFAULT 0, clave TEXT)`,
+  `CREATE INDEX IF NOT EXISTS idx_notif_para ON notificaciones(para, creado DESC)`,
+  /* NUEVO v2.5: dispositivos que activaron los avisos del celular (Web Push). endpoint = dirección que da el navegador; quien = identidad con sesión en ese dispositivo */
+  `CREATE TABLE IF NOT EXISTS suscripciones (endpoint TEXT PRIMARY KEY, quien TEXT NOT NULL, creado INTEGER NOT NULL)`,
 ];
 let preparada = null;   // promesa: la preparación corre una sola vez por instancia del servidor
 
@@ -101,7 +110,8 @@ export function aPost(r) {
 }
 
 /* ---------- Validación ---------- */
-export const TIPOS = ['nota', 'lista', 'encuesta', 'foto', 'link', 'video'];
+/* v2.3: se quita "video" (nunca se subió ninguno) y se agrega "plan" */
+export const TIPOS = ['nota', 'lista', 'encuesta', 'foto', 'link', 'plan'];
 /* Texto recortado y con el largo máximo permitido */
 export const limpiar = (t, max) => (typeof t === 'string' ? t.trim().slice(0, max) : '');
 /* Solo se aceptan direcciones http(s); devuelve la URL normalizada o null */
@@ -131,8 +141,69 @@ export function construirDatos(tipo, entrada, previo = {}) {
     datos.w = entero(e.w) || previo.w || null; datos.h = entero(e.h) || previo.h || null;
   } else if (tipo === 'link') {
     if (previo.vista) datos.vista = previo.vista;
+  } else if (tipo === 'plan') {
+    /* NUEVO v2.3: plan. Entrada: { dias: ['2026-11-21', …], hora: 'HH:MM' | '', lugar: '' } (hora y lugar son opcionales) */
+    const fechas = [...new Set((Array.isArray(e.dias) ? e.dias : []).map((x) => (typeof x === 'string' ? x : x && x.f)).filter(fechaValida))].sort();
+    if (!fechas.length) return { error: 'Elige al menos un día para el plan.' };
+    if (fechas.length > LIM_PLAN.dias) return { error: `Un plan puede tener hasta ${LIM_PLAN.dias} días.` };
+    const hora = typeof e.hora === 'string' ? e.hora.trim() : '';
+    if (hora && !/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) return { error: 'La hora no es válida.' };
+    Object.assign(datos, fusionarDias(previo, fechas));   // conserva el estado de los días que ya existían
+    datos.hora = hora;
+    datos.lugar = limpiar(e.lugar, LIM_PLAN.lugar);
   }
   return { datos };
+}
+
+/* ---------- Planes (NUEVO v2.3) ---------- */
+/* Estados de un día, en el orden en que se recorren al tocarlos: posible → ideal → descartado → seguro */
+export const ESTADOS_DIA = ['posible', 'ideal', 'descartado', 'seguro'];
+export const LIM_PLAN = { dias: 31, lugar: 120 };
+/* Fecha "AAAA-MM-DD" que existe de verdad (rechaza 2026-02-31, etc.) */
+export function fechaValida(f) {
+  if (typeof f !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(f) || f < '2000-01-01' || f > '2100-12-31') return false;
+  const d = new Date(f + 'T00:00:00Z');
+  return !isNaN(d) && d.toISOString().slice(0, 10) === f;
+}
+/* Devuelve los días al estado que tenían antes de confirmar un día seguro (guardado en "antes") */
+function restaurarDias(d) {
+  d.dias.forEach((x) => { if (x.e === 'descartado' && d.antes && d.antes[x.f]) x.e = d.antes[x.f] === 'seguro' ? 'posible' : d.antes[x.f]; });
+  d.antes = {};
+}
+/* Une la lista de fechas nueva con los días anteriores: las fechas que ya estaban conservan su estado, las nuevas entran como
+   "posible" (o "descartado" si el plan ya está confirmado) y si se quita el día seguro el plan vuelve a estar sin confirmar.
+   Devuelve { dias: [{f, e}], antes: {f: e} } */
+export function fusionarDias(previo, fechas) {
+  const viejos = new Map((Array.isArray(previo.dias) ? previo.dias : []).map((x) => [x.f, x.e]));
+  const confirmado = [...viejos.values()].includes('seguro');
+  const r = { dias: fechas.map((f) => ({ f, e: viejos.has(f) ? viejos.get(f) : confirmado ? 'descartado' : 'posible' })), antes: { ...(previo.antes || {}) } };
+  Object.keys(r.antes).forEach((f) => { if (!fechas.includes(f)) delete r.antes[f]; });
+  if (confirmado) {
+    fechas.forEach((f) => { if (!viejos.has(f)) r.antes[f] = 'posible'; });
+    if (!r.dias.some((x) => x.e === 'seguro')) restaurarDias(r);   // el día seguro se quitó del plan
+  }
+  return r;
+}
+/* Cambia el estado de UN día respetando la regla "solo un día seguro":
+   - marcar un día como seguro descarta todos los demás (se recuerda cómo estaban para poder deshacerlo);
+   - quitarle "seguro" a ese día devuelve los demás a como estaban.
+   Devuelve un texto de error o null si todo salió bien. */
+export function ponerEstadoDia(d, fecha, estado) {
+  if (!ESTADOS_DIA.includes(estado)) return 'Estado de día no válido.';
+  const dia = (d.dias || []).find((x) => x.f === fecha);
+  if (!dia) return 'Ese día no está en el plan.';
+  const hayS = d.dias.some((x) => x.e === 'seguro');
+  if (estado === 'seguro') {
+    if (!hayS) d.antes = Object.fromEntries(d.dias.map((x) => [x.f, x.e]));   // foto del estado previo, solo la primera vez
+    d.dias.forEach((x) => { x.e = x.f === fecha ? 'seguro' : 'descartado'; });
+  } else if (dia.e === 'seguro') {
+    restaurarDias(d); dia.e = estado;                                          // se desconfirma el plan
+  } else if (hayS) {
+    return 'El plan ya está confirmado: primero quita el día seguro.';          // los demás días quedan descartados mientras tanto
+  } else {
+    dia.e = estado;
+  }
+  return null;
 }
 
 /* ---------- Categorías (NUEVO v2.1) ---------- */

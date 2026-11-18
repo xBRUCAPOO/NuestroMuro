@@ -6,6 +6,7 @@
    Las categorías son compartidas: M y xB ven y usan las mismas.
    ============================================================ */
 import { json, bd, limpiar, LIM_CAT, ICONO_RE } from '../../_lib/comun.js';
+import { notificar } from '../../_lib/notificar.js';   // v2.5: avisos
 
 export async function onRequestGet({ env }) {
   const db = await bd(env);
@@ -13,7 +14,7 @@ export async function onRequestGet({ env }) {
   return json({ categorias: results });
 }
 
-export async function onRequestPost({ request, env, data }) {
+export async function onRequestPost({ request, env, data, waitUntil }) {
   let c = {};
   try { c = await request.json(); } catch (e) { return json({ error: 'Datos no válidos.' }, 400); }
   const nombre = limpiar(c.nombre, LIM_CAT.nombre);
@@ -30,5 +31,6 @@ export async function onRequestPost({ request, env, data }) {
   const cat = { id: crypto.randomUUID(), nombre, icono, autor: data.quien, creado: Date.now() };
   await db.prepare('INSERT INTO categorias (id, nombre, icono, autor, creado) VALUES (?, ?, ?, ?, ?)')
     .bind(cat.id, cat.nombre, cat.icono, cat.autor, cat.creado).run();
+  await notificar({ env, request, waitUntil }, db, { de: data.quien, tipo: 'categoria', texto: `${data.quien} creó la categoría «${cat.nombre}»` });   // v2.5: aviso
   return json({ categoria: cat }, 201);
 }

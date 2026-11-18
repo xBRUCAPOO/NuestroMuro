@@ -2,10 +2,11 @@
    posts/index.js — GET /api/posts (listar) y POST /api/posts (publicar)
    Qué hace: GET devuelve las publicaciones (más nuevas primero) sin las fotos; usa ETag para que, si nada cambió, el navegador
    reciba un 304 vacío (el muro se actualiza cada pocos segundos sin gastar datos). POST crea una publicación de cualquier tipo:
-   nota, lista, encuesta, foto, link o video, a nombre de quien tiene la sesión.
+   nota, lista, encuesta, foto, link o plan (v2.3: reemplaza a "video"), a nombre de quien tiene la sesión.
    Para qué sirve: es el corazón del muro compartido.
    ============================================================ */
 import { json, bd, COLUMNAS, aPost, TIPOS, limpiar, urlValida, construirDatos, vistaPrevia, idsCategoriasValidos } from '../../_lib/comun.js';
+import { notificar, articuloTipo, tituloDe } from '../../_lib/notificar.js';   // v2.5: avisos
 import { LIMITES } from '../../_lib/config.js';
 
 export async function onRequestGet({ request, env }) {
@@ -19,7 +20,7 @@ export async function onRequestGet({ request, env }) {
   return json({ posts: results.map(aPost) }, 200, cab);
 }
 
-export async function onRequestPost({ request, env, data }) {
+export async function onRequestPost({ request, env, data, waitUntil }) {
   let c = {};
   try { c = await request.json(); } catch (e) { return json({ error: 'Datos no válidos.' }, 400); }
   const tipo = c.tipo;
@@ -32,7 +33,8 @@ export async function onRequestPost({ request, env, data }) {
   /* Reglas por tipo */
   if (tipo === 'nota' && !texto && !titulo) return json({ error: 'Escribe algo en la nota.' }, 400);
   if (tipo === 'encuesta' && !titulo) return json({ error: 'Escribe la pregunta de la encuesta.' }, 400);
-  if (tipo === 'link' || tipo === 'video') {
+  if (tipo === 'plan' && !titulo) return json({ error: 'Ponle un nombre al plan.' }, 400);   // v2.3: el plan necesita título (los días los valida construirDatos)
+  if (tipo === 'link') {
     url = urlValida(c.url);
     if (!url) return json({ error: 'Escribe una dirección válida (que empiece con http:// o https://).' }, 400);
   }
@@ -53,5 +55,8 @@ export async function onRequestPost({ request, env, data }) {
   await db.prepare('INSERT INTO posts (id, autor, tipo, titulo, texto, url, datos, imagen, creado, actualizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(id, data.quien, tipo, titulo || null, texto || null, url, JSON.stringify(datos), imagen, ahora, ahora).run();
   const fila = await db.prepare(`SELECT ${COLUMNAS} FROM posts WHERE id = ?`).bind(id).first();
-  return json({ post: aPost(fila) }, 201);
+  /* NUEVO v2.5: aviso para la otra persona ("M publicó un link: «título»") */
+  const nuevo = aPost(fila);
+  await notificar({ env, request, waitUntil }, db, { de: data.quien, tipo: 'post', post_id: id, texto: `${data.quien} publicó ${articuloTipo(tipo)}${tituloDe(nuevo) ? ': ' + tituloDe(nuevo) : ''}` });
+  return json({ post: nuevo }, 201);
 }

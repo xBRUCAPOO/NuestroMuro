@@ -6,11 +6,12 @@
    - /api/posts (el muro): también primero internet; sin conexión se muestra lo último que se vio.
    - Fotos (/api/imagen/…): primero la copia guardada (una foto nunca cambia).
    - Fuentes de Google: se guardan y se refrescan en segundo plano.
+   - Avisos del celular (v2.5): cuando el servidor manda un "toque" de push se piden los avisos nuevos y se muestran como notificación.
    - Todo lo demás de la API (login, votos, publicar…): siempre a internet, nunca se guarda.
    Para qué sirve: que sea una app instalable, rápida y que siempre muestre la última versión publicada.
    Cambiar VERSION fuerza a renovar las copias guardadas (no hace falta tocarlo en cada push: la red tiene prioridad).
    ============================================================ */
-const VERSION = 'v2.4.0';   // v2.4: se agregan las fotos de perfil al cascarón guardado
+const VERSION = 'v2.5.0';   // v2.4: fotos de perfil en el cascarón guardado; v2.5: avisos del celular (push)
 const CACHE_ESTATICO = `muro-estatico-${VERSION}`;   // cascarón de la app
 const CACHE_DATOS = 'muro-datos';                     // listado del muro y fotos
 const CACHE_FUENTES = 'muro-fuentes';                 // Google Fonts
@@ -72,4 +73,43 @@ self.addEventListener('fetch', (e) => {
   if (url.pathname.startsWith('/api/')) return;               // login, yo, votos…: siempre a la red
   if (url.pathname === '/sw.js') return;                      // el propio service worker lo gestiona el navegador
   e.respondWith(redPrimero(request, CACHE_ESTATICO));         // página, CSS, JS, iconos
+});
+
+/* ============================================================
+   NUEVO v2.5 — Avisos del celular (Web Push)
+   Qué hace: el servidor manda un "toque" sin texto cuando la otra persona hace algo. Aquí se le pregunta a /api/notificaciones?push=1
+   qué hay de nuevo (usa la sesión guardada en el navegador) y se muestra cada aviso como notificación del sistema. Si la app está
+   abierta y a la vista no se muestra nada (ya sale el aviso dentro de la app). Tocar el aviso abre/enfoca la app en esa publicación.
+   Para qué sirve: enterarse de lo que pasa aunque la app esté cerrada.
+   ============================================================ */
+self.addEventListener('push', (e) => {
+  e.waitUntil((async () => {
+    let avisos = [];
+    try {
+      const r = await fetch('/api/notificaciones?push=1', { cache: 'no-store', credentials: 'same-origin' });
+      if (r.status === 401) return;                                   // no hay sesión en este navegador: nada que mostrar
+      if (r.ok) avisos = (await r.json()).notificaciones || [];
+    } catch (err) { /* sin conexión: se muestra el aviso genérico */ }
+    if (!avisos.length) avisos = [{ id: 'novedades', texto: 'Hay novedades en el muro.', post: '' }];
+    const ventanas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    if (ventanas.some((v) => v.visibilityState === 'visible')) return; // la app está a la vista: ya se ve dentro de ella
+    await Promise.all(avisos.map((a) => self.registration.showNotification('Nuestro Muro', {
+      body: a.texto, tag: a.id, icon: '/icons/icon-192.png', badge: '/icons/favicon-32.png', data: { post: a.post || '' },
+    })));
+  })());
+});
+/* Tocar el aviso: enfoca la app abierta (y le pasa la publicación) o la abre con ?post=ID */
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const post = (e.notification.data && e.notification.data.post) || '';
+  e.waitUntil((async () => {
+    const ventanas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    if (ventanas.length) {
+      const v = ventanas[0];
+      await v.focus();
+      if (post) v.postMessage({ tipo: 'ir-post', id: post });
+      return;
+    }
+    await self.clients.openWindow(post ? `/?post=${encodeURIComponent(post)}` : '/');
+  })());
 });
