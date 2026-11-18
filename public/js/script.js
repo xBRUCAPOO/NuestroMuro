@@ -705,7 +705,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('campoTexto').hidden = !['nota', 'foto', 'link', 'plan'].includes(tipo);
     $('etiquetaTexto').textContent = tipo === 'nota' ? 'Texto' : (tipo === 'foto' || tipo === 'plan' ? 'Descripción (opcional)' : 'Comentario (opcional)');
     $('campoUrl').hidden = tipo !== 'link';
-    $('campoPlan').hidden = tipo !== 'plan';                              // v2.3: calendario de días + hora y lugar opcionales
+    if ($('campoPlan')) $('campoPlan').hidden = tipo !== 'plan';   // v2.4.1: tolera un index.html viejo sin el campo del plan                              // v2.3: calendario de días + hora y lugar opcionales
     if (tipo === 'plan') pintarCalendario();
     $('campoItems').hidden = !['lista', 'encuesta'].includes(tipo);
     $('etiquetaItems').textContent = esEnc ? 'Opciones (mínimo 2)' : 'Elementos de la lista';
@@ -724,7 +724,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let mesCalendario = primerDiaDelMes(new Date());
   const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
   const LETRAS_SEMANA = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
-  $('calSemana').append(...LETRAS_SEMANA.map((l) => h('span', { text: l })));
+  /* v2.4.1: si el index.html guardado es más viejo que este script (no tiene el calendario), se omite el calendario en vez de romper toda la app */
+  const hayCalendario = !!($('calSemana') && $('calDias') && $('calMes') && $('calAnterior') && $('calSiguiente') && $('diasElegidos'));
+  if (hayCalendario) $('calSemana').append(...LETRAS_SEMANA.map((l) => h('span', { text: l })));
   function alternarDia(f) {
     if (diasElegidos.has(f)) diasElegidos.delete(f);
     else if (diasElegidos.size >= 31) return void avisar('Un plan puede tener hasta 31 días.', 'error');
@@ -732,6 +734,7 @@ document.addEventListener('DOMContentLoaded', () => {
     pintarCalendario();
   }
   function pintarCalendario() {
+    if (!hayCalendario) return;   // v2.4.1: sin calendario en el HTML no hay nada que pintar
     const hoy = hoyISO(), anio = mesCalendario.getFullYear(), mes = mesCalendario.getMonth();
     $('calMes').textContent = `${NOMBRES_MES[mes]} ${anio}`;
     const celdas = [], vacias = (mesCalendario.getDay() + 6) % 7;        // huecos antes del día 1 (la semana empieza el lunes)
@@ -747,8 +750,10 @@ document.addEventListener('DOMContentLoaded', () => {
       ? orden.map((f) => h('button', { class: 'chip chip--activo', type: 'button', title: 'Quitar este día', 'aria-label': `Quitar ${etiquetaDia(f)}`, onclick: () => alternarDia(f) }, icono('event'), h('span', { text: etiquetaDia(f) }), icono('close')))
       : [h('span', { class: 'campo__ayuda', text: 'Todavía no elegiste ningún día.' })]));
   }
-  $('calAnterior').addEventListener('click', () => { mesCalendario = new Date(mesCalendario.getFullYear(), mesCalendario.getMonth() - 1, 1); pintarCalendario(); });
-  $('calSiguiente').addEventListener('click', () => { mesCalendario = new Date(mesCalendario.getFullYear(), mesCalendario.getMonth() + 1, 1); pintarCalendario(); });
+  if (hayCalendario) {
+    $('calAnterior').addEventListener('click', () => { mesCalendario = new Date(mesCalendario.getFullYear(), mesCalendario.getMonth() - 1, 1); pintarCalendario(); });
+    $('calSiguiente').addEventListener('click', () => { mesCalendario = new Date(mesCalendario.getFullYear(), mesCalendario.getMonth() + 1, 1); pintarCalendario(); });
+  }
 
   /* Abre el formulario vacío (publicación nueva) */
   function abrirNuevo() {
@@ -771,7 +776,7 @@ document.addEventListener('DOMContentLoaded', () => {
     diasElegidos = new Set(p.tipo === 'plan' ? (p.datos.dias || []).map((x) => x.f) : []);
     mesCalendario = primerDiaDelMes(diasElegidos.size ? aFecha([...diasElegidos].sort()[0]) : new Date());
     elegirTipo(p.tipo);
-    if (p.tipo === 'plan') { $('planHora').value = p.datos.hora || ''; $('planLugar').value = p.datos.lugar || ''; }
+    if (p.tipo === 'plan' && $('planHora')) { $('planHora').value = p.datos.hora || ''; $('planLugar').value = p.datos.lugar || ''; }
     $('nuevoTituloCampo').value = p.titulo; $('nuevoTexto').value = p.texto; $('nuevoUrl').value = p.url;
     if (p.tipo === 'lista') { $('filasItems').replaceChildren(); (p.datos.items || []).forEach((i) => agregarFila(i.t, i.hecho)); }
     catsElegidas = new Set(catsDe(p).map((c) => c.id)); pintarCatsComposer(); reiniciarVistaTexto();   // v2.1: sus categorías actuales quedan marcadas
@@ -1253,7 +1258,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (tipo === 'plan') {                                              // v2.3: nombre + al menos un día; hora y lugar son opcionales
       if (!cuerpo.titulo) return void (error.textContent = 'Ponle un nombre al plan.');
       if (!diasElegidos.size) return void (error.textContent = 'Elige al menos un día en el calendario.');
-      cuerpo.datos = { dias: [...diasElegidos].sort(), hora: $('planHora').value, lugar: $('planLugar').value.trim() };
+      cuerpo.datos = { dias: [...diasElegidos].sort(), hora: $('planHora') ? $('planHora').value : '', lugar: $('planLugar') ? $('planLugar').value.trim() : '' };
     }
     if (tipo === 'link') {
       cuerpo.url = arreglarUrl($('nuevoUrl').value);
