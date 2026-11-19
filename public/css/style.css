@@ -702,7 +702,14 @@ textarea.comentar__campo { flex: 1; min-width: 0; min-height: 38px; max-height: 
 .cal-dia:hover:not(:disabled) { background: var(--color-acento-suave); }
 .cal-dia:disabled { color: var(--color-gris-claro); opacity: 0.45; cursor: default; }
 .cal-dia--hoy { border-color: var(--color-acento-borde); }
-.cal-dia--elegido, .cal-dia--elegido:hover:not(:disabled) { background: var(--yo); border-color: var(--yo); color: var(--color-blanco); font-weight: 700; }
+/* v2.6: cada día elegido toma el color de su tipo (posible, ideal, descartado, seguro) y muestra su icono en la esquina */
+.cal-dia--e { --e: var(--color-dia-posible); background: color-mix(in srgb, var(--e) 14%, var(--color-fondo)); border-color: color-mix(in srgb, var(--e) 70%, var(--color-gris)); font-weight: 700; }
+.cal-dia--e:hover:not(:disabled) { background: color-mix(in srgb, var(--e) 26%, var(--color-fondo)); }
+.cal-dia--ideal { --e: var(--color-dia-ideal); }
+.cal-dia--descartado { --e: var(--color-dia-descartado); }
+.cal-dia--descartado > span:first-child { text-decoration: line-through; opacity: 0.8; }
+.cal-dia--seguro { --e: var(--color-dia-seguro); background: color-mix(in srgb, var(--e) 26%, var(--color-fondo)); border-color: var(--e); }
+.cal-dia .material-symbols-rounded { position: absolute; top: 1px; right: 1px; font-size: 13px; color: var(--e); }
 .dias-elegidos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .dias-elegidos .chip .material-symbols-rounded:last-child { font-size: 16px; }
 .plan-extra { display: grid; grid-template-columns: minmax(0, 120px) minmax(0, 1fr); gap: 10px; margin-top: 6px; }

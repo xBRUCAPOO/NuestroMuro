@@ -4,7 +4,8 @@
    { accion: "corazon" }                      → pone/quita tu corazón
    { accion: "voto", opcion: 0 }              → vota (o quita tu voto) en una opción de la encuesta (un voto por persona)
    { accion: "item", indice: 2, hecho: true } → tilda / destilda un elemento de la lista
-   { accion: "dia", fecha: "2026-11-21", estado: "seguro" } → NUEVO v2.3: cambia el estado de un día de un plan (lo pueden hacer ambos)
+   { accion: "dia", fecha: "2026-11-21", estado: "seguro" } → NUEVO v2.3: cambia el estado de un día de un plan (lo pueden hacer ambos);
+   v2.6: también { accion: "dia", cambios: [{ fecha, estado }, …] } para guardar varios toques seguidos de una vez
    { accion: "comentar", texto: "…" }       → NUEVO v2.2: agrega un comentario (lo puede hacer cualquiera, también en publicaciones ajenas)
    { accion: "borrar_comentario", id: "…" }   → NUEVO v2.2: borra un comentario, pero solo quien lo escribió
    Para qué sirve: interactuar con el muro sin cambiar quién es el autor de la publicación.
@@ -51,16 +52,21 @@ export async function onRequestPost({ request, env, data, params, waitUntil }) {
   } else if (c.accion === 'dia' && p.tipo === 'plan' && Array.isArray(d.dias)) {
     /* NUEVO v2.3: cualquiera de los dos cambia el estado de un día del plan (posible/ideal/descartado/seguro).
        La regla "solo un día seguro" (los demás se descartan) vive en ponerEstadoDia. */
-    const antesDia = (d.dias.find((x) => x.f === c.fecha) || {}).e, antesSeguro = (d.dias.find((x) => x.e === 'seguro') || {}).f;
-    const err = ponerEstadoDia(d, c.fecha, c.estado);
-    if (err) return json({ error: err }, 400);
-    /* Texto según lo que pasó: confirmar, mover o quitar el día seguro, o simplemente pasar un día de un estado a otro */
-    const dia = etiquetaDia(c.fecha);
-    if (antesDia !== c.estado) {
-      if (c.estado === 'seguro') aviso = { tipo: 'dia', texto: antesSeguro ? `${yo} cambió el día seguro de ${ref} de ${etiquetaDia(antesSeguro)} a ${dia}` : `${yo} confirmó ${ref} para el ${dia}` };
-      else if (antesDia === 'seguro') aviso = { tipo: 'dia', texto: `${yo} quitó el día seguro (${dia}) de ${ref}` };
-      else aviso = { tipo: 'dia', texto: `${yo} pasó el ${dia} de ${antesDia} a ${c.estado} en ${ref}` };
+    /* v2.6: la app puede mandar varios toques seguidos en una sola vez: { cambios: [{ fecha, estado }, …] } (se aplican en orden, igual que
+       en la pantalla de quien tocó). Sigue valiendo el formato de un solo cambio { fecha, estado }. Si alguno no es válido no se guarda nada. */
+    const cambios = Array.isArray(c.cambios) ? c.cambios.slice(0, 60) : [{ fecha: c.fecha, estado: c.estado }];
+    if (!cambios.length) return json({ error: 'No hay cambios para guardar.' }, 400);
+    const antes = Object.fromEntries(d.dias.map((x) => [x.f, x.e]));
+    for (const k of cambios) {
+      const err = ponerEstadoDia(d, k && k.fecha, k && k.estado);
+      if (err) return json({ error: err }, 400);
     }
+    /* Un solo aviso con el resultado final: confirmar / mover / quitar el día seguro, o los días que pasaron de un estado a otro */
+    const viejoSeguro = Object.keys(antes).find((f) => antes[f] === 'seguro'), nuevoSeguro = (d.dias.find((x) => x.e === 'seguro') || {}).f;
+    const difs = d.dias.filter((x) => antes[x.f] !== x.e);
+    if (nuevoSeguro && nuevoSeguro !== viejoSeguro) aviso = { tipo: 'dia', texto: viejoSeguro ? `${yo} cambió el día seguro de ${ref} de ${etiquetaDia(viejoSeguro)} a ${etiquetaDia(nuevoSeguro)}` : `${yo} confirmó ${ref} para el ${etiquetaDia(nuevoSeguro)}` };
+    else if (viejoSeguro && !nuevoSeguro) aviso = { tipo: 'dia', texto: `${yo} quitó el día seguro (${etiquetaDia(viejoSeguro)}) de ${ref}` };
+    else if (difs.length) aviso = { tipo: 'dia', texto: `${yo} pasó ${difs.slice(0, 3).map((x) => `el ${etiquetaDia(x.f)} de ${antes[x.f]} a ${x.e}`).join(', ')}${difs.length > 3 ? ` y ${difs.length - 3} más` : ''} en ${ref}` };
   } else if (c.accion === 'comentar') {
     /* NUEVO v2.2: comentario nuevo al final. "limpiar" recorta espacios y largo; un comentario vacío se rechaza */
     const texto = limpiar(c.texto, LIM_COMENTARIOS.texto);

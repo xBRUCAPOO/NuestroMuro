@@ -142,13 +142,32 @@ export function construirDatos(tipo, entrada, previo = {}) {
   } else if (tipo === 'link') {
     if (previo.vista) datos.vista = previo.vista;
   } else if (tipo === 'plan') {
-    /* NUEVO v2.3: plan. Entrada: { dias: ['2026-11-21', …], hora: 'HH:MM' | '', lugar: '' } (hora y lugar son opcionales) */
-    const fechas = [...new Set((Array.isArray(e.dias) ? e.dias : []).map((x) => (typeof x === 'string' ? x : x && x.f)).filter(fechaValida))].sort();
+    /* NUEVO v2.3: plan. Entrada: { dias, hora: 'HH:MM' | '', lugar: '' } (hora y lugar son opcionales).
+       v2.6: "dias" puede ser una lista de fechas ['2026-11-21', …] (los días que ya existían conservan su estado y los nuevos entran como
+       "posible") o una lista con estados [{ f: '2026-11-21', e: 'ideal' }, …] (+ "antes", cómo estaban los demás antes de confirmar un día),
+       que es lo que manda el formulario cuando se eligieron los tipos de día al crear o editar el plan. */
+    const crudo = Array.isArray(e.dias) ? e.dias : [];
+    const conEstados = crudo.some((x) => x && typeof x === 'object');
+    const mapa = new Map();
+    crudo.forEach((x) => { const f = typeof x === 'string' ? x : x && x.f; if (fechaValida(f)) mapa.set(f, conEstados && x && ESTADOS_DIA.includes(x.e) ? x.e : 'posible'); });
+    const fechas = [...mapa.keys()].sort();
     if (!fechas.length) return { error: 'Elige al menos un día para el plan.' };
     if (fechas.length > LIM_PLAN.dias) return { error: `Un plan puede tener hasta ${LIM_PLAN.dias} días.` };
     const hora = typeof e.hora === 'string' ? e.hora.trim() : '';
     if (hora && !/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)) return { error: 'La hora no es válida.' };
-    Object.assign(datos, fusionarDias(previo, fechas));   // conserva el estado de los días que ya existían
+    if (!conEstados) Object.assign(datos, fusionarDias(previo, fechas));   // conserva el estado de los días que ya existían
+    else {
+      const seguros = fechas.filter((f) => mapa.get(f) === 'seguro');
+      if (seguros.length > 1) return { error: 'Un plan solo puede tener un día seguro.' };
+      const antesIn = e.antes && typeof e.antes === 'object' ? e.antes : {};
+      datos.antes = {};
+      /* Con un día seguro los demás quedan descartados (y se recuerda cómo estaban para poder deshacerlo); sin día seguro no hay nada que recordar */
+      datos.dias = fechas.map((f) => {
+        if (!seguros.length || f === seguros[0]) return { f, e: mapa.get(f) };
+        datos.antes[f] = ESTADOS_DIA.includes(antesIn[f]) && antesIn[f] !== 'seguro' ? antesIn[f] : 'posible';
+        return { f, e: 'descartado' };
+      });
+    }
     datos.hora = hora;
     datos.lugar = limpiar(e.lugar, LIM_PLAN.lugar);
   }

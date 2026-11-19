@@ -111,9 +111,9 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ===== API ===== */
   let yo = null;                         // "M" | "xB" cuando hay sesión
   /* Llama a /api/…; devuelve el JSON. Si el servidor responde 401 (sin sesión) abre la ventana de acceso. */
-  async function api(ruta, { metodo = 'GET', cuerpo } = {}) {
+  async function api(ruta, { metodo = 'GET', cuerpo, keepalive } = {}) {
     const res = await fetch('/api' + ruta, {
-      method: metodo, credentials: 'same-origin',
+      method: metodo, credentials: 'same-origin', keepalive: !!keepalive,   // v2.6: keepalive deja terminar el guardado aunque se cierre la página
       headers: cuerpo ? { 'Content-Type': 'application/json' } : undefined,
       body: cuerpo ? JSON.stringify(cuerpo) : undefined,
     });
@@ -269,6 +269,78 @@ document.addEventListener('DOMContentLoaded', () => {
     const dt = aFecha(f);
     return `${DIAS_SEMANA[dt.getDay()]} ${dt.getDate()} ${MESES[dt.getMonth()]}` + (dt.getFullYear() !== new Date().getFullYear() ? ` ${dt.getFullYear()}` : '');
   }
+  /* ----- v2.6: réplica en el navegador de las reglas de los días de un plan (iguales a las de functions/_lib/comun.js) -----
+     Qué hace: permite cambiar el estado de un día AL INSTANTE en la pantalla, sin esperar la respuesta del servidor. Regla: solo un día
+     seguro; marcarlo descarta los demás (se recuerda cómo estaban en "antes") y quitarlo los devuelve a como estaban.
+     Un "estado de días" es { dias: [{ f, e }], antes: { fecha: estado } }. */
+  const clonarDias = (datos) => ({ dias: ((datos && datos.dias) || []).map((x) => ({ f: x.f, e: x.e })), antes: { ...((datos && datos.antes) || {}) } });
+  function restaurarDiasLocal(d) {
+    d.dias.forEach((x) => { if (x.e === 'descartado' && d.antes[x.f]) x.e = d.antes[x.f] === 'seguro' ? 'posible' : d.antes[x.f]; });
+    d.antes = {};
+  }
+  /* Devuelve false si el cambio no es posible (el servidor lo rechazaría) */
+  function ponerEstadoDiaLocal(d, fecha, estado) {
+    const dia = d.dias.find((x) => x.f === fecha);
+    if (!dia) return false;
+    const hayS = d.dias.some((x) => x.e === 'seguro');
+    if (estado === 'seguro') {
+      if (!hayS) d.antes = Object.fromEntries(d.dias.map((x) => [x.f, x.e]));
+      d.dias.forEach((x) => { x.e = x.f === fecha ? 'seguro' : 'descartado'; });
+    } else if (dia.e === 'seguro') { restaurarDiasLocal(d); dia.e = estado; }
+    else if (hayS) return false;
+    else dia.e = estado;
+    return true;
+  }
+  /* Estado al que pasa un día cuando se lo toca: posible → ideal → descartado → seguro → posible. Con el plan confirmado: otro día pasa a ser
+     el seguro y el seguro vuelve a "posible" */
+  function siguienteEstadoDia(d, fecha) {
+    const dia = d.dias.find((x) => x.f === fecha), hayS = d.dias.some((x) => x.e === 'seguro');
+    if (hayS) return dia.e === 'seguro' ? 'posible' : 'seguro';
+    return ORDEN_ESTADOS[(ORDEN_ESTADOS.indexOf(dia.e) + 1) % ORDEN_ESTADOS.length];
+  }
+  /* ----- v2.6: toques sobre los días de un plan sin demora -----
+     Qué hace: cada toque cambia el día en pantalla al instante; el guardado se hace cuando se dejó de tocar (ESPERA_DIA ms): se manda en una
+     sola petición la secuencia de toques y el servidor la repite igual. Mientras hay cambios sin guardar, las actualizaciones automáticas
+     del muro no pisan lo que se ve. Si el servidor rechaza el cambio (por ejemplo la otra persona lo modificó antes), se vuelve a lo guardado.
+     Para qué sirve: que cambiar de día se sienta inmediato y se pueda tocar varias veces seguidas guardando solo el resultado final. */
+  const ESPERA_DIA = 600;
+  const planesPend = new Map();   // id de publicación → { local: estado de días en pantalla, ops: toques sin enviar, timer, enVuelo }
+  function aplicarPlanLocal(id, local) {
+    posts = posts.map((x) => (x.id === id ? { ...x, datos: { ...x.datos, ...clonarDias(local) } } : x));
+    ultimaFirma = JSON.stringify(posts.map((x) => [x.id, x.actualizado]));
+    pintar();
+  }
+  function tocarDia(p, fecha) {
+    let e = planesPend.get(p.id);
+    if (!e) { e = { local: clonarDias(p.datos), ops: [], timer: 0, enVuelo: false }; planesPend.set(p.id, e); }
+    if (!e.local.dias.some((x) => x.f === fecha)) return;
+    const sig = siguienteEstadoDia(e.local, fecha);
+    if (!ponerEstadoDiaLocal(e.local, fecha, sig)) return;
+    e.ops.push({ fecha, estado: sig });
+    aplicarPlanLocal(p.id, e.local);                                   // se ve al instante
+    clearTimeout(e.timer); e.timer = setTimeout(() => enviarDias(p.id), ESPERA_DIA);
+  }
+  async function enviarDias(id) {
+    const e = planesPend.get(id);
+    if (!e || e.enVuelo || !e.ops.length) return;
+    const lote = e.ops; e.ops = []; e.enVuelo = true;
+    try {
+      const r = await api(`/posts/${id}/accion`, { metodo: 'POST', cuerpo: { accion: 'dia', cambios: lote }, keepalive: true });
+      e.enVuelo = false;
+      if (e.ops.length) {                                              // hubo más toques mientras se guardaba: se conserva lo que se ve y se vuelve a guardar
+        posts = posts.map((x) => (x.id === id ? { ...r.post, datos: { ...r.post.datos, ...clonarDias(e.local) } } : x));
+        clearTimeout(e.timer); e.timer = setTimeout(() => enviarDias(id), ESPERA_DIA);
+      } else { planesPend.delete(id); reemplazar(r.post); }
+    } catch (err) {
+      planesPend.delete(id); avisar(err.message, 'error');
+      ultimaFirma = ''; cargar();                                      // se vuelve a lo que quedó guardado
+    }
+  }
+  /* Si se sale de la app con toques sin guardar, se guardan ya (sin esperar) */
+  const guardarDiasYa = () => planesPend.forEach((e, id) => { clearTimeout(e.timer); enviarDias(id); });
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') guardarDiasYa(); });
+  window.addEventListener('pagehide', guardarDiasYa);
+
 
   /* Chips de filtro por tipo (Todo + uno por tipo) */
   const chipsTipo = [['', 'apps', 'Todo'], ...Object.entries(TIPOS).map(([k, t]) => [k, t.icono, t.nombre])];
@@ -503,9 +575,9 @@ document.addEventListener('DOMContentLoaded', () => {
     /* Días: botones que cambian de estado al tocarlos */
     partes.push(h('div', { class: 'plan__dias' + (seguro ? ' plan__dias--confirmado' : ''), role: 'group', 'aria-label': 'Días del plan' }, dias.map((dia) => {
       const est = ESTADOS_DIA[dia.e] || ESTADOS_DIA.posible;
-      const sig = seguro ? (dia.e === 'seguro' ? 'posible' : 'seguro') : ORDEN_ESTADOS[(ORDEN_ESTADOS.indexOf(dia.e) + 1) % ORDEN_ESTADOS.length];
+      const sig = siguienteEstadoDia({ dias }, dia.f);                   // v2.6: la misma regla que usa el toque
       const ayuda = seguro ? (dia.e === 'seguro' ? 'Quitar el día seguro' : 'Elegir este como día seguro') : `Pasar a "${ESTADOS_DIA[sig].nombre.toLowerCase()}"`;
-      return h('button', { class: `dia dia--${dia.e}` + (dia.f < hoy ? ' dia--pasado' : ''), type: 'button', title: ayuda, 'aria-label': `${etiquetaDia(dia.f)}: ${est.nombre.toLowerCase()}. ${ayuda}`, onclick: () => accion(p, { accion: 'dia', fecha: dia.f, estado: sig }) },
+      return h('button', { class: `dia dia--${dia.e}` + (dia.f < hoy ? ' dia--pasado' : ''), type: 'button', title: ayuda, 'aria-label': `${etiquetaDia(dia.f)}: ${est.nombre.toLowerCase()}. ${ayuda}`, onclick: () => tocarDia(p, dia.f) },   // v2.6: cambio instantáneo, se guarda al dejar de tocar
         icono(est.icono, dia.e === 'seguro' || dia.e === 'ideal'), h('span', { class: 'dia__fecha', text: etiquetaDia(dia.f) }), h('span', { class: 'dia__estado', text: est.nombre }));
     })));
     if (!seguro && dias.length) partes.push(h('span', { class: 'progreso__texto', text: 'Toca un día para cambiar su estado: posible, ideal, descartado o seguro.' }));
@@ -593,7 +665,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let orden = 0;
     lista.forEach((p, i) => {
       /* v2.1: la huella incluye las categorías (nombre e icono) para que la tarjeta se repinte si se crea/borra una categoría */
-      const firma = JSON.stringify([p.actualizado, yo, catsDe(p).map((c) => [c.id, c.nombre, c.icono]), comentariosAbiertos.has(p.id), p.tipo === 'plan' ? hoyISO() : 0]);   // v2.2: + comentarios desplegados; v2.3: los planes se repintan al cambiar el día (cuenta regresiva)
+      const firma = JSON.stringify([p.actualizado, yo, catsDe(p).map((c) => [c.id, c.nombre, c.icono]), comentariosAbiertos.has(p.id), p.tipo === 'plan' ? [hoyISO(), p.datos.dias] : 0]);   // v2.2: + comentarios desplegados; v2.3: los planes se repintan al cambiar el día (cuenta regresiva); v2.6: y al cambiar el estado de un día
       let el = nodos.get(p.id);
       if (!el || el._firma !== firma) {
         /* v2.2: si se estaba escribiendo un comentario en esta tarjeta, se conserva el foco y el cursor al repintarla */
@@ -631,7 +703,8 @@ document.addEventListener('DOMContentLoaded', () => {
       let cambioCats = false;
       if (rc) { const fc = JSON.stringify(rc.categorias); if (fc !== ultimaFirmaCats) { ultimaFirmaCats = fc; categorias = rc.categorias; cambioCats = true; } }
       const firma = JSON.stringify(r.posts.map((p) => [p.id, p.actualizado]));
-      if (firma !== ultimaFirma || cambioCats) { ultimaFirma = firma; posts = r.posts; pintar(); }
+      /* v2.6: los planes con toques sin guardar conservan lo que se ve (las actualizaciones no lo pisan) */
+      if (firma !== ultimaFirma || cambioCats) { ultimaFirma = firma; posts = r.posts.map((x) => (planesPend.has(x.id) ? { ...x, datos: { ...x.datos, ...clonarDias(planesPend.get(x.id).local) } } : x)); pintar(); }
       if (postPendiente) { const id = postPendiente; postPendiente = null; setTimeout(() => irAPost(id), 300); }   // v2.5: se abrió desde un aviso del celular
     } catch (e) {
       if (e.status !== 401) { $('cargando').hidden = true; if (!posts.length) { $('vacio').hidden = false; $('vacioTexto').textContent = 'No se pudo cargar el muro. Revisa tu conexión.'; } }
@@ -853,10 +926,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ----- v2.3: calendario para elegir los días de un plan -----
-     Qué hace: mini calendario mensual (semana desde el lunes). Tocar un día lo suma o lo quita del plan; abajo se listan los elegidos.
-     Los días ya pasados no se pueden sumar (pero uno que ya estaba en el plan se puede quitar). Máximo 31 días.
-     Para qué sirve: marcar uno o varios días posibles de forma rápida desde el celular. */
-  let diasElegidos = new Set();            // fechas "AAAA-MM-DD" marcadas en el formulario
+     Qué hace: mini calendario mensual (semana desde el lunes). Cada toque sobre un día cambia su tipo: sin elegir → posible → ideal →
+     descartado → seguro → (otro toque) se quita. Abajo se listan los elegidos con su tipo. Con un día seguro el plan queda confirmado y los
+     demás se descartan (quitar el seguro los devuelve a como estaban), igual que en la tarjeta. Los días ya pasados no se pueden sumar
+     (pero uno que ya estaba en el plan se puede cambiar o quitar). Máximo 31 días.
+     Para qué sirve: dejar el plan armado, con los tipos de día ya elegidos, desde el momento de crearlo. */
+  let formDias = { dias: [], antes: {} };  // días elegidos en el formulario con su tipo: { dias: [{ f: "AAAA-MM-DD", e: estado }], antes }
+  let formDiasTocados = false;             // al editar: si no se tocó el calendario solo se mandan las fechas (así no se pisan cambios de la otra persona)
   const primerDiaDelMes = (dt) => new Date(dt.getFullYear(), dt.getMonth(), 1);
   let mesCalendario = primerDiaDelMes(new Date());
   const NOMBRES_MES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -864,10 +940,17 @@ document.addEventListener('DOMContentLoaded', () => {
   /* v2.4.1: si el index.html guardado es más viejo que este script (no tiene el calendario), se omite el calendario en vez de romper toda la app */
   const hayCalendario = !!($('calSemana') && $('calDias') && $('calMes') && $('calAnterior') && $('calSiguiente') && $('diasElegidos'));
   if (hayCalendario) $('calSemana').append(...LETRAS_SEMANA.map((l) => h('span', { text: l })));
+  /* Un toque sobre un día del calendario o de la lista de elegidos */
   function alternarDia(f) {
-    if (diasElegidos.has(f)) diasElegidos.delete(f);
-    else if (diasElegidos.size >= 31) return void avisar('Un plan puede tener hasta 31 días.', 'error');
-    else diasElegidos.add(f);
+    const d = formDias, dia = d.dias.find((x) => x.f === f), hayS = d.dias.some((x) => x.e === 'seguro');
+    if (!dia) {                                                         // todavía no elegido: entra (descartado si el plan ya está confirmado)
+      if (d.dias.length >= 31) return void avisar('Un plan puede tener hasta 31 días.', 'error');
+      d.dias.push({ f, e: hayS ? 'descartado' : 'posible' }); if (hayS) d.antes[f] = 'posible';
+      d.dias.sort((a, b) => (a.f < b.f ? -1 : 1));
+    } else if (dia.e === 'seguro') {                                    // el seguro tocado otra vez: se quita el día y los demás vuelven a como estaban
+      d.dias = d.dias.filter((x) => x.f !== f); delete d.antes[f]; restaurarDiasLocal(d);
+    } else ponerEstadoDiaLocal(d, f, siguienteEstadoDia(d, f));        // posible → ideal → descartado → seguro
+    formDiasTocados = true;
     pintarCalendario();
   }
   function pintarCalendario() {
@@ -877,14 +960,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const celdas = [], vacias = (mesCalendario.getDay() + 6) % 7;        // huecos antes del día 1 (la semana empieza el lunes)
     for (let i = 0; i < vacias; i++) celdas.push(h('span', { class: 'cal-vacio', 'aria-hidden': 'true' }));
     for (let n = 1, total = new Date(anio, mes + 1, 0).getDate(); n <= total; n++) {
-      const f = aISO(new Date(anio, mes, n)), elegido = diasElegidos.has(f);
-      celdas.push(h('button', { class: 'cal-dia' + (elegido ? ' cal-dia--elegido' : '') + (f === hoy ? ' cal-dia--hoy' : ''), type: 'button', 'aria-pressed': String(elegido), 'aria-label': etiquetaDia(f), disabled: f < hoy && !elegido, onclick: () => alternarDia(f) }, h('span', { text: String(n) })));
+      const f = aISO(new Date(anio, mes, n)), dia = formDias.dias.find((x) => x.f === f), est = dia && ESTADOS_DIA[dia.e];
+      celdas.push(h('button', { class: 'cal-dia' + (dia ? ` cal-dia--e cal-dia--${dia.e}` : '') + (f === hoy ? ' cal-dia--hoy' : ''), type: 'button', 'aria-pressed': String(!!dia), 'aria-label': `${etiquetaDia(f)}: ${est ? est.nombre.toLowerCase() : 'sin elegir'}`, disabled: f < hoy && !dia, onclick: () => alternarDia(f) },
+        h('span', { text: String(n) }), est ? icono(est.icono, dia.e === 'seguro' || dia.e === 'ideal') : null));
     }
     $('calDias').replaceChildren(...celdas);
-    /* Lista de días elegidos (ordenados), cada uno con su botón para quitarlo */
-    const orden = [...diasElegidos].sort();
-    $('diasElegidos').replaceChildren(...(orden.length
-      ? orden.map((f) => h('button', { class: 'chip chip--activo', type: 'button', title: 'Quitar este día', 'aria-label': `Quitar ${etiquetaDia(f)}`, onclick: () => alternarDia(f) }, icono('event'), h('span', { text: etiquetaDia(f) }), icono('close')))
+    /* Lista de días elegidos (ordenados) con su tipo; tocarlos hace lo mismo que tocarlos en el calendario */
+    $('diasElegidos').replaceChildren(...(formDias.dias.length
+      ? formDias.dias.map((dia) => { const est = ESTADOS_DIA[dia.e]; return h('button', { class: `dia dia--${dia.e}`, type: 'button', title: 'Tocar para cambiar el tipo de día', 'aria-label': `${etiquetaDia(dia.f)}: ${est.nombre.toLowerCase()}. Tocar para cambiar`, onclick: () => alternarDia(dia.f) },
+        icono(est.icono, dia.e === 'seguro' || dia.e === 'ideal'), h('span', { class: 'dia__fecha', text: etiquetaDia(dia.f) }), h('span', { class: 'dia__estado', text: est.nombre })); })
       : [h('span', { class: 'campo__ayuda', text: 'Todavía no elegiste ningún día.' })]));
   }
   if (hayCalendario) {
@@ -898,7 +982,7 @@ document.addEventListener('DOMContentLoaded', () => {
     formNuevo.reset(); $('filasItems').replaceChildren(); $('fotoPrevia').hidden = true; $('textoFoto').textContent = 'Elegir o tomar una foto';
     $('nuevoTitulo').textContent = 'Nueva publicación'; $('textoPublicar').textContent = 'Publicar';
     $('tiposNuevo').hidden = false;
-    diasElegidos = new Set(); mesCalendario = primerDiaDelMes(new Date());   // v2.3: plan nuevo sin días elegidos, calendario en el mes actual
+    formDias = { dias: [], antes: {} }; formDiasTocados = false; mesCalendario = primerDiaDelMes(new Date());   // v2.3: plan nuevo sin días elegidos, calendario en el mes actual
     elegirTipo('nota');
     catsElegidas = new Set(); pintarCatsComposer(); reiniciarVistaTexto();   // v2.1: sin categoría y sin vista previa al empezar
     abrirModal($('modalNuevo')); setTimeout(() => $('nuevoTexto').focus(), 80);
@@ -910,8 +994,8 @@ document.addEventListener('DOMContentLoaded', () => {
     $('nuevoTitulo').textContent = `Editar ${TIPOS[p.tipo].nombre.toLowerCase()}`; $('textoPublicar').textContent = 'Guardar';
     $('tiposNuevo').hidden = true;                                       // el tipo no se cambia al editar
     /* v2.3: al editar un plan se cargan sus días, hora y lugar (el calendario abre en el primer día del plan) */
-    diasElegidos = new Set(p.tipo === 'plan' ? (p.datos.dias || []).map((x) => x.f) : []);
-    mesCalendario = primerDiaDelMes(diasElegidos.size ? aFecha([...diasElegidos].sort()[0]) : new Date());
+    formDias = p.tipo === 'plan' ? clonarDias(p.datos) : { dias: [], antes: {} }; formDiasTocados = false;   // v2.6: con el tipo que tiene cada día
+    mesCalendario = primerDiaDelMes(formDias.dias.length ? aFecha(formDias.dias[0].f) : new Date());
     elegirTipo(p.tipo);
     if (p.tipo === 'plan' && $('planHora')) { $('planHora').value = p.datos.hora || ''; $('planLugar').value = p.datos.lugar || ''; }
     $('nuevoTituloCampo').value = p.titulo; $('nuevoTexto').value = p.texto; $('nuevoUrl').value = p.url;
@@ -1394,8 +1478,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (tipo === 'plan') {                                              // v2.3: nombre + al menos un día; hora y lugar son opcionales
       if (!cuerpo.titulo) return void (error.textContent = 'Ponle un nombre al plan.');
-      if (!diasElegidos.size) return void (error.textContent = 'Elige al menos un día en el calendario.');
-      cuerpo.datos = { dias: [...diasElegidos].sort(), hora: $('planHora') ? $('planHora').value : '', lugar: $('planLugar') ? $('planLugar').value.trim() : '' };
+      if (!formDias.dias.length) return void (error.textContent = 'Elige al menos un día en el calendario.');
+      /* v2.6: al crear se mandan los días con su tipo; al editar solo si se tocó el calendario (si no, solo las fechas y se conservan los tipos guardados) */
+      const diasEnviar = !editando || formDiasTocados ? formDias.dias.map((x) => ({ f: x.f, e: x.e })) : formDias.dias.map((x) => x.f);
+      cuerpo.datos = { dias: diasEnviar, antes: formDias.antes, hora: $('planHora') ? $('planHora').value : '', lugar: $('planLugar') ? $('planLugar').value.trim() : '' };
     }
     if (tipo === 'link') {
       cuerpo.url = arreglarUrl($('nuevoUrl').value);
