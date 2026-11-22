@@ -13,11 +13,12 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Nuestro Muro">
-  <!-- Tipografías (Google Fonts): Oxanium (títulos), Space Grotesk (texto), Share Tech Mono (HUD), JetBrains Mono (código) y Cutive Mono (código en línea).
+  <!-- Tipografías (Google Fonts): Oxanium (títulos), Space Grotesk (texto), Share Tech Mono (HUD), JetBrains Mono (código), Cutive Mono (código en línea) y
+       Zilla Slab (v2.7: texto "Eres Mely / Eres Bruu" de la escena de inicio de sesión).
        Cada una es una variable --fuente-* en el :root de css/style.css -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cutive+Mono&family=JetBrains+Mono:wght@400;700&family=Oxanium:wght@200..800&family=Share+Tech+Mono&family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Cutive+Mono&family=JetBrains+Mono:wght@400;700&family=Oxanium:wght@200..800&family=Share+Tech+Mono&family=Space+Grotesk:wght@300..700&family=Zilla+Slab:wght@500;600&display=swap" rel="stylesheet">
   <!-- Iconos (fonts.google.com/icons): Material Symbols Rounded, con eje de relleno (FILL) para corazones llenos -->
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
@@ -86,10 +87,10 @@
 
   <!-- Pie: versión y fecha de la última modificación de index.html (actualizar cada vez que se edite este archivo) -->
   <footer class="pie">
-    <!-- v2.6.0: cambio instantáneo de los días del plan y tipos de día al crear el plan; v2.5.0: notificaciones (campanita + avisos del celular); v2.4.0: fotos de perfil (carta azul M / roja xB) en vez de las iniciales; v2.3.0: tipo "plan" en lugar de "video" -->
-    <span id="pieVersion">Versión 2.6.0</span>
+    <!-- v2.7.0: todo se actualiza al instante (si el servidor falla se deshace y avisa), lista completada en verde, descripción en lista y encuesta, formato de texto en todos los campos, menos color de la persona, animaciones más fluidas y escena de inicio de sesión; v2.6.0: cambio instantáneo de los días del plan y tipos de día al crear el plan; v2.5.0: notificaciones (campanita + avisos del celular); v2.4.0: fotos de perfil (carta azul M / roja xB) en vez de las iniciales; v2.3.0: tipo "plan" en lugar de "video" -->
+    <span id="pieVersion">Versión 2.7.0</span>
     <span aria-hidden="true">·</span>
-    <span id="pieFecha">18/11/2026</span>
+    <span id="pieFecha">21/11/2026</span>
   </footer>
 
   <!-- ===================== VENTANA DE ACCESO (solo la primera vez) =====================
@@ -126,8 +127,10 @@
       <!-- Selector de tipo (script.js crea los botones; en modo edición se oculta) -->
       <div class="tipos" id="tiposNuevo" role="tablist" aria-label="Tipo de publicación"></div>
       <div class="modal__cuerpo">
+        <!-- v2.7: data-rico marca los campos de texto que aceptan formato (negrita, cursiva…): al escribir en ellos aparece la barra flotante #barraFlota
+             y funcionan Ctrl/Cmd + B, I y K. El texto se ve con su formato en la publicación -->
         <label class="campo" id="campoTitulo"><span class="campo__etiqueta" id="etiquetaTitulo">Título (opcional)</span>
-          <input class="campo__entrada" id="nuevoTituloCampo" type="text" maxlength="120" autocomplete="off"></label>
+          <input class="campo__entrada" id="nuevoTituloCampo" type="text" maxlength="120" autocomplete="off" data-rico="flota"></label>
         <!-- NUEVO v2.1: texto con formato. La barra de botones inserta marcas Markdown (negrita, cursiva, listas…) alrededor de lo seleccionado;
              en la publicación se muestran ya con su formato. Los botones los maneja script.js por su atributo data-fmt -->
         <div class="campo" id="campoTexto"><label class="campo__etiqueta" id="etiquetaTexto" for="nuevoTexto">Texto</label>
@@ -145,9 +148,9 @@
             <span class="formato__sep formato__sep--der" aria-hidden="true"></span>
             <button class="btn-icono" type="button" data-fmt="vista" id="btnVistaTexto" aria-pressed="false" title="Ver cómo queda" aria-label="Ver cómo queda"><span class="material-symbols-rounded">visibility</span></button>
           </div>
-          <textarea class="campo__entrada" id="nuevoTexto" rows="4" maxlength="5000"></textarea>
+          <textarea class="campo__entrada" id="nuevoTexto" rows="4" maxlength="5000" data-rico="completo"></textarea>
           <div class="md-previa" id="textoPrevia" hidden aria-live="polite"></div>
-          <p class="campo__ayuda">Selecciona texto y toca un botón. Como en WhatsApp: *negrita*, _cursiva_, ~tachado~, ```mono```, - listas, &gt; citas, [texto](https://…)</p></div>
+          <p class="campo__ayuda">Selecciona texto y toca un botón. Como en WhatsApp: *negrita*, _cursiva_, ~tachado~, ```mono```, - listas, &gt; citas, [texto](https://…). El formato también funciona en el título, los elementos de la lista, las opciones de la encuesta y los comentarios.</p></div>
         <label class="campo" id="campoUrl"><span class="campo__etiqueta">Dirección (link)</span>
           <input class="campo__entrada" id="nuevoUrl" type="url" inputmode="url" placeholder="https://…" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
         <!-- NUEVO v2.3: plan. Mini calendario para elegir uno o varios días + hora y lugar (opcionales). Los días los dibuja script.js.
@@ -256,6 +259,18 @@
     <img class="visor__img" id="visorImg" alt="">
     <p class="visor__pie" id="visorPie"></p>
   </div>
+
+  <!-- NUEVO v2.7: barra de formato flotante. Aparece sobre el campo de una línea que se está escribiendo (título, elementos de lista, opciones,
+       comentarios); script.js la mueve y aplica el formato con los mismos botones data-fmt de la barra grande -->
+  <div class="formato formato--flota" id="barraFlota" role="toolbar" aria-label="Formato de texto" hidden>
+    <button class="btn-icono" type="button" data-fmt="negrita" title="Negrita (Ctrl+B)" aria-label="Negrita"><span class="material-symbols-rounded">format_bold</span></button>
+    <button class="btn-icono" type="button" data-fmt="cursiva" title="Cursiva (Ctrl+I)" aria-label="Cursiva"><span class="material-symbols-rounded">format_italic</span></button>
+    <button class="btn-icono" type="button" data-fmt="tachado" title="Tachado" aria-label="Tachado"><span class="material-symbols-rounded">strikethrough_s</span></button>
+    <button class="btn-icono" type="button" data-fmt="codigo" title="Código" aria-label="Código"><span class="material-symbols-rounded">code</span></button>
+    <button class="btn-icono" type="button" data-fmt="enlace" title="Enlace (Ctrl+K)" aria-label="Enlace"><span class="material-symbols-rounded">link</span></button>
+  </div>
+  <!-- NUEVO v2.7: filtro que vuelve irregulares los bordes de la caja del nombre en la escena de inicio de sesión (la escena la arma script.js) -->
+  <svg class="svg-filtros" width="0" height="0" aria-hidden="true" focusable="false"><filter id="escena-rugoso" x="-4%" y="-12%" width="108%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="2" seed="7" result="r"/><feDisplacementMap in="SourceGraphic" in2="r" scale="6"/></filter></svg>
 
   <!-- Avisos breves -->
   <div class="toasts" id="toasts" aria-live="polite"></div>

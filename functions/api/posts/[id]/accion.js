@@ -73,7 +73,11 @@ export async function onRequestPost({ request, env, data, params, waitUntil }) {
     if (!texto) return json({ error: 'Escribe algo para comentar.' }, 400);
     const l = Array.isArray(d.comentarios) ? d.comentarios : [];
     if (l.length >= LIM_COMENTARIOS.porPost) return json({ error: 'Esta publicación ya tiene demasiados comentarios.' }, 400);
-    d.comentarios = [...l, { id: crypto.randomUUID(), autor: yo, texto, creado: Date.now() }];
+    /* v2.7: el comentario ya se ve en pantalla con un id que puso el navegador; se usa ese mismo (si tiene formato UUID) para que no cambie al
+       confirmarse. Si ya existía un comentario con ese id (envío repetido) no se duplica y no se avisa de nuevo. */
+    const idCom = typeof c.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.id) && !l.some((x) => x.id === c.id) ? c.id : crypto.randomUUID();
+    if (typeof c.id === 'string' && l.some((x) => x.id === c.id)) return json({ post: p });
+    d.comentarios = [...l, { id: idCom, autor: yo, texto, creado: Date.now() }];
     aviso = { tipo: 'comentario', texto: `${yo} comentó en ${ref}: «${recortar(texto, 80)}»` };
   } else if (c.accion === 'borrar_comentario') {
     /* NUEVO v2.2: solo se puede borrar un comentario propio */

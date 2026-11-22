@@ -11,11 +11,11 @@
    Para qué sirve: que sea una app instalable, rápida y que siempre muestre la última versión publicada.
    Cambiar VERSION fuerza a renovar las copias guardadas (no hace falta tocarlo en cada push: la red tiene prioridad).
    ============================================================ */
-const VERSION = 'v2.5.0';   // v2.4: fotos de perfil en el cascarón guardado; v2.5: avisos del celular (push)
+const VERSION = 'v2.7.0';   // v2.4: fotos de perfil en el cascarón guardado; v2.5: avisos del celular (push); v2.7: fotos en gris de la escena de inicio de sesión
 const CACHE_ESTATICO = `muro-estatico-${VERSION}`;   // cascarón de la app
 const CACHE_DATOS = 'muro-datos';                     // listado del muro y fotos
 const CACHE_FUENTES = 'muro-fuentes';                 // Google Fonts
-const ESTATICOS = ['/', '/index.html', '/css/style.css', '/js/script.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/favicon-32.png', '/icons/apple-touch-icon.png', '/img/avatar-M.png', '/img/avatar-xB.png'];
+const ESTATICOS = ['/', '/index.html', '/css/style.css', '/js/script.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/favicon-32.png', '/icons/apple-touch-icon.png', '/img/avatar-M.png', '/img/avatar-xB.png', '/img/avatar-M-gris.png', '/img/avatar-xB-gris.png'];
 
 /* Instalación: guarda el cascarón y se activa de inmediato */
 self.addEventListener('install', (e) => {

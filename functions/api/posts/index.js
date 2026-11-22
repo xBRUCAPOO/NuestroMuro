@@ -9,6 +9,8 @@ import { json, bd, COLUMNAS, aPost, TIPOS, limpiar, urlValida, construirDatos, v
 import { notificar, articuloTipo, tituloDe } from '../../_lib/notificar.js';   // v2.5: avisos
 import { LIMITES } from '../../_lib/config.js';
 
+const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;   // v2.7: formato de los ids (UUID) que puede proponer el navegador
+
 export async function onRequestGet({ request, env }) {
   const db = await bd(env);
   /* ETag = cantidad + suma y máximo de "actualizado": cambia con cualquier alta, edición, voto o borrado */
@@ -48,8 +50,16 @@ export async function onRequestPost({ request, env, data, waitUntil }) {
   if (error) return json({ error }, 400);
   if (tipo === 'link') datos.vista = await vistaPrevia(url);   // título, descripción e imagen del sitio (si se pueden leer)
 
-  const ahora = Date.now(), id = crypto.randomUUID();
-  const db = await bd(env);
+  /* v2.7: el navegador publica al instante (sin esperar) y ya le puso un id a la publicación; se usa ese mismo id para que la tarjeta que ya se ve
+     sea la definitiva (sin parpadeo al confirmarse). Si el id no tiene formato de UUID se genera uno. Si ya existía una publicación propia con ese
+     id (el mismo envío repetido) se devuelve esa y no se duplica. */
+  const ahora = Date.now(), db = await bd(env);
+  const idPedido = typeof c.id === 'string' && ID_RE.test(c.id) ? c.id : null;
+  if (idPedido) {
+    const ya = await db.prepare(`SELECT ${COLUMNAS} FROM posts WHERE id = ?`).bind(idPedido).first();
+    if (ya && ya.autor === data.quien) return json({ post: aPost(ya) }, 200);
+  }
+  const id = idPedido && !(await db.prepare('SELECT 1 AS x FROM posts WHERE id = ?').bind(idPedido).first()) ? idPedido : crypto.randomUUID();
   /* NUEVO v2.1: categorías elegidas (solo se guardan las que existen). Van dentro de "datos"; vacío = "sin categoría" */
   datos.categorias = await idsCategoriasValidos(db, c.categorias);
   await db.prepare('INSERT INTO posts (id, autor, tipo, titulo, texto, url, datos, imagen, creado, actualizado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')

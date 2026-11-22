@@ -9,6 +9,8 @@
      Fuera de esos bloques NO hay ningún color escrito a mano.
    - TODAS las tipografías vienen de Google Fonts y son variables en :root.
    - TODOS los iconos son Material Symbols (fonts.google.com/icons).
+   v2.7: el color de la persona ya no tiñe el fondo ni la barra superior (solo quedan su botón +, sus publicaciones y detalles chicos);
+   lista completada en verde con su cuadro "COMPLETADO"; barra de formato flotante; escena de inicio de sesión; animaciones más fluidas.
    ============================================================ */
 
 :root {
@@ -21,6 +23,7 @@
   --fuente-mono: 'JetBrains Mono', monospace;           /* bloques de código y teclas */
   --fuente-codigo: 'Cutive Mono', monospace;            /* código en línea */
   --fuente-iconos: 'Material Symbols Rounded';          /* iconos (fonts.google.com/icons) */
+  --fuente-escena: 'Zilla Slab', serif;                 /* v2.7: texto "Eres Mely / Eres Bruu" de la escena de inicio de sesión */
 
   /* ---- Grises de la interfaz (los tres que antes eran azules ahora son una escala de grises) ---- */
   --color-principal: #3A3A41;          /* gris grafito: base de degradados y botones */
@@ -70,6 +73,15 @@
   --color-dia-ideal: var(--color-warning-texto);          /* ideal: amarillo (estrella) */
   --color-dia-descartado: var(--color-error-texto);       /* descartado: rojo apagado y tachado */
   --color-dia-seguro: var(--color-success-texto);         /* seguro: verde */
+
+  /* v2.7: lista completada al 100 % (todo se pone verde) */
+  --color-completo: var(--color-success);
+  --color-completo-texto: var(--color-success-texto);
+  --color-completo-suave: color-mix(in srgb, var(--color-success) 14%, transparent);
+  /* v2.7: escena de inicio de sesión (siempre oscura, en cualquier tema): fondo negro, marco crema de las fotos y caja gris del nombre */
+  --color-escena-fondo: var(--color-negro);
+  --color-escena-caja: #2B2B2D;
+  --color-escena-texto: #F1ECE0;
 
   /* ---- Efectos HUD ---- */
   --color-cuadricula: color-mix(in srgb, var(--color-acento) 7%, transparent);    /* cuadrícula tenue del fondo */
@@ -142,17 +154,9 @@
 /* ---- Colores del usuario: botón +, botón Publicar y foco de los formularios toman el azul (M) o el rojo (xB) ---- */
 :root[data-yo="M"] { --yo: var(--color-m-vivo); --yo-texto: var(--color-m-texto); --yo-gradiente: var(--gradiente-m); }
 :root[data-yo="xB"] { --yo: var(--color-xb); --yo-texto: var(--color-xb-texto); --yo-gradiente: var(--gradiente-xb); }
-/* v2.1: TODO el sitio se tiñe con el color de quien tiene la sesión (azul M / rojo xB). El "acento" (scrollbar, selección de texto, foco,
-   fichas activas, cuadrícula, halos, enlaces…) deja de ser gris y pasa a ser su color; el fondo gana un degradado y resplandores del mismo tono. */
-:root[data-yo="M"], :root[data-yo="xB"] {
-  --color-acento: var(--yo);
-  --color-acento-texto: var(--yo-texto);
-  --color-fondo-2: color-mix(in srgb, var(--yo) 14%, var(--color-fondo));                 /* el degradado de fondo termina en un tono del color */
-  --color-halo: color-mix(in srgb, var(--yo) 24%, transparent);                            /* resplandor superior */
-  --color-halo-yo: color-mix(in srgb, var(--yo) 13%, transparent);                         /* resplandor en la esquina inferior */
-  --color-cuadricula: color-mix(in srgb, var(--yo) 8%, transparent);                       /* cuadrícula del fondo */
-  --color-esqueleto: color-mix(in srgb, var(--yo) 24%, var(--color-tarjeta-2));
-}
+/* v2.7: ANTES (v2.1) todo el sitio se teñía con el color de quien tiene la sesión (acento, fondo, halos, cuadrícula…). Ahora se quitó:
+   el fondo, la barra superior, el acento, los halos y la cuadrícula quedan grises para los dos. El color de la persona (--yo) solo se usa en
+   el botón +, el botón Publicar, el borde de los campos al escribir y las publicaciones de cada autor. */
 
 /* ---------- Base ---------- */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -213,8 +217,8 @@ body.modal-abierto { overflow: hidden; }   /* con una ventana abierta no se desp
 .appbar > .appbar__espacio:last-child { min-width: 84px; justify-content: flex-end; }
 .appbar > .appbar__espacio:first-child { min-width: 84px; justify-content: flex-start; }
 /* Quién soy: la foto de mi carta (azul M / roja xB). v2.4: antes era un círculo con la inicial; ahora solo hay imagen, con un brillo del color de quien soy */
-.yo-chip { width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; padding: 0; position: relative; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--yo) 55%, transparent)); transition: transform var(--mov-rapido) var(--ease-suave), filter var(--mov-rapido) var(--ease-suave); }
-.yo-chip:hover { transform: scale(1.08) rotate(-2deg); filter: drop-shadow(0 0 10px var(--yo)); }
+.yo-chip { width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; padding: 0; position: relative; transition: transform var(--mov-rapido) var(--ease-suave); }   /* v2.7: sin brillo de color alrededor de la foto */
+.yo-chip:hover { transform: scale(1.08) rotate(-2deg); }
 .yo-chip .avatar { width: 100%; height: 100%; }
 
 /* ---------- Botones ---------- */
@@ -224,8 +228,8 @@ body.modal-abierto { overflow: hidden; }   /* con una ventana abierta no se desp
 .btn--primario { background: var(--gradiente-principal); color: var(--color-blanco); border-color: var(--color-acento); box-shadow: var(--sombra-acento); }
 .btn--primario:hover:not(:disabled) { background: var(--gradiente-principal-hover); box-shadow: var(--sombra-acento-fuerte); }
 .btn--primario:active:not(:disabled) { background: var(--color-principal-activo); }
-.btn--yo { background: var(--yo-gradiente); color: var(--color-blanco); border-color: var(--yo); box-shadow: 0 0 20px color-mix(in srgb, var(--yo) 35%, transparent); }   /* botón con el color de quien tiene la sesión */
-.btn--yo:hover:not(:disabled) { filter: brightness(1.15); box-shadow: 0 0 28px color-mix(in srgb, var(--yo) 55%, transparent); }
+.btn--yo { background: var(--yo-gradiente); color: var(--color-blanco); border-color: var(--yo); }   /* botón con el color de quien tiene la sesión */
+.btn--yo:hover:not(:disabled) { filter: brightness(1.15); }
 .btn--fantasma { color: var(--color-acento-texto); }
 .btn--fantasma:hover { background: var(--color-acento-suave); }
 .btn--peligro { background: var(--color-error-suave); border-color: var(--color-error); color: var(--color-error-texto); }
@@ -238,7 +242,7 @@ body.modal-abierto { overflow: hidden; }   /* con una ventana abierta no se desp
 .campo__etiqueta { font-size: 13px; color: var(--color-texto-suave); font-weight: 500; }
 .campo__ayuda { font-size: 12px; color: var(--color-texto-suave); }
 .campo__entrada { width: 100%; background: var(--color-fondo); border: 1px solid var(--color-gris); border-radius: var(--radio-md); padding: 12px 14px; font-size: 16px; outline: none; }   /* 16 px: evita el zoom automático de iPhone al enfocar */
-.campo__entrada:focus { border-color: var(--yo); box-shadow: 0 0 18px color-mix(in srgb, var(--yo) 30%, transparent); }
+.campo__entrada:focus { border-color: var(--yo); }
 textarea.campo__entrada { resize: vertical; min-height: 96px; }
 .campo__envoltorio { position: relative; display: flex; align-items: center; }
 .campo__envoltorio .campo__entrada { padding-right: 48px; }
@@ -283,7 +287,7 @@ textarea.campo__entrada { resize: vertical; min-height: 96px; }
 }
 .post[data-autor="M"] { --c: var(--color-m-vivo); --c-texto: var(--color-m-texto); --c-gradiente: var(--gradiente-m); }
 .post[data-autor="xB"] { --c: var(--color-xb); --c-texto: var(--color-xb-texto); --c-gradiente: var(--gradiente-xb); }
-.post:hover { box-shadow: var(--sombra-tarjeta), 0 0 24px color-mix(in srgb, var(--c) 32%, transparent); }
+.post:hover { box-shadow: var(--sombra-tarjeta); }
 .post__cab { display: flex; align-items: center; gap: 8px; }
 .autor { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 /* v2.4: el avatar del autor es su foto (antes un círculo con la inicial) */
@@ -324,10 +328,15 @@ textarea.campo__entrada { resize: vertical; min-height: 96px; }
 .lista__item { display: flex; align-items: flex-start; gap: 8px; padding: 6px 4px; border-radius: var(--radio-sm); text-align: left; width: 100%; font-size: 14px; overflow-wrap: anywhere; }
 .lista__item:hover { background: color-mix(in srgb, var(--c) 12%, transparent); }
 .lista__item .material-symbols-rounded { font-size: 22px; color: var(--c-texto); flex-shrink: 0; transition: transform var(--mov-medio) var(--ease-rebote); }
-.lista__item.hecho { color: var(--color-texto-suave); text-decoration: line-through; }
+/* v2.7: el tachado va SOLO en el texto (antes la línea también cruzaba el icono de la casilla). Se dibuja como una línea que avanza de izquierda a derecha. */
+.lista__item.hecho { color: var(--color-texto-suave); }
 .lista__item.hecho .material-symbols-rounded { transform: scale(1.1); }
+.lista__texto { display: inline; min-width: 0; background: linear-gradient(currentColor, currentColor) no-repeat 0 58% / 0% 1.5px; -webkit-box-decoration-break: clone; box-decoration-break: clone; transition: background-size var(--mov-medio) var(--ease-suave), color var(--mov-medio) var(--ease-suave); }
+.lista__item.hecho .lista__texto { background-size: 100% 1.5px; }
+.lista__item { transition: background-color var(--mov-rapido) var(--ease-suave), color var(--mov-medio) var(--ease-suave), transform var(--mov-rapido) var(--ease-suave); }
+.lista__item .material-symbols-rounded { transition: transform var(--mov-medio) var(--ease-rebote), color var(--mov-medio) var(--ease-suave); }
 .progreso { height: 6px; background: var(--color-gris); border-radius: var(--radio-sm); overflow: hidden; }
-.progreso__barra { height: 100%; width: var(--valor, 0%); background: var(--c-gradiente); animation: llenar var(--mov-lento) var(--ease-salida) backwards; transition: width var(--mov-medio) var(--ease-suave); }
+.progreso__barra { position: relative; height: 100%; width: var(--valor, 0%); background: var(--c-gradiente); animation: llenar var(--mov-lento) var(--ease-salida) backwards; transition: width var(--mov-medio) var(--ease-suave); }
 .progreso__texto { font-family: var(--fuente-hud); font-size: 12px; color: var(--color-texto-suave); }
 /* Encuesta: cada opción muestra su barra (azul = votos de M, rojo = votos de xB) y quién votó */
 .encuesta { display: flex; flex-direction: column; gap: 8px; }
@@ -339,9 +348,9 @@ textarea.campo__entrada { resize: vertical; min-height: 96px; }
 .opcion__votos { position: relative; display: inline-flex; gap: 3px; }
 
 /* ---------- Botón flotante (+) ---------- */
-.fab { position: fixed; right: max(18px, env(safe-area-inset-right)); bottom: calc(22px + env(safe-area-inset-bottom)); z-index: 40; width: 58px; height: 58px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--yo-gradiente); color: var(--color-blanco); box-shadow: var(--sombra-tarjeta), 0 0 26px color-mix(in srgb, var(--yo) 45%, transparent); overflow: hidden; }
+.fab { position: fixed; right: max(18px, env(safe-area-inset-right)); bottom: calc(22px + env(safe-area-inset-bottom)); z-index: 40; width: 58px; height: 58px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--yo-gradiente); color: var(--color-blanco); box-shadow: var(--sombra-tarjeta);  overflow: hidden; }
 .fab .material-symbols-rounded { font-size: 30px; }
-.fab:hover { box-shadow: var(--sombra-tarjeta), 0 0 36px color-mix(in srgb, var(--yo) 65%, transparent); }
+.fab:hover { box-shadow: var(--sombra-tarjeta); }
 
 /* ---------- Ventanas (modales) ---------- */
 .modal-fondo { position: fixed; inset: 0; z-index: 100; background: var(--color-velo); display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(3px); }
@@ -534,7 +543,7 @@ input[type="search"]::-webkit-search-decoration, input[type="search"]::-webkit-s
    Se indican también los otros ejes de la fuente para que el relleno no dependa de valores por defecto del navegador. */
 .post__accion--corazon .material-symbols-rounded { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; transition: transform var(--mov-medio) var(--ease-rebote), color var(--mov-rapido) var(--ease-suave); }
 .post__accion--corazon.activo { color: var(--yo-texto); }
-.post__accion--corazon.activo .material-symbols-rounded { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--yo) 55%, transparent)); }
+.post__accion--corazon.activo .material-symbols-rounded { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
 .material-symbols-rounded.lleno { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }   /* cualquier icono marcado como lleno (casillas marcadas, etc.) */
 
 /* ---------- "Editado hace…" ---------- */
@@ -607,24 +616,25 @@ input[type="search"]::-webkit-search-decoration, input[type="search"]::-webkit-s
 .icono-op[aria-pressed="true"] { border-color: var(--yo); background: color-mix(in srgb, var(--yo) 20%, transparent); color: var(--yo-texto); }
 .cat-previa { display: flex; align-items: center; gap: 10px; }
 
-/* ---------- Detalles con el color de quien tiene la sesión (azul M / rojo xB) ---------- */
-.appbar { background: linear-gradient(180deg, color-mix(in srgb, var(--yo) 13%, var(--color-tarjeta)), var(--color-tarjeta)); border-bottom-color: color-mix(in srgb, var(--yo) 42%, var(--color-gris)); }
-.appbar__titulo { text-shadow: 0 0 20px color-mix(in srgb, var(--yo) 55%, transparent); }
-.ayuda-hero { border-color: color-mix(in srgb, var(--yo) 45%, var(--color-gris)); box-shadow: var(--sombra-tarjeta), 0 0 36px color-mix(in srgb, var(--yo) 14%, transparent); }
-.ayuda-hero__icono { color: var(--yo-texto); filter: drop-shadow(0 0 12px color-mix(in srgb, var(--yo) 55%, transparent)); }
-.ayuda-hero__titulo { color: color-mix(in srgb, var(--yo-texto) 45%, var(--color-texto)); }
-.contador-lista { color: var(--yo-texto); }
-.segmento { border-color: color-mix(in srgb, var(--yo) 40%, var(--color-gris)); }
-.segmento__btn--activo { background: var(--yo-gradiente); }
-.segmento__btn--m.segmento__btn--activo { background: var(--gradiente-m); }
-.segmento__btn--xb.segmento__btn--activo { background: var(--gradiente-xb); }
-.pie { border-top: 1px solid color-mix(in srgb, var(--yo) 32%, var(--color-gris)); }
-#pieVersion { color: var(--yo-texto); }
-.vacio .material-symbols-rounded { color: var(--yo-texto); opacity: .75; }
-.modal { box-shadow: var(--sombra-tarjeta), 0 0 44px color-mix(in srgb, var(--yo) 22%, transparent); }
-.buscador .campo__entrada:focus { box-shadow: 0 0 22px color-mix(in srgb, var(--yo) 38%, transparent); }
-/* Mis publicaciones brillan un poco más que las de la otra persona */
-:root[data-yo="M"] .post[data-autor="M"], :root[data-yo="xB"] .post[data-autor="xB"] { box-shadow: var(--sombra-tarjeta), 0 0 20px color-mix(in srgb, var(--c) 24%, transparent); }
+/* ---------- Detalles de la persona con la sesión (v2.7: mucho menos color) ----------
+   Qué hace: la barra superior, la portada, los filtros, el pie y las ventanas vuelven a ser grises y SIN brillo del color de la persona.
+   Solo queda una línea fina del color de la persona bajo la barra superior. Para qué sirve: una interfaz más limpia donde el color
+   lo ponen las publicaciones y no el fondo. */
+.appbar { background: var(--color-tarjeta); border-bottom-color: var(--color-gris); }
+.appbar::after { box-shadow: none; }                                     /* sin resplandor en la línea de la barra */
+.appbar__titulo { text-shadow: none; }
+.yo-chip, .yo-chip:hover { filter: none; }                               /* sin brillo alrededor de mi foto */
+.ayuda-hero__icono { color: var(--color-acento-texto); filter: none; }
+.contador-lista { color: var(--color-texto); }
+.btn--yo, .btn--yo:hover:not(:disabled) { box-shadow: none; }
+.fab, .fab:hover { box-shadow: var(--sombra-tarjeta); }
+.campo__entrada:focus, .buscador .campo__entrada:focus { box-shadow: none; }
+.vacio .material-symbols-rounded { color: var(--color-gris-claro); opacity: .75; }
+.modal { box-shadow: var(--sombra-tarjeta); }
+.post:hover { box-shadow: var(--sombra-tarjeta); }
+.post__accion--corazon.activo .material-symbols-rounded { filter: none; }
+.btn-icono.notif-btn .notif-btn__badge { box-shadow: 0 0 0 2px var(--color-tarjeta); }
+.separador { background: linear-gradient(90deg, transparent, var(--color-gris) 12%, var(--color-gris) 88%, transparent); }   /* líneas de los filtros: grises */
 
 
 /* ============================================================
@@ -635,7 +645,7 @@ input[type="search"]::-webkit-search-decoration, input[type="search"]::-webkit-s
 .filtros { flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: flex-start; gap: 12px; min-width: 0; }   /* nowrap: si no, la fila ancha de categorías ensancharía todo el bloque */
 .filtros > * { min-width: 0; }
 .filtros .segmento { align-self: flex-start; }
-.separador { width: 100%; height: 1px; margin: 0; border: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--yo) 40%, var(--color-gris)) 12%, color-mix(in srgb, var(--yo) 40%, var(--color-gris)) 88%, transparent); }
+.separador { width: 100%; height: 1px; margin: 0; border: 0; background: linear-gradient(90deg, transparent, var(--color-gris) 12%, var(--color-gris) 88%, transparent); }   /* v2.7: gris (antes con el color de la persona) */
 .filtros .cat-barra { margin-bottom: -4px; }
 .filtros__tipos { flex: 0 0 auto; align-content: flex-start; }                 /* en columna, las fichas de tipo no se estiran a lo alto: cada una mantiene su tamaño y se acomoda en varias filas */
 
@@ -743,3 +753,72 @@ textarea.comentar__campo { flex: 1; min-width: 0; min-height: 38px; max-height: 
 /* La publicación a la que lleva un aviso parpadea con el color de su autor */
 @keyframes resaltar { 0%, 100% { box-shadow: var(--sombra-tarjeta); } 25%, 75% { box-shadow: 0 0 0 3px var(--c), 0 0 28px color-mix(in srgb, var(--c) 60%, transparent); } }
 .post.post--resalta { animation: resaltar 1.2s var(--ease-suave) 2; }
+
+
+/* ============================================================
+   v2.7 — Lista completada, descripción, barra de formato flotante, escena de inicio de sesión y animaciones más fluidas
+   Todos los colores salen de variables de :root.
+   ============================================================ */
+
+/* ---------- Lista completada al 100 % ----------
+   Qué hace: cuando todos los elementos están tildados, las casillas, la línea de progreso y su texto se vuelven verdes y aparece abajo un
+   cuadro que dice COMPLETADO. Para qué sirve: ver de un vistazo que la lista terminó. */
+.lista-bloque { display: flex; flex-direction: column; gap: 6px; }
+.progreso__barra::after { content: ''; position: absolute; inset: 0; background: var(--color-completo); opacity: 0; transition: opacity var(--mov-medio) var(--ease-suave); }
+.lista-bloque--completa .progreso__barra::after { opacity: 1; }
+.lista-bloque--completa .lista__item .material-symbols-rounded { color: var(--color-completo-texto); }
+.lista-bloque--completa .progreso__texto { color: var(--color-completo-texto); }
+.completado { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 12px; border: 1.5px solid var(--color-completo); border-radius: var(--radio-md); background: var(--color-completo-suave); color: var(--color-completo-texto); font-family: var(--fuente-titulo); font-size: 14px; font-weight: 800; letter-spacing: 0.18em; animation: completado-entra var(--mov-lento) var(--ease-rebote) backwards; }
+.completado .material-symbols-rounded { font-size: 22px; }
+@keyframes completado-entra { from { opacity: 0; transform: translateY(-6px) scale(.92); } }
+
+/* ---------- Barra de formato flotante (campos de una línea: título, elementos de lista, opciones y comentarios) ---------- */
+.formato--flota { position: fixed; z-index: 250; border: 1px solid var(--color-gris); border-radius: var(--radio-md); box-shadow: var(--sombra-tarjeta); padding: 3px; animation: aparecer var(--mov-rapido) var(--ease-suave) both; }
+.formato--flota .btn-icono { width: 36px; height: 36px; }
+
+/* ---------- Escena de inicio de sesión (inspirada en el cambio de personaje de The Coffin of Andy and Leyley) ----------
+   Qué hace: pantalla negra con las dos fotos en gris; a los 2 s la de quien entró recupera su color y recién ahí aparece, dentro de una caja,
+   "Eres Mely" / "Eres Bruu" con una animación letra por letra. Para qué sirve: darle una bienvenida a cada persona.
+   Las fotos en gris son archivos propios (img/avatar-*-gris.png): el color de cada foto aparece por encima con un fundido y un destello. */
+.escena { position: fixed; inset: 0; z-index: 400; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: clamp(18px, 5vh, 40px); padding: 24px; background: var(--color-escena-fondo); color: var(--color-escena-texto); animation: aparecer 380ms var(--ease-suave) both; }
+.escena.escena--sale { animation: desvanecer 520ms var(--ease-suave) forwards; pointer-events: none; }
+.escena__fotos { position: relative; display: flex; align-items: center; justify-content: center; width: min(92vw, 540px); }
+.escena__foto { position: relative; flex: 1 1 0; min-width: 0; aspect-ratio: 1; margin: 0 -2%; animation: escena-foto-entra 700ms var(--ease-salida) backwards; }
+.escena__foto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; user-select: none; }
+.escena__foto .escena__color { opacity: 0; }
+.escena__foto--activa { z-index: 2; }
+.escena__foto--activa .escena__color { animation: escena-ilumina 900ms var(--ease-salida) both; animation-delay: var(--escena-espera, 2s); }
+.escena__foto--activa { animation: escena-foto-entra 700ms var(--ease-salida) backwards, escena-pop 700ms var(--ease-rebote) var(--escena-espera, 2s) forwards; }
+.escena__foto--otra { animation: escena-foto-entra 700ms var(--ease-salida) backwards, escena-apaga 900ms var(--ease-suave) var(--escena-espera, 2s) forwards; }
+.escena__foto:nth-child(2) { animation-delay: 140ms, var(--escena-espera, 2s); }
+.escena__caja { position: relative; width: min(86vw, 500px); min-height: clamp(70px, 17vw, 108px); display: flex; align-items: center; justify-content: center; animation: escena-caja-entra 600ms var(--ease-salida) 500ms backwards; }
+.escena__caja::before { content: ''; position: absolute; inset: 0; background: var(--color-escena-caja); filter: url(#escena-rugoso); }   /* bordes irregulares, como dibujados a mano */
+.escena__nombre { position: relative; font-family: var(--fuente-escena); font-size: clamp(26px, 8vw, 40px); font-weight: 600; letter-spacing: 0.02em; display: flex; white-space: pre; }
+.escena__letra { display: inline-block; opacity: 0; animation: escena-letra 520ms var(--ease-salida) both; animation-delay: calc(var(--escena-espera, 2s) + 700ms + var(--n, 0) * 55ms); }
+@keyframes escena-foto-entra { from { opacity: 0; transform: translateY(26px) scale(.94); } }
+@keyframes escena-caja-entra { from { opacity: 0; transform: scaleX(.6); } }
+@keyframes escena-ilumina { 0% { opacity: 0; filter: brightness(2.4); } 35% { opacity: 1; filter: brightness(1.8); } 100% { opacity: 1; filter: brightness(1); } }
+@keyframes escena-pop { 0% { transform: scale(1); } 40% { transform: scale(1.07); } 100% { transform: scale(1.04); } }
+@keyframes escena-apaga { to { opacity: .55; transform: scale(.97); } }
+@keyframes escena-letra { from { opacity: 0; transform: translateY(14px) scale(.9); filter: blur(6px); } to { opacity: 1; transform: none; filter: blur(0); } }
+
+/* ---------- Animaciones más fluidas ---------- */
+html { scroll-behavior: smooth; }
+/* las tarjetas ya no se vuelven a crear al cambiar: se actualizan "en el lugar", así los colores, barras y tachados se mueven en vez de saltar */
+.post__accion .material-symbols-rounded, .post__tipo { transition: transform var(--mov-medio) var(--ease-rebote), color var(--mov-medio) var(--ease-suave), font-variation-settings var(--mov-medio) var(--ease-suave); }
+.post__accion--corazon.activo .material-symbols-rounded { animation: corazon-late var(--mov-lento) var(--ease-rebote); }
+.progreso__barra, .opcion__barra { transition: width var(--mov-lento) var(--ease-salida); }
+.opcion { transition: border-color var(--mov-rapido) var(--ease-suave), transform var(--mov-rapido) var(--ease-suave), background-color var(--mov-rapido) var(--ease-suave); }
+.opcion--mia { background: color-mix(in srgb, var(--yo) 8%, var(--color-fondo)); }
+.opcion__votos .avatar { animation: pop var(--mov-medio) var(--ease-rebote) backwards; }
+.corazones .avatar { animation: pop var(--mov-medio) var(--ease-rebote) backwards; }
+.comentario { animation: entrar var(--mov-medio) var(--ease-salida) backwards; }
+.comentarios { animation: entrar var(--mov-medio) var(--ease-salida) backwards; }
+.dia, .cal-dia, .chip, .segmento__btn { transition: background-color var(--mov-rapido) var(--ease-suave), border-color var(--mov-rapido) var(--ease-suave), color var(--mov-rapido) var(--ease-suave), opacity var(--mov-medio) var(--ease-suave), transform var(--mov-rapido) var(--ease-suave); }
+.post.sale { animation: post-sale var(--mov-medio) var(--ease-entrada) forwards; pointer-events: none; }
+.pie { border-top: 1px solid var(--color-gris); }
+/* Quien prefiere menos movimiento (ajuste del sistema): todo pasa casi sin animar */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0ms !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
+}
+.svg-filtros { position: absolute; width: 0; height: 0; overflow: hidden; }   /* v2.7: contenedor del filtro SVG de la escena (no ocupa lugar) */

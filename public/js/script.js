@@ -9,6 +9,10 @@
    Seguridad: todo el contenido que escriben las personas se pinta con textContent (nunca como HTML).
    NUEVO v2.1: 9) texto con formato (barra de botones + Markdown seguro), 10) categorías (selector tipo "guardar en lista", creación
    con nombre e icono y fila de filtros que se desliza), 11) "editado hace…" en las publicaciones modificadas, 12) corazón relleno, 13) notificaciones (v2.5).
+   NUEVO v2.7: 14) TODO instantáneo: cada acción (corazón, voto, tildar, comentar, publicar, editar, borrar, categorías) se ve al momento y se manda al
+   servidor en segundo plano; si el servidor la rechaza, la pantalla vuelve a lo que dice el servidor y sale un aviso de error. 15) las tarjetas se
+   actualizan "en el lugar" (morph) para que las transiciones sean fluidas, 16) formato de texto (negrita, cursiva…) en todos los campos de texto,
+   17) lista completada en verde, 18) escena de inicio de sesión.
    ============================================================ */
 
 /* ---------- 1) Tema claro / oscuro ---------- */
@@ -81,13 +85,63 @@ document.addEventListener('DOMContentLoaded', () => {
       if (v == null || v === false) continue;
       if (k === 'class') el.className = v;
       else if (k === 'text') el.textContent = v;
-      else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+      else if (k.startsWith('on')) { const t = k.slice(2); (el._h = el._h || {})[t] = v; escuchar(el, t); }   // v2.7: manejador indirecto (ver escuchar)
       else el.setAttribute(k, v === true ? '' : v);
     }
     /* v2.1: flat(Infinity) para aceptar listas dentro de listas de hijos (el formato de texto devuelve arreglos anidados) */
     for (const c of hijos.flat(Infinity)) { if (c == null || c === false) continue; el.append(c.nodeType ? c : document.createTextNode(c)); }
     return el;
   }
+  /* ----- v2.7: manejadores indirectos y "morph" -----
+     Qué hace: los manejadores (onclick…) se guardan en el propio elemento (el._h) y un único oyente fijo los llama. Así, cuando una tarjeta cambia,
+     morph() puede actualizar la tarjeta que ya está en pantalla con los datos nuevos (en vez de reemplazarla por otra) y le pasa los manejadores
+     nuevos; los elementos que ya estaban se quedan, y por eso las transiciones de CSS (colores, barras, tachado, corazón) se animan en vez de saltar.
+     Para qué sirve: animaciones fluidas y que no se pierda el foco ni lo que se está escribiendo. */
+  function escuchar(el, tipo) {
+    el._reg = el._reg || new Set();
+    if (el._reg.has(tipo)) return;
+    el._reg.add(tipo);
+    el.addEventListener(tipo, (e) => { const f = el._h && el._h[tipo]; if (f) f.call(el, e); });
+  }
+  /* Deja "viejo" igual a "nuevo" tocando solo lo que cambió. raiz = true en la tarjeta: ahí no se tocan class/style (los pone script.js: animación de entrada, resaltado) */
+  function morph(viejo, nuevo, raiz) {
+    for (const a of [...viejo.attributes]) { if (!nuevo.hasAttribute(a.name) && !(raiz && (a.name === 'class' || a.name === 'style'))) viejo.removeAttribute(a.name); }
+    for (const a of nuevo.attributes) { if (raiz && (a.name === 'class' || a.name === 'style')) continue; if (viejo.getAttribute(a.name) !== a.value) viejo.setAttribute(a.name, a.value); }
+    viejo._h = nuevo._h || {};
+    Object.keys(viejo._h).forEach((t) => escuchar(viejo, t));
+    const hv = [...viejo.childNodes].filter((n) => !(n.classList && n.classList.contains('onda'))), hn = [...nuevo.childNodes];   // las ondas del toque se dejan terminar
+    /* Hijos con clave (data-k): se emparejan por su clave y no por su posición (así, si aparece un comentario nuevo o un bloque, el cuadro de
+       comentario que se está escribiendo no se pierde ni se mezcla con otro). Los que no existían se agregan y los que sobran se quitan. */
+    if (hn.some((n) => n.nodeType === 1 && n.hasAttribute('data-k'))) {
+      const porClave = new Map(hv.filter((n) => n.nodeType === 1 && n.hasAttribute('data-k')).map((n) => [n.getAttribute('data-k'), n]));
+      const final = hn.map((b) => {
+        const a = b.nodeType === 1 ? porClave.get(b.getAttribute('data-k')) : null;
+        if (!a || a.tagName !== b.tagName) return b;
+        porClave.delete(b.getAttribute('data-k'));
+        if (!a.matches('textarea.comentar__campo')) morph(a, b, false);
+        return a;
+      });
+      hv.forEach((n) => { if (!final.includes(n)) n.remove(); });
+      let cur = viejo.firstChild;
+      final.forEach((n) => { if (cur === n) cur = cur.nextSibling; else viejo.insertBefore(n, cur); });
+      return;
+    }
+    for (let i = 0; i < Math.max(hv.length, hn.length); i++) {
+      const a = hv[i], b = hn[i];
+      if (!b) { a.remove(); continue; }
+      if (!a) { viejo.append(b); continue; }
+      if (a.nodeType === 3 && b.nodeType === 3) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; continue; }
+      if (a.nodeType === 1 && b.nodeType === 1) {
+        if (a.matches('textarea.comentar__campo') && b.matches('textarea.comentar__campo')) continue;   // el cuadro de comentario se queda tal cual (con lo que se está escribiendo)
+        if (a.tagName === b.tagName) { morph(a, b, false); continue; }
+      }
+      a.replaceWith(b);
+    }
+  }
+  const clon = (x) => JSON.parse(JSON.stringify(x));   // copia profunda de datos simples (publicaciones)
+  /* Id único para lo que se crea en pantalla antes de que el servidor responda (el servidor usa ese mismo id) */
+  const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => { const r = (Math.random() * 16) | 0; return (c === 'x' ? r : (r & 3) | 8).toString(16); }));
+
   /* Icono Material Symbols (nombre de fonts.google.com/icons); lleno = versión rellena */
   const icono = (nombre, lleno) => h('span', { class: 'material-symbols-rounded' + (lleno ? ' lleno' : ''), text: nombre, 'aria-hidden': 'true' });
   /* NUEVO v2.4: foto de perfil de cada identidad (M = carta azul, xB = carta roja; archivos en /img/).
@@ -112,11 +166,14 @@ document.addEventListener('DOMContentLoaded', () => {
   let yo = null;                         // "M" | "xB" cuando hay sesión
   /* Llama a /api/…; devuelve el JSON. Si el servidor responde 401 (sin sesión) abre la ventana de acceso. */
   async function api(ruta, { metodo = 'GET', cuerpo, keepalive } = {}) {
-    const res = await fetch('/api' + ruta, {
-      method: metodo, credentials: 'same-origin', keepalive: !!keepalive,   // v2.6: keepalive deja terminar el guardado aunque se cierre la página
-      headers: cuerpo ? { 'Content-Type': 'application/json' } : undefined,
-      body: cuerpo ? JSON.stringify(cuerpo) : undefined,
-    });
+    let res;
+    try {
+      res = await fetch('/api' + ruta, {
+        method: metodo, credentials: 'same-origin', keepalive: !!keepalive,   // v2.6: keepalive deja terminar el guardado aunque se cierre la página
+        headers: cuerpo ? { 'Content-Type': 'application/json' } : undefined,
+        body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+      });
+    } catch (e) { throw Object.assign(new Error('No hay conexión con el servidor.'), { status: 0 }); }   // v2.7: mensaje claro cuando no hay red
     let datos = {};
     try { datos = await res.json(); } catch (e) { /* respuesta sin cuerpo */ }
     if (res.status === 401 && ruta !== '/login') { yo = null; mostrarAcceso(); }
@@ -131,6 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function cerrarModal(el) {
     if (el.hidden) return;
+    if (typeof ocultarBarraFlota === 'function') ocultarBarraFlota();   // v2.7: la barra de formato flotante no queda suelta al cerrar una ventana
     el.classList.add('saliendo');
     setTimeout(() => { el.hidden = true; el.classList.remove('saliendo'); if (!document.querySelector('.modal-fondo:not([hidden])')) document.body.classList.remove('modal-abierto'); }, 160);
   }
@@ -187,13 +245,16 @@ document.addEventListener('DOMContentLoaded', () => {
     abrirModal($('modalAcceso'));
     setTimeout(() => $('claveAcceso').focus(), 60);
   }
+  let salidaEnCurso = Promise.resolve();                                    // v2.7: cierre de sesión en el servidor que todavía no terminó
   formAcceso.addEventListener('submit', async (e) => {
     e.preventDefault();
     const clave = $('claveAcceso').value;
     if (!clave) { $('errorAcceso').textContent = 'Escribe la contraseña.'; return; }
     const boton = $('btnEntrar'); boton.disabled = true;
     try {
+      await salidaEnCurso;                                                  // v2.7: si se acaba de cerrar sesión, se espera a que el servidor termine (si no, borraría la sesión nueva)
       const r = await api('/login', { metodo: 'POST', cuerpo: { quien: formAcceso.dataset.quien, clave } });
+      mostrarEscena(r.quien);                                               // v2.7: escena de bienvenida (pantalla negra con las dos fotos)
       cerrarModal($('modalAcceso'));
       iniciarSesion(r.quien);
     } catch (err) {
@@ -202,9 +263,34 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally { boton.disabled = false; }
   });
 
+  /* ----- v2.7: escena de inicio de sesión (inspirada en el cambio de personaje de The Coffin of Andy and Leyley) -----
+     Qué hace: al entrar con una identidad aparece una pantalla negra con las dos fotos en gris; a los 2 s la foto de quien entró recupera su color
+     (fundido + destello) y recién entonces aparece, dentro de una caja y letra por letra, "Eres Mely" (M) o "Eres Bruu" (xB). Después se desvanece
+     y queda el muro. Tocar la pantalla la salta. Las fotos en gris son img/avatar-*-gris.png; el color es la foto de siempre encima.
+     Para qué sirve: dar la bienvenida. Los tiempos de cada paso están en el CSS (.escena*), aquí solo cuánto se queda en pantalla. */
+  const NOMBRE_ESCENA = { M: 'Mely', xB: 'Bruu' };
+  ['M', 'xB'].forEach((q) => { new Image().src = `/img/avatar-${q}-gris.png`; });   // se precargan para que la escena no arranque con las fotos a medio cargar
+  function mostrarEscena(quien) {
+    const ESPERA = 2000;                                                    // ms hasta que la foto de quien entró recupera su color
+    const nombre = 'Eres ' + (NOMBRE_ESCENA[quien] || quien);
+    const foto = (q) => h('div', { class: 'escena__foto ' + (q === quien ? 'escena__foto--activa' : 'escena__foto--otra') },
+      h('img', { class: 'escena__gris', src: `/img/avatar-${q}-gris.png`, alt: '', draggable: 'false' }),
+      q === quien ? h('img', { class: 'escena__color', src: `/img/avatar-${q}.png`, alt: '', draggable: 'false' }) : null);
+    const el = h('div', { class: 'escena', role: 'status', 'aria-label': nombre, style: `--escena-espera:${ESPERA}ms` },
+      h('div', { class: 'escena__fotos' }, foto('M'), foto('xB')),
+      h('div', { class: 'escena__caja' }, h('div', { class: 'escena__nombre', 'aria-hidden': 'true' }, [...nombre].map((c, i) => h('span', { class: 'escena__letra', style: `--n:${i}`, text: c })))));
+    document.body.append(el);
+    const cerrar = () => { clearTimeout(t); el.classList.add('escena--sale'); setTimeout(() => el.remove(), 560); };
+    const t = setTimeout(cerrar, ESPERA + 700 + nombre.length * 55 + 520 + 1400);   // color + letras + un momento para leerlo
+    el.addEventListener('click', cerrar, { once: true });                           // un toque salta la escena
+  }
+
   /* Sesión iniciada: aplica los colores de la persona, desbloquea el muro y carga las publicaciones */
   function iniciarSesion(quien) {
     yo = quien;
+    /* v2.7: otra identidad = se descarta todo lo que había en pantalla y las respuestas pendientes de la sesión anterior */
+    sesion++; servidor.clear(); catsServidor = []; pendientes.length = 0; cola.clear(); fotosLocales.clear(); posts = [];
+    planesPend.forEach((e) => clearTimeout(e.timer)); planesPend.clear(); ultimaFirma = '';
     document.documentElement.dataset.yo = quien;
     try { localStorage.setItem('muro_quien', quien); } catch (e) { /* sin almacenamiento */ }
     Tema.repintarBarra();
@@ -223,9 +309,9 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Tocar la inicial de quien soy: confirmar y salir (vuelve a aparecer la ventana de acceso) */
   $('btnYo').addEventListener('click', async () => {
     if (!(await confirmar({ titulo: `Sesión de ${yo}`, texto: '¿Quieres cerrar la sesión para entrar como otra identidad?', boton: 'Cerrar sesión' }))) return;
-    await bajaPushDeEstaSesion();                                          // v2.5: este dispositivo deja de recibir los avisos de esta persona
-    try { await api('/salir', { metodo: 'POST' }); } catch (e) { /* aunque falle, se muestra el acceso */ }
-    yo = null; mostrarAcceso();
+    /* v2.7: la ventana de acceso aparece al instante; el cierre de sesión en el servidor sigue en segundo plano (el nuevo inicio de sesión lo espera) */
+    salidaEnCurso = bajaPushDeEstaSesion().catch(() => {}).then(() => api('/salir', { metodo: 'POST' })).catch(() => { /* aunque falle, ya se muestra el acceso */ });   // v2.5: este dispositivo deja de recibir los avisos de esta persona
+    yo = null; sesion++; pendientes.length = 0; mostrarAcceso();
   });
 
   /* ============================================================
@@ -298,18 +384,161 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hayS) return dia.e === 'seguro' ? 'posible' : 'seguro';
     return ORDEN_ESTADOS[(ORDEN_ESTADOS.indexOf(dia.e) + 1) % ORDEN_ESTADOS.length];
   }
-  /* ----- v2.6: toques sobre los días de un plan sin demora -----
-     Qué hace: cada toque cambia el día en pantalla al instante; el guardado se hace cuando se dejó de tocar (ESPERA_DIA ms): se manda en una
-     sola petición la secuencia de toques y el servidor la repite igual. Mientras hay cambios sin guardar, las actualizaciones automáticas
-     del muro no pisan lo que se ve. Si el servidor rechaza el cambio (por ejemplo la otra persona lo modificó antes), se vuelve a lo guardado.
-     Para qué sirve: que cambiar de día se sienta inmediato y se pueda tocar varias veces seguidas guardando solo el resultado final. */
+  /* ============================================================
+     v2.7 — TODO INSTANTÁNEO (la pantalla no espera al servidor)
+     Qué hace: cada acción (corazón, voto, tildar un elemento, comentar, publicar, editar, borrar, crear/borrar categorías, cambiar un día) se
+     aplica YA en la pantalla con una copia local de las reglas del servidor y se manda a Cloudflare en segundo plano, de a una y en orden por
+     publicación. Lo que se ve es siempre: "lo último que confirmó el servidor" + "las acciones que todavía no confirmó" (recomponer()).
+     Si el servidor rechaza una acción (o no hay conexión) esa acción se quita de la lista, la pantalla vuelve a lo que dice el servidor y sale
+     un aviso de error; si era una publicación o una edición, el formulario se vuelve a abrir con lo que se había escrito.
+     Mientras una publicación tiene acciones sin confirmar, las actualizaciones automáticas del muro no la pisan.
+     Para qué sirve: que la app se sienta inmediata y no dependa de la velocidad del servidor. */
+  const servidor = new Map();        // id → publicación tal como la confirmó el servidor
+  let catsServidor = [];             // categorías confirmadas por el servidor
+  const pendientes = [];             // acciones hechas en pantalla que el servidor todavía no confirmó, en orden: { k, id, t, quien, sesion, … }
+  const cola = new Map();            // clave → promesa: las acciones de una misma publicación se mandan de a una y en orden
+  let generacion = 0;                // sube cada vez que algo se confirma o se rechaza (descarta actualizaciones automáticas que quedaron "viejas")
+  let sesion = 0;                    // sube al cambiar de identidad (se ignoran las respuestas de la sesión anterior)
+  const fotosLocales = new Map();    // id → foto (dataURL) de publicaciones recién subidas (se ve al instante, sin pedirla al servidor)
+  const AVISO_ERROR = { accion: 'No se pudo guardar el cambio', crear: 'No se pudo publicar', editar: 'No se pudieron guardar los cambios', borrar: 'No se pudo eliminar', 'cat+': 'No se pudo crear la categoría', 'cat-': 'No se pudo borrar la categoría' };
+
+  /* ----- Copias locales de las reglas del servidor (functions/api/posts/…) ----- */
+  /* corazón, voto, tildar, comentar y borrar comentario sobre una copia de la publicación */
+  function aplicarAccion(p, op) {
+    const c = op.cuerpo, q = clon(p), d = q.datos, quien = op.quien;
+    if (c.accion === 'corazon') { const l = Array.isArray(d.corazones) ? d.corazones : []; d.corazones = l.includes(quien) ? l.filter((x) => x !== quien) : [...l, quien]; }
+    else if (c.accion === 'voto' && Array.isArray(d.opciones) && d.opciones[c.opcion]) {
+      const yaVotaba = d.opciones[c.opcion].votos.includes(quien);
+      d.opciones.forEach((o) => { o.votos = o.votos.filter((x) => x !== quien); });      // un solo voto por persona
+      if (!yaVotaba) d.opciones[c.opcion].votos.push(quien);                              // tocar tu opción otra vez quita el voto
+    } else if (c.accion === 'item' && Array.isArray(d.items) && d.items[c.indice]) d.items[c.indice].hecho = !!c.hecho;
+    else if (c.accion === 'comentar') { const l = Array.isArray(d.comentarios) ? d.comentarios : []; if (!l.some((x) => x.id === c.id)) d.comentarios = [...l, { id: c.id, autor: quien, texto: c.texto, creado: op.t }]; }
+    else if (c.accion === 'borrar_comentario') d.comentarios = (Array.isArray(d.comentarios) ? d.comentarios : []).filter((x) => x.id !== c.id);
+    return q;
+  }
+  /* Días de un plan a partir de lo que mandó el formulario (igual que construirDatos en comun.js): fechas sueltas conservan el estado de los días
+     que ya estaban; con estados + "antes" se respeta lo elegido y, si hay un día seguro, los demás quedan descartados */
+  function planLocal(previo, e) {
+    const crudo = Array.isArray(e.dias) ? e.dias : [], conEstados = crudo.some((x) => x && typeof x === 'object'), mapa = new Map();
+    crudo.forEach((x) => { const f = typeof x === 'string' ? x : x && x.f; if (f) mapa.set(f, conEstados && x && ORDEN_ESTADOS.includes(x.e) ? x.e : 'posible'); });
+    const fechas = [...mapa.keys()].sort();
+    let r;
+    if (!conEstados) {
+      const viejos = new Map((Array.isArray(previo.dias) ? previo.dias : []).map((x) => [x.f, x.e])), confirmado = [...viejos.values()].includes('seguro');
+      r = { dias: fechas.map((f) => ({ f, e: viejos.has(f) ? viejos.get(f) : confirmado ? 'descartado' : 'posible' })), antes: { ...(previo.antes || {}) } };
+      Object.keys(r.antes).forEach((f) => { if (!fechas.includes(f)) delete r.antes[f]; });
+      if (confirmado) { fechas.forEach((f) => { if (!viejos.has(f)) r.antes[f] = 'posible'; }); if (!r.dias.some((x) => x.e === 'seguro')) restaurarDiasLocal(r); }
+    } else {
+      const seguros = fechas.filter((f) => mapa.get(f) === 'seguro'), antesIn = e.antes && typeof e.antes === 'object' ? e.antes : {};
+      r = { dias: [], antes: {} };
+      r.dias = fechas.map((f) => {
+        if (!seguros.length || f === seguros[0]) return { f, e: mapa.get(f) };
+        r.antes[f] = ORDEN_ESTADOS.includes(antesIn[f]) && antesIn[f] !== 'seguro' ? antesIn[f] : 'posible';
+        return { f, e: 'descartado' };
+      });
+    }
+    return { dias: r.dias, antes: r.antes, hora: e.hora || '', lugar: String(e.lugar || '').trim() };
+  }
+  const claveDePlan = (d) => JSON.stringify([(d.dias || []).map((x) => x.f), d.hora || '', d.lugar || '']);   // lo que cuenta como "editar" un plan (no el estado de los días)
+  /* Publicación nueva tal como se va a ver (la misma que armará el servidor) */
+  function postLocal(op) {
+    const c = op.cuerpo, datos = { corazones: [], categorias: c.categorias || [] };
+    if (c.tipo === 'lista') datos.items = c.datos.items.map((i) => ({ t: i.t, hecho: !!i.hecho }));
+    else if (c.tipo === 'encuesta') datos.opciones = c.datos.opciones.map((t) => ({ t, votos: [] }));
+    else if (c.tipo === 'foto') { datos.w = c.datos.w; datos.h = c.datos.h; }
+    else if (c.tipo === 'link') datos.vista = {};                                          // la vista previa del sitio llega cuando responde el servidor
+    else if (c.tipo === 'plan') Object.assign(datos, planLocal({}, c.datos));
+    return { id: op.id, autor: op.quien, tipo: c.tipo, titulo: c.titulo || '', texto: c.texto || '', url: c.url || '', datos, imagen: c.tipo === 'foto', creado: op.t, actualizado: op.t };
+  }
+  /* Edición de una publicación propia (igual que PATCH /api/posts/ID): también marca "editado" si de verdad cambió algo */
+  function aplicarEdicion(p, op, cats) {
+    const c = op.cuerpo, q = clon(p), d = q.datos;
+    if (c.titulo !== undefined) q.titulo = c.titulo;
+    if (c.texto !== undefined) q.texto = c.texto;
+    if (p.tipo === 'link' && c.url !== undefined && c.url !== p.url) { q.url = c.url; d.vista = {}; }
+    if (p.tipo === 'lista' && c.datos && c.datos.items) d.items = c.datos.items.map((i) => ({ t: i.t, hecho: !!i.hecho }));
+    if (p.tipo === 'plan' && c.datos) Object.assign(d, planLocal(p.datos, c.datos));
+    if (c.categorias !== undefined) d.categorias = c.categorias.filter((id) => cats.some((x) => x.id === id));
+    const cambio = q.titulo !== p.titulo || q.texto !== p.texto || q.url !== p.url || JSON.stringify(d.items || null) !== JSON.stringify(p.datos.items || null)
+      || JSON.stringify(d.categorias || []) !== JSON.stringify(p.datos.categorias || []) || (p.tipo === 'plan' && claveDePlan(d) !== claveDePlan(p.datos));
+    if (cambio) d.editado = op.t;
+    return q;
+  }
+
+  /* ----- Motor ----- */
+  const ocupado = (id) => planesPend.has(id) || pendientes.some((o) => o.id === id);   // ¿la publicación tiene cambios sin confirmar?
+  /* Arma lo que se ve (servidor + acciones sin confirmar) y repinta */
+  function recomponer() {
+    const mapa = new Map(servidor);
+    let cats = [...catsServidor];
+    pendientes.forEach((o) => { if (o.k === 'cat+' && !cats.some((x) => x.id === o.cat.id)) cats.push(o.cat); else if (o.k === 'cat-') cats = cats.filter((x) => x.id !== o.id); });
+    pendientes.forEach((o) => {
+      const p = mapa.get(o.id);
+      if (o.k === 'crear') mapa.set(o.id, o.post);
+      else if (o.k === 'accion' && p) mapa.set(o.id, aplicarAccion(p, o));
+      else if (o.k === 'editar' && p) mapa.set(o.id, aplicarEdicion(p, o, cats));
+      else if (o.k === 'borrar') mapa.delete(o.id);
+    });
+    planesPend.forEach((e, id) => { const p = mapa.get(id); if (p) mapa.set(id, { ...p, datos: { ...p.datos, ...clonarDias(e.local) } }); });   // toques de días sin guardar
+    categorias = cats;
+    posts = [...mapa.values()].sort((a, b) => b.creado - a.creado);
+    pintar();
+    if (!$('modalNuevo').hidden) pintarCatsComposer();                    // la lista de categorías del formulario sigue a los cambios
+  }
+  /* Une la acción a la lista, la muestra YA y la manda en segundo plano */
+  function encolar(op) {
+    op.t = Date.now(); op.quien = yo; op.sesion = sesion;
+    pendientes.push(op);
+    recomponer();
+    enCola(op.k.startsWith('cat') ? 'cats' : op.id, () => ejecutar(op));
+  }
+  /* Ejecuta fn cuando terminen las anteriores de la misma clave (fn nunca falla: atrapa sus errores) */
+  function enCola(clave, fn) {
+    const sig = (cola.get(clave) || Promise.resolve()).then(fn);
+    cola.set(clave, sig);
+    sig.finally(() => { if (cola.get(clave) === sig) cola.delete(clave); });
+    return sig;
+  }
+  async function ejecutar(op) {
+    if (op.sesion !== sesion) return;
+    let recargar = false;
+    try {
+      if (op.k === 'crear' || op.k === 'editar') { const c = cola.get('cats'); if (c) await c; }   // las categorías nuevas se crean antes de usarlas
+      if (op.k === 'accion') { const r = await api(`/posts/${op.id}/accion`, { metodo: 'POST', cuerpo: op.cuerpo }); if (op.sesion === sesion) servidor.set(op.id, r.post); }
+      else if (op.k === 'crear') { const r = await api('/posts', { metodo: 'POST', cuerpo: { ...op.cuerpo, id: op.id } }); if (op.sesion === sesion) servidor.set(r.post.id, r.post); }
+      else if (op.k === 'editar') { const r = await api(`/posts/${op.id}`, { metodo: 'PATCH', cuerpo: op.cuerpo }); if (op.sesion === sesion) servidor.set(op.id, r.post); }
+      else if (op.k === 'borrar') { await api(`/posts/${op.id}`, { metodo: 'DELETE' }); servidor.delete(op.id); }
+      else if (op.k === 'cat+') { const r = await api('/categorias', { metodo: 'POST', cuerpo: op.cuerpo }); catsServidor = [...catsServidor.filter((x) => x.id !== r.categoria.id), r.categoria]; }
+      else if (op.k === 'cat-') { await api(`/categorias/${op.id}`, { metodo: 'DELETE' }); catsServidor = catsServidor.filter((x) => x.id !== op.id); }
+    } catch (e) {
+      if (op.sesion !== sesion) return;
+      recargar = true;
+      if (op.k === 'borrar' && e.status === 404) { servidor.delete(op.id); recargar = false; }     // ya no existía: era justo lo que se quería
+      else {
+        avisar(`${AVISO_ERROR[op.k] || 'No se pudo guardar'}: ${e.message}`, 'error');
+        if (op.k === 'cat+') { catsElegidas.delete(op.id); }
+        if (op.k === 'accion' && op.cuerpo.accion === 'comentar') {                              // el comentario no se pierde: vuelve al cuadro
+          borradores.set(op.id, op.cuerpo.texto);
+          const campo = nodos.get(op.id) && nodos.get(op.id).querySelector('.comentar__campo');
+          if (campo && !campo.value) { campo.value = op.cuerpo.texto; campo.dispatchEvent(new Event('input')); }
+        }
+        if (op.form) restaurarFormulario(op);
+      }
+    }
+    if (op.sesion !== sesion) return;
+    pendientes.splice(pendientes.indexOf(op), 1);
+    generacion++; ultimaFirma = ''; ultimaFirmaCats = '';                // la próxima actualización automática vuelve a comparar todo
+    recomponer();
+    if (recargar) cargar();                                              // se vuelve a lo que dice el servidor
+  }
+  /* Acción rápida sobre una publicación: corazón, voto, tildar, comentar, borrar comentario */
+  function accion(p, cuerpo) { encolar({ k: 'accion', id: p.id, cuerpo }); }
+
+  /* ----- Toques sobre los días de un plan (v2.6, ahora dentro del motor) -----
+     Cada toque cambia el día en pantalla al instante; el guardado se hace cuando se dejó de tocar (ESPERA_DIA ms): se manda en una sola petición la
+     secuencia de toques y el servidor la repite igual. Si el servidor la rechaza, el plan vuelve a como estaba guardado. */
   const ESPERA_DIA = 600;
   const planesPend = new Map();   // id de publicación → { local: estado de días en pantalla, ops: toques sin enviar, timer, enVuelo }
-  function aplicarPlanLocal(id, local) {
-    posts = posts.map((x) => (x.id === id ? { ...x, datos: { ...x.datos, ...clonarDias(local) } } : x));
-    ultimaFirma = JSON.stringify(posts.map((x) => [x.id, x.actualizado]));
-    pintar();
-  }
   function tocarDia(p, fecha) {
     let e = planesPend.get(p.id);
     if (!e) { e = { local: clonarDias(p.datos), ops: [], timer: 0, enVuelo: false }; planesPend.set(p.id, e); }
@@ -317,27 +546,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const sig = siguienteEstadoDia(e.local, fecha);
     if (!ponerEstadoDiaLocal(e.local, fecha, sig)) return;
     e.ops.push({ fecha, estado: sig });
-    aplicarPlanLocal(p.id, e.local);                                   // se ve al instante
+    recomponer();                                                        // se ve al instante
     clearTimeout(e.timer); e.timer = setTimeout(() => enviarDias(p.id), ESPERA_DIA);
   }
-  async function enviarDias(id) {
+  function enviarDias(id, ya) {
     const e = planesPend.get(id);
     if (!e || e.enVuelo || !e.ops.length) return;
-    const lote = e.ops; e.ops = []; e.enVuelo = true;
-    try {
-      const r = await api(`/posts/${id}/accion`, { metodo: 'POST', cuerpo: { accion: 'dia', cambios: lote }, keepalive: true });
-      e.enVuelo = false;
-      if (e.ops.length) {                                              // hubo más toques mientras se guardaba: se conserva lo que se ve y se vuelve a guardar
-        posts = posts.map((x) => (x.id === id ? { ...r.post, datos: { ...r.post.datos, ...clonarDias(e.local) } } : x));
-        clearTimeout(e.timer); e.timer = setTimeout(() => enviarDias(id), ESPERA_DIA);
-      } else { planesPend.delete(id); reemplazar(r.post); }
-    } catch (err) {
-      planesPend.delete(id); avisar(err.message, 'error');
-      ultimaFirma = ''; cargar();                                      // se vuelve a lo que quedó guardado
-    }
+    const lote = e.ops, ses = sesion; e.ops = []; e.enVuelo = true;
+    const trabajo = async () => {
+      if (ses !== sesion) return;
+      try {
+        const r = await api(`/posts/${id}/accion`, { metodo: 'POST', cuerpo: { accion: 'dia', cambios: lote }, keepalive: true });
+        e.enVuelo = false; servidor.set(id, r.post);
+        if (e.ops.length) { clearTimeout(e.timer); e.timer = setTimeout(() => enviarDias(id), ESPERA_DIA); }   // hubo más toques mientras se guardaba
+        else planesPend.delete(id);
+      } catch (err) {
+        planesPend.delete(id); avisar(`${AVISO_ERROR.accion}: ${err.message}`, 'error');
+        generacion++; ultimaFirma = ''; recomponer(); cargar();          // se vuelve a lo que quedó guardado
+        return;
+      }
+      generacion++; ultimaFirma = ''; recomponer();
+    };
+    return ya ? trabajo() : enCola(id, trabajo);
   }
   /* Si se sale de la app con toques sin guardar, se guardan ya (sin esperar) */
-  const guardarDiasYa = () => planesPend.forEach((e, id) => { clearTimeout(e.timer); enviarDias(id); });
+  const guardarDiasYa = () => planesPend.forEach((e, id) => { clearTimeout(e.timer); enviarDias(id, true); });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') guardarDiasYa(); });
   window.addEventListener('pagehide', guardarDiasYa);
 
@@ -450,17 +683,19 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Marcas dentro de una línea (como en WhatsApp). Grupos: 1 ```mono``` · 2 `código` · 3/4 *negrita* · 5/6 ~tachado~ · 7/8 _cursiva_ · 9/10/11 [texto](url) · 12 link suelto.
      v2.2: antes la negrita era **así** y el tachado ~~así~~; ahora es *así* y ~así~. Lo escrito entre marcas no puede empezar ni terminar con espacio. */
   const MD_INLINE = '(```[^`\\n]+```)|(`[^`\\n]+`)|(\\*([^\\s*](?:[^*\\n]*?[^\\s*])?)\\*)|(~([^\\s~](?:[^~\\n]*?[^\\s~])?)~)|(\\b_([^\\s_](?:[^_\\n]*?[^\\s_])?)_\\b)|(\\[([^\\]\\n]+)\\]\\((https?:\\/\\/[^\\s)]+)\\))|(https?:\\/\\/[^\\s<]+)';
-  function inline(texto) {
+  /* v2.7: sinEnlaces = true dentro de botones (elementos de lista, opciones de encuesta): ahí un link no puede ser clicable, se muestra como texto */
+  function inline(texto, sinEnlaces) {
     const re = new RegExp(MD_INLINE, 'g'), out = [];          // una expresión nueva por llamada: la función se llama a sí misma (negrita dentro de cursiva…)
     let ultimo = 0, m;
     while ((m = re.exec(texto))) {
       if (m.index > ultimo) out.push(texto.slice(ultimo, m.index));
       if (m[1]) out.push(h('code', { text: m[1].slice(3, -3) }));
       else if (m[2]) out.push(h('code', { text: m[2].slice(1, -1) }));
-      else if (m[3]) out.push(h('strong', {}, inline(m[4])));
-      else if (m[5]) out.push(h('del', {}, inline(m[6])));
-      else if (m[7]) out.push(h('em', {}, inline(m[8])));
-      else if (m[9]) out.push(enlace(m[11], m[10]));
+      else if (m[3]) out.push(h('strong', {}, inline(m[4], sinEnlaces)));
+      else if (m[5]) out.push(h('del', {}, inline(m[6], sinEnlaces)));
+      else if (m[7]) out.push(h('em', {}, inline(m[8], sinEnlaces)));
+      else if (m[9]) out.push(sinEnlaces ? m[10] : enlace(m[11], m[10]));
+      else if (sinEnlaces) out.push(m[12]);
       else {                                                   // link suelto: se le saca la puntuación final ("mira https://x.com.")
         let url = m[12], resto = '';
         const f = url.match(/[.,;:!?)\]]+$/);
@@ -514,12 +749,16 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----- Cuerpo de cada tipo de publicación ----- */
   function cuerpoPost(p) {
     const d = p.datos || {}, partes = [];
-    if (p.titulo) partes.push(h('h3', { class: 'post__titulo', text: p.titulo }));
+    if (p.titulo) partes.push(h('h3', { class: 'post__titulo' }, inline(p.titulo)));   // v2.7: el título acepta formato (negrita, cursiva…)
+    /* v2.7: la lista y la encuesta también tienen descripción; va justo debajo del título (en los demás tipos sigue al final) */
+    const descripcion = p.texto ? md(p.texto, 'post__texto') : null;   // v2.1: texto con formato (negrita, cursiva, listas, links…)
+    const descArriba = p.tipo === 'lista' || p.tipo === 'encuesta';
+    if (descripcion && descArriba) partes.push(descripcion);
 
     if (p.tipo === 'foto') {
-      const img = h('img', { class: 'post__foto', src: `/api/imagen/${p.id}`, alt: p.titulo || p.texto || 'Foto', loading: 'lazy', decoding: 'async' });
+      const src = fotosLocales.get(p.id) || `/api/imagen/${p.id}`;      // v2.7: una foto recién subida se ve con la copia local, sin pedirla al servidor
+      const img = h('img', { class: 'post__foto', src, alt: p.titulo || p.texto || 'Foto', loading: 'lazy', decoding: 'async', onclick: () => abrirVisor(src, p.titulo || p.texto) });
       if (d.w && d.h) img.style.aspectRatio = `${d.w} / ${d.h}`;       // reserva el alto: el muro no "salta" al cargar la foto
-      img.addEventListener('click', () => abrirVisor(img.src, p.titulo || p.texto));
       partes.push(img);
     }
     if (p.tipo === 'plan') partes.push(cuerpoPlan(p));   // v2.3: días con estados, hora y lugar
@@ -527,10 +766,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (p.tipo === 'lista') {
       const items = d.items || [], hechos = items.filter((i) => i.hecho).length, pct = items.length ? Math.round(hechos * 100 / items.length) : 0;
-      partes.push(h('div', { class: 'lista' }, items.map((it, i) => h('button', { class: 'lista__item' + (it.hecho ? ' hecho' : ''), type: 'button', 'aria-pressed': String(!!it.hecho), onclick: () => accion(p, { accion: 'item', indice: i, hecho: !it.hecho }) },
-        icono(it.hecho ? 'check_box' : 'check_box_outline_blank', it.hecho), h('span', { text: it.t })))));
-      partes.push(h('div', { class: 'progreso', role: 'progressbar', 'aria-valuenow': pct, 'aria-valuemin': 0, 'aria-valuemax': 100, style: `--valor:${pct}%` }, h('div', { class: 'progreso__barra' })));
-      partes.push(h('span', { class: 'progreso__texto', text: `${hechos} de ${items.length} · ${pct}%` }));
+      const completa = items.length > 0 && hechos === items.length;     // v2.7: al 100 % casillas y línea se ponen verdes y aparece el cuadro COMPLETADO
+      partes.push(h('div', { class: 'lista-bloque' + (completa ? ' lista-bloque--completa' : '') },
+        /* v2.7: solo el TEXTO se tacha (span .lista__texto); la casilla ya no. El texto acepta formato (sin links: el elemento es un botón) */
+        h('div', { class: 'lista' }, items.map((it, i) => h('button', { class: 'lista__item' + (it.hecho ? ' hecho' : ''), type: 'button', 'aria-pressed': String(!!it.hecho), onclick: () => accion(p, { accion: 'item', indice: i, hecho: !it.hecho }) },
+          icono(it.hecho ? 'check_box' : 'check_box_outline_blank', it.hecho), h('span', { class: 'lista__texto' }, inline(it.t, true))))),
+        h('div', { class: 'progreso', role: 'progressbar', 'aria-valuenow': pct, 'aria-valuemin': 0, 'aria-valuemax': 100, style: `--valor:${pct}%` }, h('div', { class: 'progreso__barra' })),
+        h('span', { class: 'progreso__texto', text: `${hechos} de ${items.length} · ${pct}%` }),
+        completa ? h('div', { class: 'completado', role: 'status' }, icono('task_alt', true), h('span', { text: 'COMPLETADO' })) : null));
     }
     if (p.tipo === 'encuesta') {
       const ops = d.opciones || [], total = ops.reduce((s, o) => s + o.votos.length, 0);
@@ -538,12 +781,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const nM = o.votos.filter((v) => v === 'M').length, ancho = total ? Math.round(o.votos.length * 100 / total) : 0, corte = o.votos.length ? Math.round(nM * 100 / o.votos.length) : 50;
         return h('button', { class: 'opcion' + (o.votos.includes(yo) ? ' opcion--mia' : ''), type: 'button', 'aria-pressed': String(o.votos.includes(yo)), onclick: () => accion(p, { accion: 'voto', opcion: i }) },
           h('span', { class: 'opcion__barra', style: `--ancho:${ancho}%;--corte:${corte}%` }),
-          h('span', { class: 'opcion__texto', text: o.t }),
+          h('span', { class: 'opcion__texto' }, inline(o.t, true)),   // v2.7: la opción acepta formato
           h('span', { class: 'opcion__votos' }, o.votos.map((v) => avatar(v, 'avatar--mini'))));
       })));
       partes.push(h('span', { class: 'progreso__texto', text: total ? `${total} ${total === 1 ? 'voto' : 'votos'}` : 'Todavía nadie votó' }));
     }
-    if (p.texto) partes.push(md(p.texto, 'post__texto'));   // v2.1: texto con formato (negrita, cursiva, listas, links…)
+    if (descripcion && !descArriba) partes.push(descripcion);
     return partes;
   }
   /* ----- Plan (NUEVO v2.3) -----
@@ -599,25 +842,27 @@ document.addEventListener('DOMContentLoaded', () => {
      Para qué sirve: conversar sobre las publicaciones, también las del otro. */
   function seccionComentarios(p) {
     const coms = (p.datos && p.datos.comentarios) || [];
-    const campo = h('textarea', { class: 'campo__entrada comentar__campo', rows: '1', maxlength: '500', placeholder: 'Escribe un comentario…', 'aria-label': 'Escribir un comentario' });
+    /* v2.7: data-rico = acepta formato (barra flotante y Ctrl+B/I/K). El comentario se ve al instante (accion() lo agrega en pantalla y lo manda en segundo plano) */
+    const campo = h('textarea', { class: 'campo__entrada comentar__campo', rows: '1', maxlength: '500', placeholder: 'Escribe un comentario…', 'aria-label': 'Escribir un comentario', 'data-rico': 'flota' });
     campo.value = borradores.get(p.id) || '';
-    const enviar = async () => {
-      const texto = campo.value.trim(); if (!texto) return;
-      campo.disabled = true;
-      try { await api(`/posts/${p.id}/accion`, { metodo: 'POST', cuerpo: { accion: 'comentar', texto } }).then((r) => { borradores.delete(p.id); reemplazar(r.post); }); }
-      catch (e) { avisar(e.message, 'error'); campo.disabled = false; campo.focus(); }
-    };
     campo.addEventListener('input', () => { borradores.set(p.id, campo.value); campo.style.height = 'auto'; campo.style.height = Math.min(campo.scrollHeight, 120) + 'px'; });
-    campo.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviar(); } });   // Enter envía; Shift+Enter hace un salto de línea
+    campo.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviarComentario(p, campo); } });   // Enter envía; Shift+Enter hace un salto de línea
     return h('div', { class: 'comentarios' },
-      coms.map((c) => h('div', { class: 'comentario', 'data-autor': c.autor },
+      coms.map((c) => h('div', { class: 'comentario', 'data-autor': c.autor, 'data-k': c.id },
         h('div', { class: 'comentario__cab' },
           avatar(c.autor, 'avatar--mini'),
           h('time', { class: 'comentario__hora', 'data-ts': c.creado, text: hora(c.creado), title: new Date(c.creado).toLocaleString('es-AR') }),
           c.autor === yo ? h('button', { class: 'comentario__borrar', type: 'button', 'aria-label': 'Borrar comentario', title: 'Borrar comentario', onclick: () => borrarComentario(p, c) }, icono('close')) : null),
         md(c.texto, 'comentario__texto'))),
-      h('div', { class: 'comentar' }, campo,
-        h('button', { class: 'btn-icono comentar__enviar', type: 'button', 'aria-label': 'Enviar comentario', title: 'Enviar', onclick: enviar }, icono('send'))));
+      h('div', { class: 'comentar', 'data-k': 'nuevo' }, campo,
+        /* el cuadro de comentario se conserva al actualizar la tarjeta (ver morph), por eso el botón lo busca en la página en vez de usar esta copia */
+        h('button', { class: 'btn-icono comentar__enviar', type: 'button', 'aria-label': 'Enviar comentario', title: 'Enviar', onclick: (e) => enviarComentario(p, e.currentTarget.closest('.comentar').querySelector('textarea')) }, icono('send'))));
+  }
+  /* Manda el comentario escrito: se vacía el cuadro y el comentario aparece al instante (si el servidor falla, vuelve al cuadro con un aviso) */
+  function enviarComentario(p, campo) {
+    const texto = campo.value.trim(); if (!texto) return;
+    campo.value = ''; campo.style.height = 'auto'; borradores.delete(p.id);
+    accion(p, { accion: 'comentar', texto, id: uuid() });
   }
   async function borrarComentario(p, c) {
     if (!(await confirmar({ titulo: 'Borrar comentario', texto: 'Se borrará tu comentario y no se puede deshacer.', boton: 'Borrar' }))) return;
@@ -650,38 +895,45 @@ document.addEventListener('DOMContentLoaded', () => {
         /* v2.2: botón de comentarios con su cantidad; despliega/pliega la sección */
         h('button', { class: 'post__accion post__accion--comentar' + (abiertos ? ' activo' : ''), type: 'button', 'aria-expanded': String(abiertos), 'aria-label': nComs ? `Comentarios (${nComs})` : 'Comentar', onclick: () => alternarComentarios(p) },
           icono('chat_bubble', abiertos || nComs > 0), nComs ? h('span', { class: 'contador', text: String(nComs) }) : null),
-        mia && p.tipo !== 'encuesta' ? h('button', { class: 'post__accion post__accion--der', type: 'button', 'aria-label': 'Editar', onclick: () => abrirEditor(p) }, icono('edit')) : null,
-        mia ? h('button', { class: 'post__accion post__accion--peligro' + (p.tipo === 'encuesta' ? ' post__accion--der' : ''), type: 'button', 'aria-label': 'Eliminar', onclick: () => borrar(p) }, icono('delete')) : null),
+        mia ? h('button', { class: 'post__accion post__accion--der', type: 'button', 'aria-label': 'Editar', onclick: () => abrirEditor(p) }, icono('edit')) : null,   // v2.7: las encuestas también se editan (pregunta y descripción)
+        mia ? h('button', { class: 'post__accion post__accion--peligro', type: 'button', 'aria-label': 'Eliminar', onclick: () => borrar(p) }, icono('delete')) : null),
       abiertos ? seccionComentarios(p) : null);                        // v2.2: sección de comentarios (solo si está desplegada)
+    /* v2.7: cada bloque de la tarjeta lleva una clave (su primera clase) para que morph() los empareje aunque aparezca o desaparezca alguno (p. ej. "editado") */
+    [...tarjeta.children].forEach((c) => c.setAttribute('data-k', c.className.split(' ')[0] || c.tagName));
     return tarjeta;
   }
 
-  /* Pinta el muro: crea las tarjetas nuevas, reemplaza las que cambiaron, quita las que ya no están y las ordena.
-     Solo las tarjetas recién aparecidas llevan la animación de entrada. */
+  /* Pinta el muro: crea las tarjetas nuevas, ACTUALIZA EN EL LUGAR las que cambiaron (v2.7: morph, así las transiciones se animan), saca con
+     animación las que ya no están y las ordena. Solo las tarjetas recién aparecidas llevan la animación de entrada. */
+  function salirTarjeta(el) {
+    el.classList.remove('entra'); el.classList.add('sale');
+    el.addEventListener('animationend', () => el.remove(), { once: true });
+    setTimeout(() => el.remove(), 450);                                  // respaldo por si la animación no corre (pestaña oculta)
+  }
   function pintar() {
     const lista = posts.filter(pasaFiltro), muro = $('muro');
     const visibles = new Set(lista.map((p) => p.id));
-    nodos.forEach((el, id) => { if (!visibles.has(id)) { el.remove(); nodos.delete(id); } });   // borradas (desde otro dispositivo) o filtradas
+    nodos.forEach((el, id) => { if (!visibles.has(id)) { nodos.delete(id); salirTarjeta(el); } });   // borradas (desde cualquier dispositivo) o filtradas
     let orden = 0;
-    lista.forEach((p, i) => {
-      /* v2.1: la huella incluye las categorías (nombre e icono) para que la tarjeta se repinte si se crea/borra una categoría */
-      const firma = JSON.stringify([p.actualizado, yo, catsDe(p).map((c) => [c.id, c.nombre, c.icono]), comentariosAbiertos.has(p.id), p.tipo === 'plan' ? [hoyISO(), p.datos.dias] : 0]);   // v2.2: + comentarios desplegados; v2.3: los planes se repintan al cambiar el día (cuenta regresiva); v2.6: y al cambiar el estado de un día
+    const ordenadas = [];
+    lista.forEach((p) => {
+      /* v2.7: la huella es el CONTENIDO de la publicación (no solo "actualizado"): así una acción instantánea (que todavía no tiene hora del servidor)
+         también repinta, y la confirmación del servidor, que deja el mismo contenido, no vuelve a tocar la tarjeta */
+      const firma = JSON.stringify([p.titulo, p.texto, p.url, p.datos, p.imagen, yo, catsDe(p).map((c) => [c.id, c.nombre, c.icono]), comentariosAbiertos.has(p.id), p.tipo === 'plan' ? hoyISO() : 0]);   // v2.3: los planes se repintan al cambiar el día (cuenta regresiva)
       let el = nodos.get(p.id);
-      if (!el || el._firma !== firma) {
-        /* v2.2: si se estaba escribiendo un comentario en esta tarjeta, se conserva el foco y el cursor al repintarla */
-        const activo = el && document.activeElement && document.activeElement.classList.contains('comentar__campo') && el.contains(document.activeElement) ? document.activeElement : null;
-        const nuevo = crearTarjeta(p); nuevo._firma = firma;
-        if (!el) {                                                     // tarjeta que recién aparece: entra con animación en cascada
-          nuevo.classList.add('entra'); nuevo.style.setProperty('--i', Math.min(orden++, 10));
-          nuevo.addEventListener('animationend', () => nuevo.classList.remove('entra'), { once: true });   // para que no se repita si se mueve de lugar
-        } else {
-          el.replaceWith(nuevo);
-          const campoNuevo = activo && nuevo.querySelector('.comentar__campo');
-          if (campoNuevo) { campoNuevo.focus(); campoNuevo.setSelectionRange(campoNuevo.value.length, campoNuevo.value.length); }
-        }
-        el = nuevo; nodos.set(p.id, el);
-      }
-      if (muro.children[i] !== el) muro.insertBefore(el, muro.children[i] || null);
+      if (!el) {                                                         // tarjeta que recién aparece: entra con animación en cascada
+        el = crearTarjeta(p); el._firma = firma;
+        el.classList.add('entra'); el.style.setProperty('--i', Math.min(orden++, 10));
+        el.addEventListener('animationend', () => el.classList.remove('entra'), { once: true });   // para que no se repita si se mueve de lugar
+        nodos.set(p.id, el);
+      } else if (el._firma !== firma) { morph(el, crearTarjeta(p), true); el._firma = firma; }
+      ordenadas.push(el);
+    });
+    /* Orden: cada tarjeta va en su lugar (las que están saliendo con animación se saltean) */
+    let cursor = muro.firstChild;
+    ordenadas.forEach((el) => {
+      while (cursor && cursor.classList && cursor.classList.contains('sale')) cursor = cursor.nextSibling;
+      if (cursor === el) cursor = cursor.nextSibling; else muro.insertBefore(el, cursor);
     });
     const n = lista.length;
     $('cuenta').textContent = `${n} ${n === 1 ? 'publicación' : 'publicaciones'}`;
@@ -697,14 +949,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!yo || cargando) return;
     cargando = true;
     cargarAvisos();                      // v2.5: cada vez que se actualiza el muro también se piden las notificaciones
+    const gen = generacion, ses = sesion;
     try {
       /* v2.1: se piden juntas las publicaciones y las categorías; si las categorías fallan (ej. sin conexión) se siguen usando las que ya había */
       const [r, rc] = await Promise.all([api('/posts'), api('/categorias').catch(() => null)]);
+      /* v2.7: si mientras tanto se confirmó o rechazó algo (o cambió la sesión), esta respuesta pudo quedar vieja: se descarta y la próxima actualización la trae */
+      if (gen !== generacion || ses !== sesion) return;
       let cambioCats = false;
-      if (rc) { const fc = JSON.stringify(rc.categorias); if (fc !== ultimaFirmaCats) { ultimaFirmaCats = fc; categorias = rc.categorias; cambioCats = true; } }
+      if (rc && !pendientes.some((o) => o.k.startsWith('cat'))) { const fc = JSON.stringify(rc.categorias); if (fc !== ultimaFirmaCats) { ultimaFirmaCats = fc; catsServidor = rc.categorias; cambioCats = true; } }
       const firma = JSON.stringify(r.posts.map((p) => [p.id, p.actualizado]));
-      /* v2.6: los planes con toques sin guardar conservan lo que se ve (las actualizaciones no lo pisan) */
-      if (firma !== ultimaFirma || cambioCats) { ultimaFirma = firma; posts = r.posts.map((x) => (planesPend.has(x.id) ? { ...x, datos: { ...x.datos, ...clonarDias(planesPend.get(x.id).local) } } : x)); pintar(); }
+      if (firma !== ultimaFirma || cambioCats) {
+        ultimaFirma = firma;
+        /* Lo que dice el servidor reemplaza lo anterior, salvo las publicaciones con acciones sin confirmar (esas se siguen viendo como las dejaste) */
+        const ids = new Set(r.posts.map((p) => p.id));
+        r.posts.forEach((p) => { if (!ocupado(p.id)) servidor.set(p.id, p); });
+        [...servidor.keys()].forEach((id) => { if (!ids.has(id) && !ocupado(id)) servidor.delete(id); });
+        recomponer();
+      }
       if (postPendiente) { const id = postPendiente; postPendiente = null; setTimeout(() => irAPost(id), 300); }   // v2.5: se abrió desde un aviso del celular
     } catch (e) {
       if (e.status !== 401) { $('cargando').hidden = true; if (!posts.length) { $('vacio').hidden = false; $('vacioTexto').textContent = 'No se pudo cargar el muro. Revisa tu conexión.'; } }
@@ -793,8 +1054,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('#modalNotif [data-cerrar]').forEach((b) => b.addEventListener('click', () => cerrarModal($('modalNotif'))));
   $('modalNotif').addEventListener('click', (e) => { if (e.target === $('modalNotif')) cerrarModal($('modalNotif')); });   // tocar fuera cierra
   $('notifVaciar').addEventListener('click', async () => {
-    try { await api('/notificaciones', { metodo: 'POST', cuerpo: { accion: 'vaciar' } }); avisos = []; noLeidas = 0; resaltarAvisos.clear(); pintarContador(); pintarPanelAvisos(); }
-    catch (e) { avisar(e.message, 'error'); }
+    /* v2.7: la lista se vacía al instante; si el servidor falla, vuelve con un aviso */
+    const previos = avisos, previasNoLeidas = noLeidas, previasResaltadas = resaltarAvisos;
+    avisos = []; noLeidas = 0; resaltarAvisos = new Set(); pintarContador(); pintarPanelAvisos();
+    try { await api('/notificaciones', { metodo: 'POST', cuerpo: { accion: 'vaciar' } }); }
+    catch (e) { avisos = previos; noLeidas = previasNoLeidas; resaltarAvisos = previasResaltadas; pintarContador(); pintarPanelAvisos(); avisar(`No se pudieron vaciar las notificaciones: ${e.message}`, 'error'); }
   });
 
   /* ----- Avisos del celular (Web Push) -----
@@ -844,29 +1108,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (postPendiente) { try { history.replaceState(null, '', location.pathname); } catch (e) { /* nada */ } }
   if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.tipo === 'ir-post') { cargar().then(() => irAPost(e.data.id)); cargarAvisos(); } });
 
-  /* ----- Acciones sobre una publicación (corazón, voto, tildar lista) ----- */
-  async function accion(p, cuerpo) {
-    try {
-      const r = await api(`/posts/${p.id}/accion`, { metodo: 'POST', cuerpo });
-      reemplazar(r.post);
-    } catch (e) { avisar(e.message, 'error'); if (e.status === 404) cargar(); }
-  }
-  /* Cambia una publicación en memoria y repinta (no espera al siguiente ciclo de actualización) */
-  function reemplazar(nueva) {
-    posts = posts.map((x) => (x.id === nueva.id ? nueva : x));
-    ultimaFirma = JSON.stringify(posts.map((x) => [x.id, x.actualizado]));
-    pintar();
-  }
+  /* ----- Acciones sobre una publicación (corazón, voto, tildar lista, comentarios): ver accion() y el motor (v2.7) más arriba ----- */
+  /* Eliminar: se pide confirmación y después la tarjeta sale al instante (si el servidor falla vuelve a aparecer con un aviso) */
   async function borrar(p) {
     if (!(await confirmar({ titulo: 'Eliminar publicación', texto: 'Se borrará para los dos y no se puede deshacer.', boton: 'Eliminar' }))) return;
-    try {
-      await api(`/posts/${p.id}`, { metodo: 'DELETE' });
-      const el = nodos.get(p.id);
-      if (el) { el.classList.remove('entra'); el.classList.add('sale'); await pausa(280); }
-      posts = posts.filter((x) => x.id !== p.id);
-      ultimaFirma = JSON.stringify(posts.map((x) => [x.id, x.actualizado]));
-      pintar(); avisar('Publicación eliminada.', 'ok');
-    } catch (e) { avisar(e.message, 'error'); }
+    encolar({ k: 'borrar', id: p.id });
   }
 
   /* ============================================================
@@ -896,7 +1142,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function agregarFila(valor = '', hecho = false) {
     const max = tipoActual === 'encuesta' ? 8 : 50;
     if ($('filasItems').children.length >= max) { avisar(`Máximo ${max} elementos.`, 'error'); return; }
-    const entrada = h('input', { class: 'campo__entrada', type: 'text', maxlength: 200, placeholder: tipoActual === 'encuesta' ? `Opción ${$('filasItems').children.length + 1}` : 'Elemento', autocomplete: 'off', value: valor });
+    /* v2.7: data-rico = el elemento / la opción acepta formato (barra flotante y Ctrl+B/I/K) */
+    const entrada = h('input', { class: 'campo__entrada', type: 'text', maxlength: 200, placeholder: tipoActual === 'encuesta' ? `Opción ${$('filasItems').children.length + 1}` : 'Elemento', autocomplete: 'off', value: valor, 'data-rico': 'flota' });
     const fila = h('div', { class: 'fila' }, entrada, h('button', { class: 'btn-icono', type: 'button', 'aria-label': 'Quitar', onclick: () => fila.remove() }, icono('close')));
     fila._hecho = hecho;                                                  // se conserva el "tildado" al editar una lista
     $('filasItems').append(fila);
@@ -912,12 +1159,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const esEnc = tipo === 'encuesta';
     $('campoTitulo').hidden = false;
     $('etiquetaTitulo').textContent = esEnc ? 'Pregunta' : (tipo === 'plan' ? 'Nombre del plan' : 'Título (opcional)');
-    $('campoTexto').hidden = !['nota', 'foto', 'link', 'plan'].includes(tipo);
-    $('etiquetaTexto').textContent = tipo === 'nota' ? 'Texto' : (tipo === 'foto' || tipo === 'plan' ? 'Descripción (opcional)' : 'Comentario (opcional)');
+    $('campoTexto').hidden = false;                                       // v2.7: TODOS los tipos tienen texto; en la lista y la encuesta es la descripción
+    $('etiquetaTexto').textContent = tipo === 'nota' ? 'Texto' : (tipo === 'link' ? 'Comentario (opcional)' : 'Descripción (opcional)');
     $('campoUrl').hidden = tipo !== 'link';
     if ($('campoPlan')) $('campoPlan').hidden = tipo !== 'plan';   // v2.4.1: tolera un index.html viejo sin el campo del plan                              // v2.3: calendario de días + hora y lugar opcionales
     if (tipo === 'plan') pintarCalendario();
-    $('campoItems').hidden = !['lista', 'encuesta'].includes(tipo);
+    $('campoItems').hidden = !['lista', 'encuesta'].includes(tipo) || (tipo === 'encuesta' && !!editando);   // v2.7: al editar una encuesta solo cambian la pregunta y la descripción (las opciones y votos no se tocan)
     $('etiquetaItems').textContent = esEnc ? 'Opciones (mínimo 2)' : 'Elementos de la lista';
     $('textoMasItems').textContent = esEnc ? 'Agregar opción' : 'Agregar elemento';
     $('campoFoto').hidden = tipo !== 'foto' || !!editando;                // al editar no se cambia la foto
@@ -1027,9 +1274,11 @@ document.addEventListener('DOMContentLoaded', () => {
     enlace: { enlace: true },
   };
   const PREFIJO_BLOQUE = /^(#{1,3}\s|>\s?|[-*+]\s|\d+[.)]\s)/;   // marcas de comienzo de línea que se reemplazan al cambiar de formato
-  function aplicarFormato(nombre) {
-    const t = $('nuevoTexto'), f = FORMATOS[nombre], v = t.value, ini = t.selectionStart, fin = t.selectionEnd;
-    if (!f) return;
+  /* v2.7: sirve para cualquier campo con formato (t = el cuadro de texto grande por defecto, o el campo de una línea que tiene la barra flotante).
+     En los campos de una línea solo van las marcas que no necesitan salto de línea (negrita, cursiva, tachado, código, enlace). */
+  function aplicarFormato(nombre, t = $('nuevoTexto')) {
+    const f = FORMATOS[nombre], v = t.value, ini = t.selectionStart, fin = t.selectionEnd;
+    if (!f || (f.pre && t.tagName !== 'TEXTAREA')) return;
     if (f.env) {                                                       // marcas a los dos lados de lo seleccionado
       const [a, b, hueco] = f.env;
       if (v.slice(ini - a.length, ini) === a && v.slice(fin, fin + b.length) === b) {
@@ -1077,10 +1326,41 @@ document.addEventListener('DOMContentLoaded', () => {
     aplicarFormato(b.dataset.fmt);
   });
   $('nuevoTexto').addEventListener('input', actualizarVistaTexto);
-  $('nuevoTexto').addEventListener('keydown', (e) => {                 // atajos de teclado
-    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-    const k = e.key.toLowerCase(), fmt = { b: 'negrita', i: 'cursiva', k: 'enlace' }[k];
-    if (fmt) { e.preventDefault(); aplicarFormato(fmt); }
+  /* ----- v2.7: formato en TODOS los campos de texto -----
+     Qué hace: los campos marcados con data-rico (título, elementos de lista, opciones de encuesta, comentarios y el texto grande) aceptan los atajos
+     Ctrl/Cmd + B (negrita), I (cursiva) y K (enlace). Los de una línea además muestran una barra flotante (#barraFlota) con los botones
+     de formato encima del campo mientras se escribe. En la publicación el texto se ve con su formato.
+     Para qué sirve: poder resaltar texto en cualquier parte, no solo en las notas. */
+  document.addEventListener('keydown', (e) => {                        // atajos de teclado
+    const t = e.target;
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || !t || !t.dataset || !t.dataset.rico) return;
+    const fmt = { b: 'negrita', i: 'cursiva', k: 'enlace' }[e.key.toLowerCase()];
+    if (fmt) { e.preventDefault(); aplicarFormato(fmt, t); }
+  });
+  const barraFlota = $('barraFlota');
+  let campoFlota = null;                                               // campo de una línea que tiene el foco (el que recibe el formato)
+  function ocultarBarraFlota() { campoFlota = null; barraFlota.hidden = true; }
+  /* Pone la barra justo encima del campo (o debajo si arriba no hay lugar) y la oculta si el campo quedó fuera de la pantalla */
+  function colocarBarraFlota() {
+    if (!campoFlota || !document.body.contains(campoFlota)) return void ocultarBarraFlota();
+    const r = campoFlota.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > window.innerHeight) { barraFlota.hidden = true; return; }
+    barraFlota.hidden = false;
+    const bw = barraFlota.offsetWidth, bh = barraFlota.offsetHeight;
+    let arriba = r.top - bh - 6; if (arriba < 6) arriba = Math.min(r.bottom + 6, window.innerHeight - bh - 6);
+    barraFlota.style.top = `${arriba}px`; barraFlota.style.left = `${Math.max(6, Math.min(r.left, window.innerWidth - bw - 6))}px`;
+  }
+  document.addEventListener('focusin', (e) => {
+    const t = e.target;
+    if (t && t.dataset && t.dataset.rico === 'flota') { campoFlota = t; colocarBarraFlota(); }
+    else if (!barraFlota.contains(t)) ocultarBarraFlota();
+  });
+  document.addEventListener('focusout', (e) => { if (e.target === campoFlota) setTimeout(() => { if (document.activeElement !== campoFlota) ocultarBarraFlota(); }, 120); });
+  window.addEventListener('scroll', colocarBarraFlota, true); window.addEventListener('resize', colocarBarraFlota);
+  barraFlota.addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });   // los botones no le quitan el foco (ni la selección) al campo
+  barraFlota.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-fmt]');
+    if (b && campoFlota) { aplicarFormato(b.dataset.fmt, campoFlota); colocarBarraFlota(); }
   });
 
   /* ============================================================
@@ -1365,11 +1645,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   async function borrarCategoria(c) {
     if (!(await confirmar({ titulo: 'Borrar categoría', texto: `Se borrará «${c.nombre}». Las publicaciones no se borran: solo dejan de tener esta categoría.`, boton: 'Borrar' }))) return;
-    try {
-      await api(`/categorias/${c.id}`, { metodo: 'DELETE' });
-      categorias = categorias.filter((x) => x.id !== c.id); ultimaFirmaCats = JSON.stringify(categorias);
-      catsElegidas.delete(c.id); pintarCatsComposer(); pintar(); avisar('Categoría borrada.', 'ok');
-    } catch (e) { avisar(e.message, 'error'); }
+    catsElegidas.delete(c.id);
+    encolar({ k: 'cat-', id: c.id });                                   // v2.7: la ficha desaparece al instante (si el servidor falla vuelve con un aviso)
   }
 
   /* Ventana "Nueva categoría" */
@@ -1409,20 +1686,16 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btnNuevaCat').addEventListener('click', () => abrirNuevaCategoria((c) => { catsElegidas.add(c.id); pintarCatsComposer(); }));
   document.querySelectorAll('#modalCategoria [data-cerrar]').forEach((b) => b.addEventListener('click', () => cerrarModal(modalCat)));
   modalCat.addEventListener('mousedown', (e) => { if (e.target === modalCat) cerrarModal(modalCat); });
-  $('formCategoria').addEventListener('submit', async (e) => {
+  $('formCategoria').addEventListener('submit', (e) => {
     e.preventDefault();
     const nombre = $('catNombre').value.trim();
     if (!nombre) { $('errorCat').textContent = 'Ponle un nombre a la categoría.'; $('catNombre').focus(); return; }
-    const boton = $('btnCrearCat'); boton.disabled = true;
-    try {
-      const r = await api('/categorias', { metodo: 'POST', cuerpo: { nombre, icono: iconoCat } });
-      if (!categorias.some((c) => c.id === r.categoria.id)) categorias = [...categorias, r.categoria];
-      ultimaFirmaCats = JSON.stringify(categorias);
-      cerrarModal(modalCat); pintar();                                  // pintar() también actualiza la fila de filtros
-      if (alCrearCategoria) alCrearCategoria(r.categoria);
-      avisar(`Categoría «${r.categoria.nombre}» creada.`, 'ok');
-    } catch (err) { $('errorCat').textContent = err.message; }
-    finally { boton.disabled = false; }
+    if (categorias.some((c) => c.nombre.toLowerCase() === nombre.toLowerCase())) { $('errorCat').textContent = 'Ya existe una categoría con ese nombre.'; return; }
+    /* v2.7: la categoría aparece al instante (con un id propio que el servidor respeta); si el servidor la rechaza se quita y sale un aviso */
+    const cat = { id: uuid(), nombre, icono: iconoCat, autor: yo, creado: Date.now() };
+    encolar({ k: 'cat+', id: cat.id, cat, cuerpo: { id: cat.id, nombre, icono: iconoCat } });
+    cerrarModal(modalCat);
+    if (alCrearCategoria) alCrearCategoria(cat);
   });
 
   /* ----- Foto: elegir y comprimir en el celular antes de subir ----- */
@@ -1473,8 +1746,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (tipo === 'lista') { if (!filas.length) return void (error.textContent = 'Agrega al menos un elemento.'); cuerpo.datos.items = filas; }
     if (tipo === 'encuesta') {
       if (!cuerpo.titulo) return void (error.textContent = 'Escribe la pregunta.');
-      if (filas.length < 2) return void (error.textContent = 'Agrega al menos 2 opciones.');
-      cuerpo.datos.opciones = filas.map((f) => f.t);
+      if (!editando) {                                                  // v2.7: al editar una encuesta no se tocan las opciones
+        if (filas.length < 2) return void (error.textContent = 'Agrega al menos 2 opciones.');
+        cuerpo.datos.opciones = filas.map((f) => f.t);
+      }
     }
     if (tipo === 'plan') {                                              // v2.3: nombre + al menos un día; hora y lugar son opcionales
       if (!cuerpo.titulo) return void (error.textContent = 'Ponle un nombre al plan.');
@@ -1493,22 +1768,45 @@ document.addEventListener('DOMContentLoaded', () => {
       cuerpo.imagen = foto.dataUrl; cuerpo.datos.w = foto.w; cuerpo.datos.h = foto.h;
     }
 
-    const boton = $('btnPublicar'); boton.disabled = true;
-    try {
-      if (editando) {
-        const r = await api(`/posts/${editando.id}`, { metodo: 'PATCH', cuerpo });
-        reemplazar(r.post); avisar('Cambios guardados.', 'ok');
-      } else {
-        const r = await api('/posts', { metodo: 'POST', cuerpo });
-        posts = [r.post, ...posts.filter((x) => x.id !== r.post.id)];
-        ultimaFirma = JSON.stringify(posts.map((x) => [x.id, x.actualizado]));
-        pintar(); avisar('¡Publicado!', 'ok');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-      cerrarModal($('modalNuevo'));
-    } catch (err) { error.textContent = err.message; }
-    finally { boton.disabled = false; }
+    /* v2.7: se publica / guarda AL INSTANTE: la ventana se cierra y la publicación ya aparece en el muro; el servidor la recibe en segundo plano.
+       Si lo rechaza, la publicación desaparece, sale un aviso de error y esta ventana se vuelve a abrir con lo que habías escrito (restaurarFormulario). */
+    const form = { cuerpo: clon(cuerpo), foto: tipo === 'foto' && !editando ? foto : null };
+    if (editando) encolar({ k: 'editar', id: editando.id, cuerpo, form });
+    else {
+      const id = uuid();
+      if (cuerpo.imagen) fotosLocales.set(id, cuerpo.imagen);          // la foto se ve ya mismo con la copia local
+      const op = { k: 'crear', id, cuerpo, form };
+      op.t = Date.now(); op.quien = yo; op.post = postLocal(op);       // (encolar vuelve a poner la hora; la publicación local ya quedó armada)
+      encolar(op);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    cerrarModal($('modalNuevo'));
   });
+
+  /* Reabre el formulario con lo que se había escrito cuando el servidor rechazó una publicación o una edición (v2.7) */
+  function restaurarFormulario(op) {
+    if (!$('modalNuevo').hidden) return;                                // ya hay otro formulario abierto: no se pisa
+    const c = op.form.cuerpo;
+    if (op.k === 'editar') {
+      const p = posts.find((x) => x.id === op.id); if (!p) return;
+      abrirEditor(p);                                                   // la publicación todavía se ve con la edición aplicada: el formulario ya queda con lo escrito
+      return;
+    }
+    abrirNuevo(); elegirTipo(c.tipo);
+    $('nuevoTituloCampo').value = c.titulo || ''; $('nuevoTexto').value = c.texto || ''; $('nuevoUrl').value = c.url || '';
+    if (c.tipo === 'lista' || c.tipo === 'encuesta') {
+      $('filasItems').replaceChildren();
+      (c.tipo === 'lista' ? c.datos.items : c.datos.opciones.map((t) => ({ t, hecho: false }))).forEach((i) => agregarFila(i.t, i.hecho));
+    }
+    if (c.tipo === 'plan') {
+      formDias = { dias: (c.datos.dias || []).map((x) => ({ f: x.f, e: x.e })), antes: { ...(c.datos.antes || {}) } }; formDiasTocados = true;
+      if ($('planHora')) { $('planHora').value = c.datos.hora || ''; $('planLugar').value = c.datos.lugar || ''; }
+      if (formDias.dias.length) mesCalendario = primerDiaDelMes(aFecha(formDias.dias[0].f));
+      pintarCalendario();
+    }
+    if (c.tipo === 'foto' && op.form.foto) { foto = op.form.foto; $('fotoPrevia').src = foto.dataUrl; $('fotoPrevia').hidden = false; $('textoFoto').textContent = 'Cambiar foto'; }
+    catsElegidas = new Set(c.categorias || []); pintarCatsComposer(); actualizarVistaTexto();
+  }
 
   /* Esc: cierra la ventana o el visor que esté arriba (la de acceso no se puede cerrar) */
   document.addEventListener('keydown', (e) => {

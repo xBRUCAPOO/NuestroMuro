@@ -28,7 +28,9 @@ export async function onRequestPost({ request, env, data, waitUntil }) {
   const repetida = await db.prepare('SELECT id FROM categorias WHERE LOWER(nombre) = LOWER(?)').bind(nombre).first();
   if (repetida) return json({ error: 'Ya existe una categoría con ese nombre.' }, 409);
 
-  const cat = { id: crypto.randomUUID(), nombre, icono, autor: data.quien, creado: Date.now() };
+  /* v2.7: el navegador crea la categoría al instante y propone su id (UUID); se usa ese mismo para que la ficha que ya se ve sea la definitiva */
+  const idPedido = typeof c.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.id) && !(await db.prepare('SELECT 1 AS x FROM categorias WHERE id = ?').bind(c.id).first()) ? c.id : null;
+  const cat = { id: idPedido || crypto.randomUUID(), nombre, icono, autor: data.quien, creado: Date.now() };
   await db.prepare('INSERT INTO categorias (id, nombre, icono, autor, creado) VALUES (?, ?, ?, ?, ?)')
     .bind(cat.id, cat.nombre, cat.icono, cat.autor, cat.creado).run();
   await notificar({ env, request, waitUntil }, db, { de: data.quien, tipo: 'categoria', texto: `${data.quien} creó la categoría «${cat.nombre}»` });   // v2.5: aviso
