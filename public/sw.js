@@ -11,7 +11,7 @@
    Para qué sirve: que sea una app instalable, rápida y que siempre muestre la última versión publicada.
    Cambiar VERSION fuerza a renovar las copias guardadas (no hace falta tocarlo en cada push: la red tiene prioridad).
    ============================================================ */
-const VERSION = 'v2.8.1';   // v2.8: imágenes de los perfiles (/api/perfiles/imagen/…) también primero desde la copia guardada; v2.4: fotos de perfil en el cascarón guardado; v2.5: avisos del celular (push); v2.7: fotos en gris de la escena de inicio de sesión
+const VERSION = 'v2.9.0';   // v2.8: imágenes de los perfiles (/api/perfiles/imagen/…) también primero desde la copia guardada; v2.4: fotos de perfil en el cascarón guardado; v2.5: avisos del celular (push); v2.7: fotos en gris de la escena de inicio de sesión
 const CACHE_ESTATICO = `muro-estatico-${VERSION}`;   // cascarón de la app
 const CACHE_DATOS = 'muro-datos';                     // listado del muro y fotos
 const CACHE_FUENTES = 'muro-fuentes';                 // Google Fonts

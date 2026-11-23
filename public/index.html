@@ -97,8 +97,8 @@
 
   <!-- Pie: versión y fecha de la última modificación de index.html (actualizar cada vez que se edite este archivo) -->
   <footer class="pie">
-    <!-- v2.8.1: buscador en los perfiles, entradas siempre en una columna con otro diseño (ícono de color, título como en el muro, texto en caja oscura) y barra de formato completa (links, viñetas, lista numerada); v2.8.0: perfiles (pestaña "Perfiles" y foto de cada persona: frase, entradas con ícono, título, texto con formato e imágenes), cerrar sesión pasa al perfil propio y el tachado de las listas se ve bien en varias líneas; v2.7.0: todo se actualiza al instante (si el servidor falla se deshace y avisa), lista completada en verde, descripción en lista y encuesta, formato de texto en todos los campos, menos color de la persona, animaciones más fluidas y escena de inicio de sesión; v2.6.0: cambio instantáneo de los días del plan y tipos de día al crear el plan; v2.5.0: notificaciones (campanita + avisos del celular); v2.4.0: fotos de perfil (carta azul M / roja xB) en vez de las iniciales; v2.3.0: tipo "plan" en lugar de "video" -->
-    <span id="pieVersion">Versión 2.8.1</span>
+    <!-- v2.9.0: respuestas a comentarios (hilos), barras de formato debajo del campo de texto y círculo de carga en las entradas de perfil; v2.8.1: buscador en los perfiles, entradas siempre en una columna con otro diseño (ícono de color, título como en el muro, texto en caja oscura) y barra de formato completa (links, viñetas, lista numerada); v2.8.0: perfiles (pestaña "Perfiles" y foto de cada persona: frase, entradas con ícono, título, texto con formato e imágenes), cerrar sesión pasa al perfil propio y el tachado de las listas se ve bien en varias líneas; v2.7.0: todo se actualiza al instante (si el servidor falla se deshace y avisa), lista completada en verde, descripción en lista y encuesta, formato de texto en todos los campos, menos color de la persona, animaciones más fluidas y escena de inicio de sesión; v2.6.0: cambio instantáneo de los días del plan y tipos de día al crear el plan; v2.5.0: notificaciones (campanita + avisos del celular); v2.4.0: fotos de perfil (carta azul M / roja xB) en vez de las iniciales; v2.3.0: tipo "plan" en lugar de "video" -->
+    <span id="pieVersion">Versión 2.9.0</span>
     <span aria-hidden="true">·</span>
     <span id="pieFecha">23/11/2026</span>
   </footer>
@@ -144,7 +144,9 @@
         <!-- NUEVO v2.1: texto con formato. La barra de botones inserta marcas Markdown (negrita, cursiva, listas…) alrededor de lo seleccionado;
              en la publicación se muestran ya con su formato. Los botones los maneja script.js por su atributo data-fmt -->
         <div class="campo" id="campoTexto"><label class="campo__etiqueta" id="etiquetaTexto" for="nuevoTexto">Texto</label>
-          <div class="formato" id="barraFormato" role="toolbar" aria-label="Formato de texto">
+          <textarea class="campo__entrada" id="nuevoTexto" rows="4" maxlength="5000" data-rico="completo"></textarea>
+          <!-- v2.9: la barra de formato va DEBAJO del cuadro de texto (antes arriba) para que el menú del celular al seleccionar texto no la tape -->
+          <div class="formato formato--abajo" id="barraFormato" role="toolbar" aria-label="Formato de texto">
             <button class="btn-icono" type="button" data-fmt="negrita" title="Negrita (Ctrl+B)" aria-label="Negrita"><span class="material-symbols-rounded">format_bold</span></button>
             <button class="btn-icono" type="button" data-fmt="cursiva" title="Cursiva (Ctrl+I)" aria-label="Cursiva"><span class="material-symbols-rounded">format_italic</span></button>
             <button class="btn-icono" type="button" data-fmt="tachado" title="Tachado" aria-label="Tachado"><span class="material-symbols-rounded">strikethrough_s</span></button>
@@ -158,7 +160,6 @@
             <span class="formato__sep formato__sep--der" aria-hidden="true"></span>
             <button class="btn-icono" type="button" data-fmt="vista" id="btnVistaTexto" aria-pressed="false" title="Ver cómo queda" aria-label="Ver cómo queda"><span class="material-symbols-rounded">visibility</span></button>
           </div>
-          <textarea class="campo__entrada" id="nuevoTexto" rows="4" maxlength="5000" data-rico="completo"></textarea>
           <div class="md-previa" id="textoPrevia" hidden aria-live="polite"></div>
           <p class="campo__ayuda">Selecciona texto y toca un botón. Como en WhatsApp: *negrita*, _cursiva_, ~tachado~, ```mono```, - listas, &gt; citas, [texto](https://…). El formato también funciona en el título, los elementos de la lista, las opciones de la encuesta y los comentarios.</p></div>
         <label class="campo" id="campoUrl"><span class="campo__etiqueta">Dirección (link)</span>
@@ -258,7 +259,9 @@
         <!-- v2.8.1: el texto de la entrada tiene la barra de formato completa (negrita, cursiva, tachado, código, título, cita, viñetas, lista numerada, enlace
              y vista previa); los botones los maneja script.js por su atributo data-fmt -->
         <div class="campo"><label class="campo__etiqueta" for="entTexto">Texto</label>
-          <div class="formato" id="entBarraFormato" role="toolbar" aria-label="Formato de texto">
+          <textarea class="campo__entrada" id="entTexto" rows="5" maxlength="3000" placeholder="Escribe lo que quieras contar…" data-rico="completo"></textarea>
+          <!-- v2.9: la barra de formato va DEBAJO del cuadro de texto (antes arriba) para que el menú del celular al seleccionar texto no la tape -->
+          <div class="formato formato--abajo" id="entBarraFormato" role="toolbar" aria-label="Formato de texto">
             <button class="btn-icono" type="button" data-fmt="negrita" title="Negrita (Ctrl+B)" aria-label="Negrita"><span class="material-symbols-rounded">format_bold</span></button>
             <button class="btn-icono" type="button" data-fmt="cursiva" title="Cursiva (Ctrl+I)" aria-label="Cursiva"><span class="material-symbols-rounded">format_italic</span></button>
             <button class="btn-icono" type="button" data-fmt="tachado" title="Tachado" aria-label="Tachado"><span class="material-symbols-rounded">strikethrough_s</span></button>
@@ -272,7 +275,6 @@
             <span class="formato__sep formato__sep--der" aria-hidden="true"></span>
             <button class="btn-icono" type="button" data-fmt="vista" id="entBtnVista" aria-pressed="false" title="Ver cómo queda" aria-label="Ver cómo queda"><span class="material-symbols-rounded">visibility</span></button>
           </div>
-          <textarea class="campo__entrada" id="entTexto" rows="5" maxlength="3000" placeholder="Escribe lo que quieras contar…" data-rico="completo"></textarea>
           <div class="md-previa" id="entTextoPrevia" hidden aria-live="polite"></div>
           <p class="campo__ayuda">Selecciona texto y toca un botón. Como en WhatsApp: *negrita*, _cursiva_, ~tachado~, - viñetas, 1. lista numerada, [texto](https://…) para un link.</p></div>
         <div class="campo"><span class="campo__etiqueta" id="entEtiquetaImgs">Imágenes (hasta 4)</span>

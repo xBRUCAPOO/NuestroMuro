@@ -7,6 +7,7 @@
    { accion: "dia", fecha: "2026-11-21", estado: "seguro" } → NUEVO v2.3: cambia el estado de un día de un plan (lo pueden hacer ambos);
    v2.6: también { accion: "dia", cambios: [{ fecha, estado }, …] } para guardar varios toques seguidos de una vez
    { accion: "comentar", texto: "…" }       → NUEVO v2.2: agrega un comentario (lo puede hacer cualquiera, también en publicaciones ajenas)
+   { accion: "comentar", texto: "…", resp: "ID" } → NUEVO v2.9: responde a otro comentario (hilos anidados, como Reddit)
    { accion: "borrar_comentario", id: "…" }   → NUEVO v2.2: borra un comentario, pero solo quien lo escribió
    Para qué sirve: interactuar con el muro sin cambiar quién es el autor de la publicación.
    Los comentarios se guardan dentro de "datos.comentarios" de la publicación: [{ id, autor, texto, creado }].
@@ -16,6 +17,21 @@ import { notificar, otraPersona, refPost, recortar, etiquetaDia } from '../../..
 
 /* Límites de los comentarios (aquí y no en config.js para no pisar las contraseñas que ya pusiste allí) */
 const LIM_COMENTARIOS = { texto: 500, porPost: 200 };
+
+/* NUEVO v2.9: respuestas a comentarios. Un comentario puede llevar "resp" = id del comentario al que responde (así se arma el hilo).
+   Borrar un comentario que ya tiene respuestas no se lleva las respuestas de la otra persona: queda un "Comentario eliminado" (borrado: true, sin texto)
+   que mantiene el hilo; si no tiene respuestas se quita del todo. Después se limpian los "eliminados" que se quedaron sin respuestas.
+   (script.js tiene la misma regla: quitarComentario) */
+function quitarComentario(lista, id) {
+  let r = lista.some((c) => c.resp === id)
+    ? lista.map((c) => (c.id === id ? { id: c.id, autor: c.autor, texto: '', creado: c.creado, ...(c.resp ? { resp: c.resp } : {}), borrado: true } : c))
+    : lista.filter((c) => c.id !== id);
+  for (;;) {   // poda de "eliminados" sin respuestas (puede encadenarse hacia arriba)
+    const huerfanos = r.filter((c) => c.borrado && !r.some((x) => x.resp === c.id)).map((c) => c.id);
+    if (!huerfanos.length) return r;
+    r = r.filter((c) => !huerfanos.includes(c.id));
+  }
+}
 
 export async function onRequestPost({ request, env, data, params, waitUntil }) {
   let c = {};
@@ -73,19 +89,25 @@ export async function onRequestPost({ request, env, data, params, waitUntil }) {
     if (!texto) return json({ error: 'Escribe algo para comentar.' }, 400);
     const l = Array.isArray(d.comentarios) ? d.comentarios : [];
     if (l.length >= LIM_COMENTARIOS.porPost) return json({ error: 'Esta publicación ya tiene demasiados comentarios.' }, 400);
+    /* v2.9: si es una respuesta, el comentario al que responde tiene que existir y no estar eliminado */
+    const padre = typeof c.resp === 'string' && c.resp ? l.find((x) => x.id === c.resp) : null;
+    if (typeof c.resp === 'string' && c.resp && !padre) return json({ error: 'El comentario al que respondes ya no existe.' }, 404);
+    if (padre && padre.borrado) return json({ error: 'No se puede responder a un comentario eliminado.' }, 400);
     /* v2.7: el comentario ya se ve en pantalla con un id que puso el navegador; se usa ese mismo (si tiene formato UUID) para que no cambie al
        confirmarse. Si ya existía un comentario con ese id (envío repetido) no se duplica y no se avisa de nuevo. */
     const idCom = typeof c.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.id) && !l.some((x) => x.id === c.id) ? c.id : crypto.randomUUID();
     if (typeof c.id === 'string' && l.some((x) => x.id === c.id)) return json({ post: p });
-    d.comentarios = [...l, { id: idCom, autor: yo, texto, creado: Date.now() }];
-    aviso = { tipo: 'comentario', texto: `${yo} comentó en ${ref}: «${recortar(texto, 80)}»` };
+    d.comentarios = [...l, { id: idCom, autor: yo, texto, creado: Date.now(), ...(padre ? { resp: padre.id } : {}) }];
+    /* v2.9: el aviso dice si es una respuesta (y si es a un comentario de la otra persona: "a tu comentario") */
+    aviso = { tipo: 'comentario', texto: padre ? `${yo} respondió ${padre.autor === yo ? '' : 'a tu comentario '}en ${ref}: «${recortar(texto, 80)}»` : `${yo} comentó en ${ref}: «${recortar(texto, 80)}»` };
   } else if (c.accion === 'borrar_comentario') {
     /* NUEVO v2.2: solo se puede borrar un comentario propio */
     const l = Array.isArray(d.comentarios) ? d.comentarios : [];
     const com = l.find((x) => x.id === c.id);
     if (!com) return json({ error: 'El comentario ya no existe.' }, 404);
     if (com.autor !== yo) return json({ error: 'Solo quien lo escribió puede borrar el comentario.' }, 403);
-    d.comentarios = l.filter((x) => x.id !== c.id);
+    if (com.borrado) return json({ error: 'El comentario ya no existe.' }, 404);
+    d.comentarios = quitarComentario(l, c.id);   // v2.9: si tiene respuestas queda como "Comentario eliminado"; si no, se quita
     aviso = { tipo: 'comentario', texto: `${yo} borró un comentario en ${ref}` };
   } else {
     return json({ error: 'Acción no válida.' }, 400);

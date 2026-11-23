@@ -303,7 +303,8 @@ document.addEventListener('DOMContentLoaded', () => {
     categorias = []; ultimaFirmaCats = ''; filtro.cat = '';              // v2.1: también se vuelven a pedir las categorías
     avisos = []; noLeidas = 0; avisosVistos.clear(); primeraCargaAvisos = true; pintarContador();   // v2.5: notificaciones de la otra identidad
     $('btnNotif').hidden = false; sincronizarPush();
-    comentariosAbiertos.clear(); borradores.clear();                     // v2.2: al cambiar de identidad no quedan comentarios desplegados ni borradores de la otra persona
+    comentariosAbiertos.clear(); borradores.clear(); respondiendo.pid = respondiendo.cid = null; respuestasPlegadas.clear();   // v2.9: tampoco queda una respuesta a medio escribir ni hilos plegados
+                        // v2.2: al cambiar de identidad no quedan comentarios desplegados ni borradores de la otra persona
     pintarFiltroCategorias();
     reiniciarPerfiles(quien);                                            // v2.8: perfiles de la sesión anterior fuera; se vuelve a la pestaña del muro
     cargar();
@@ -416,9 +417,27 @@ document.addEventListener('DOMContentLoaded', () => {
       d.opciones.forEach((o) => { o.votos = o.votos.filter((x) => x !== quien); });      // un solo voto por persona
       if (!yaVotaba) d.opciones[c.opcion].votos.push(quien);                              // tocar tu opción otra vez quita el voto
     } else if (c.accion === 'item' && Array.isArray(d.items) && d.items[c.indice]) d.items[c.indice].hecho = !!c.hecho;
-    else if (c.accion === 'comentar') { const l = Array.isArray(d.comentarios) ? d.comentarios : []; if (!l.some((x) => x.id === c.id)) d.comentarios = [...l, { id: c.id, autor: quien, texto: c.texto, creado: op.t }]; }
-    else if (c.accion === 'borrar_comentario') d.comentarios = (Array.isArray(d.comentarios) ? d.comentarios : []).filter((x) => x.id !== c.id);
+    else if (c.accion === 'comentar') {
+      /* v2.9: "resp" = id del comentario al que se responde (debe existir y no estar eliminado, igual que en el servidor) */
+      const l = Array.isArray(d.comentarios) ? d.comentarios : [], padre = c.resp ? l.find((x) => x.id === c.resp) : null;
+      if (!l.some((x) => x.id === c.id) && (!c.resp || (padre && !padre.borrado))) d.comentarios = [...l, { id: c.id, autor: quien, texto: c.texto, creado: op.t, ...(padre ? { resp: padre.id } : {}) }];
+    } else if (c.accion === 'borrar_comentario') {
+      const l = Array.isArray(d.comentarios) ? d.comentarios : [], com = l.find((x) => x.id === c.id);
+      if (com && !com.borrado) d.comentarios = quitarComentario(l, c.id);
+    }
     return q;
+  }
+  /* v2.9: borrar un comentario. Si ya tiene respuestas queda como "Comentario eliminado" (borrado: true) para no llevarse las respuestas; si no, se quita.
+     Después se limpian los "eliminados" que se quedaron sin respuestas. Es la misma regla que quitarComentario() en functions/api/posts/[id]/accion.js */
+  function quitarComentario(lista, id) {
+    let r = lista.some((c) => c.resp === id)
+      ? lista.map((c) => (c.id === id ? { id: c.id, autor: c.autor, texto: '', creado: c.creado, ...(c.resp ? { resp: c.resp } : {}), borrado: true } : c))
+      : lista.filter((c) => c.id !== id);
+    for (;;) {
+      const huerfanos = r.filter((c) => c.borrado && !r.some((x) => x.resp === c.id)).map((c) => c.id);
+      if (!huerfanos.length) return r;
+      r = r.filter((c) => !huerfanos.includes(c.id));
+    }
   }
   /* Días de un plan a partir de lo que mandó el formulario (igual que construirDatos en comun.js): fechas sueltas conservan el estado de los días
      que ya estaban; con estados + "antes" se respeta lo elegido y, si hay un día seguro, los demás quedan descartados */
@@ -844,7 +863,14 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----- Comentarios (NUEVO v2.2) -----
      Qué hace: bajo cada publicación se puede desplegar una sección de comentarios; cada comentario lleva el color de quien lo escribió
      (azul M / rojo xB), acepta el mismo formato de texto de WhatsApp y solo su autor puede borrarlo.
-     Para qué sirve: conversar sobre las publicaciones, también las del otro. */
+     v2.9: RESPUESTAS, como en Reddit / TikTok. Cada comentario tiene un botón "Responder" que abre un cuadro justo debajo de él; la respuesta queda
+     anidada (con una línea a la izquierda) y se puede responder a las respuestas. Los comentarios con respuestas tienen un botón para ocultarlas / verlas.
+     La sangría se limita a NIVEL_SANGRIA niveles (más abajo las respuestas siguen alineadas y dicen a quién responden). Si se borra un comentario que
+     ya tiene respuestas queda "Comentario eliminado" para no romper el hilo.
+     Para qué sirve: conversar sobre las publicaciones, también las del otro, sin perder el hilo. */
+  const NIVEL_SANGRIA = 3;
+  const respondiendo = { pid: null, cid: null };   // v2.9: comentario al que se está escribiendo una respuesta ahora
+  const respuestasPlegadas = new Set();            // v2.9: ids de comentarios con sus respuestas ocultas
   function seccionComentarios(p) {
     const coms = (p.datos && p.datos.comentarios) || [];
     /* v2.7: data-rico = acepta formato (barra flotante y Ctrl+B/I/K). El comentario se ve al instante (accion() lo agrega en pantalla y lo manda en segundo plano) */
@@ -852,16 +878,67 @@ document.addEventListener('DOMContentLoaded', () => {
     campo.value = borradores.get(p.id) || '';
     campo.addEventListener('input', () => { borradores.set(p.id, campo.value); campo.style.height = 'auto'; campo.style.height = Math.min(campo.scrollHeight, 120) + 'px'; });
     campo.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviarComentario(p, campo); } });   // Enter envía; Shift+Enter hace un salto de línea
+    /* v2.9: se arma el árbol: respuestas de cada comentario (si el comentario al que responde ya no está, pasa a ser uno de primer nivel) */
+    const porId = new Map(coms.map((c) => [c.id, c])), hijosDe = new Map();
+    coms.forEach((c) => { const k = c.resp && porId.has(c.resp) ? c.resp : ''; if (!hijosDe.has(k)) hijosDe.set(k, []); hijosDe.get(k).push(c); });
+    const cuantas = (id) => (hijosDe.get(id) || []).reduce((n, x) => n + 1 + cuantas(x.id), 0);   // todas las respuestas de un comentario (también las anidadas)
+    function nodo(c, nivel) {
+      const hijos = hijosDe.get(c.id) || [], plegado = respuestasPlegadas.has(c.id), n = cuantas(c.id), padre = c.resp && porId.get(c.resp);
+      const abierto = respondiendo.pid === p.id && respondiendo.cid === c.id;
+      const caja = c.borrado
+        ? h('div', { class: 'comentario comentario--borrado', 'data-k': 'c' }, h('span', { class: 'comentario__borrado', text: 'Comentario eliminado' }))
+        : h('div', { class: 'comentario', 'data-autor': c.autor, 'data-k': 'c' },
+          h('div', { class: 'comentario__cab' },
+            avatar(c.autor, 'avatar--mini'),
+            /* en los niveles sin sangría se dice a quién responde */
+            nivel > NIVEL_SANGRIA && padre ? h('span', { class: 'comentario__a' }, icono('subdirectory_arrow_right'), h('span', { text: NOMBRE_ESCENA[padre.autor] })) : null,
+            h('time', { class: 'comentario__hora', 'data-ts': c.creado, text: hora(c.creado), title: new Date(c.creado).toLocaleString('es-AR') }),
+            c.autor === yo ? h('button', { class: 'comentario__borrar', type: 'button', 'aria-label': 'Borrar comentario', title: 'Borrar comentario', onclick: () => borrarComentario(p, c, n) }, icono('close')) : null),
+          md(c.texto, 'comentario__texto'),
+          h('div', { class: 'comentario__acc' },
+            h('button', { class: 'comentario__btn', type: 'button', 'aria-pressed': String(abierto), onclick: () => alternarRespuesta(p, c) }, icono('reply'), h('span', { text: 'Responder' })),
+            n ? h('button', { class: 'comentario__btn', type: 'button', 'aria-expanded': String(!plegado), onclick: () => alternarHilo(p, c) },
+              icono(plegado ? 'keyboard_arrow_down' : 'keyboard_arrow_up'), h('span', { text: plegado ? `Ver ${n} respuesta${n === 1 ? '' : 's'}` : `Ocultar respuestas (${n})` })) : null));
+      return h('div', { class: 'hilo', 'data-k': c.id },
+        caja,
+        abierto && !c.borrado ? cajaRespuesta(p, c) : null,
+        hijos.length && !plegado ? h('div', { class: 'respuestas' + (nivel >= NIVEL_SANGRIA ? ' respuestas--plana' : ''), 'data-k': 'respuestas' }, hijos.map((x) => nodo(x, nivel + 1))) : null);
+    }
     return h('div', { class: 'comentarios' },
-      coms.map((c) => h('div', { class: 'comentario', 'data-autor': c.autor, 'data-k': c.id },
-        h('div', { class: 'comentario__cab' },
-          avatar(c.autor, 'avatar--mini'),
-          h('time', { class: 'comentario__hora', 'data-ts': c.creado, text: hora(c.creado), title: new Date(c.creado).toLocaleString('es-AR') }),
-          c.autor === yo ? h('button', { class: 'comentario__borrar', type: 'button', 'aria-label': 'Borrar comentario', title: 'Borrar comentario', onclick: () => borrarComentario(p, c) }, icono('close')) : null),
-        md(c.texto, 'comentario__texto'))),
+      (hijosDe.get('') || []).map((c) => nodo(c, 0)),
       h('div', { class: 'comentar', 'data-k': 'nuevo' }, campo,
         /* el cuadro de comentario se conserva al actualizar la tarjeta (ver morph), por eso el botón lo busca en la página en vez de usar esta copia */
         h('button', { class: 'btn-icono comentar__enviar', type: 'button', 'aria-label': 'Enviar comentario', title: 'Enviar', onclick: (e) => enviarComentario(p, e.currentTarget.closest('.comentar').querySelector('textarea')) }, icono('send'))));
+  }
+  /* v2.9: cuadro para escribir la respuesta, justo debajo del comentario (el borrador se guarda por separado y no se pierde al actualizarse la tarjeta) */
+  function cajaRespuesta(p, c) {
+    const clave = `${p.id}:${c.id}`;
+    const campo = h('textarea', { class: 'campo__entrada comentar__campo', rows: '1', maxlength: '500', placeholder: `Responder a ${NOMBRE_ESCENA[c.autor]}…`, 'aria-label': `Responder a ${NOMBRE_ESCENA[c.autor]}`, 'data-rico': 'flota' });
+    campo.value = borradores.get(clave) || '';
+    campo.addEventListener('input', () => { borradores.set(clave, campo.value); campo.style.height = 'auto'; campo.style.height = Math.min(campo.scrollHeight, 120) + 'px'; });
+    campo.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviarRespuesta(p, c, campo); }
+      else if (e.key === 'Escape') { e.stopPropagation(); cerrarRespuesta(); }
+    });
+    return h('div', { class: 'comentar comentar--resp', 'data-k': 'responder' }, campo,
+      h('button', { class: 'btn-icono comentar__enviar', type: 'button', 'aria-label': 'Enviar respuesta', title: 'Enviar', onclick: (e) => enviarRespuesta(p, c, e.currentTarget.closest('.comentar').querySelector('textarea')) }, icono('send')),
+      h('button', { class: 'btn-icono', type: 'button', 'aria-label': 'Cancelar respuesta', title: 'Cancelar', onclick: () => cerrarRespuesta() }, icono('close')));
+  }
+  function cerrarRespuesta() { respondiendo.pid = respondiendo.cid = null; pintar(); }
+  /* Abre (o cierra, si ya estaba abierto) el cuadro de respuesta de un comentario y le da el foco */
+  function alternarRespuesta(p, c) {
+    if (respondiendo.pid === p.id && respondiendo.cid === c.id) return cerrarRespuesta();
+    respondiendo.pid = p.id; respondiendo.cid = c.id;
+    pintar();
+    const campo = nodos.get(p.id) && nodos.get(p.id).querySelector('.comentar--resp textarea');
+    if (campo) campo.focus();
+  }
+  function alternarHilo(p, c) { if (respuestasPlegadas.has(c.id)) respuestasPlegadas.delete(c.id); else respuestasPlegadas.add(c.id); pintar(); }
+  /* Manda la respuesta: se cierra el cuadro y aparece al instante dentro del hilo (si el servidor falla, el texto vuelve al cuadro principal con un aviso) */
+  function enviarRespuesta(p, c, campo) {
+    const texto = campo.value.trim(); if (!texto) return;
+    borradores.delete(`${p.id}:${c.id}`); respondiendo.pid = respondiendo.cid = null; respuestasPlegadas.delete(c.id);   // el hilo queda desplegado para ver la respuesta
+    accion(p, { accion: 'comentar', texto, id: uuid(), resp: c.id });
   }
   /* Manda el comentario escrito: se vacía el cuadro y el comentario aparece al instante (si el servidor falla, vuelve al cuadro con un aviso) */
   function enviarComentario(p, campo) {
@@ -869,8 +946,8 @@ document.addEventListener('DOMContentLoaded', () => {
     campo.value = ''; campo.style.height = 'auto'; borradores.delete(p.id);
     accion(p, { accion: 'comentar', texto, id: uuid() });
   }
-  async function borrarComentario(p, c) {
-    if (!(await confirmar({ titulo: 'Borrar comentario', texto: 'Se borrará tu comentario y no se puede deshacer.', boton: 'Borrar' }))) return;
+  async function borrarComentario(p, c, nRespuestas) {
+    if (!(await confirmar({ titulo: 'Borrar comentario', texto: nRespuestas ? 'Se borrará tu comentario y no se puede deshacer. Sus respuestas se quedan en el hilo.' : 'Se borrará tu comentario y no se puede deshacer.', boton: 'Borrar' }))) return;
     accion(p, { accion: 'borrar_comentario', id: c.id });
   }
   /* Despliega / pliega los comentarios de una publicación (el cambio de huella en pintar() repinta la tarjeta) */
@@ -883,7 +960,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----- Tarjeta completa ----- */
   function crearTarjeta(p) {
     const mia = p.autor === yo, cor = (p.datos && p.datos.corazones) || [], meGusta = cor.includes(yo);
-    const nComs = ((p.datos && p.datos.comentarios) || []).length, abiertos = comentariosAbiertos.has(p.id);   // v2.2
+    const nComs = ((p.datos && p.datos.comentarios) || []).filter((c) => !c.borrado).length, abiertos = comentariosAbiertos.has(p.id);   // v2.2
     const editado = (p.datos && p.datos.editado) || 0, cats = catsDe(p);
     const tarjeta = h('article', { class: 'post', 'data-autor': p.autor, 'data-id': p.id },
       h('div', { class: 'post__cab' },
@@ -924,7 +1001,7 @@ document.addEventListener('DOMContentLoaded', () => {
     lista.forEach((p) => {
       /* v2.7: la huella es el CONTENIDO de la publicación (no solo "actualizado"): así una acción instantánea (que todavía no tiene hora del servidor)
          también repinta, y la confirmación del servidor, que deja el mismo contenido, no vuelve a tocar la tarjeta */
-      const firma = JSON.stringify([p.titulo, p.texto, p.url, p.datos, p.imagen, yo, catsDe(p).map((c) => [c.id, c.nombre, c.icono]), comentariosAbiertos.has(p.id), p.tipo === 'plan' ? hoyISO() : 0]);   // v2.3: los planes se repintan al cambiar el día (cuenta regresiva)
+      const firma = JSON.stringify([p.titulo, p.texto, p.url, p.datos, p.imagen, yo, catsDe(p).map((c) => [c.id, c.nombre, c.icono]), comentariosAbiertos.has(p.id), respondiendo.pid === p.id ? respondiendo.cid : 0, ((p.datos && p.datos.comentarios) || []).filter((c) => respuestasPlegadas.has(c.id)).map((c) => c.id), p.tipo === 'plan' ? hoyISO() : 0]);   // v2.9: también cambia si se abre una respuesta o se pliega un hilo   // v2.3: los planes se repintan al cambiar el día (cuenta regresiva)
       let el = nodos.get(p.id);
       if (!el) {                                                         // tarjeta que recién aparece: entra con animación en cascada
         el = crearTarjeta(p); el._firma = firma;
@@ -1344,24 +1421,38 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   const barraFlota = $('barraFlota');
   let campoFlota = null;                                               // campo de una línea que tiene el foco (el que recibe el formato)
-  function ocultarBarraFlota() { campoFlota = null; barraFlota.hidden = true; }
-  /* Pone la barra justo encima del campo (o debajo si arriba no hay lugar) y la oculta si el campo quedó fuera de la pantalla */
-  function colocarBarraFlota() {
+  function ocultarBarraFlota() { campoFlota = null; barraFlota.hidden = true; document.body.classList.remove('con-barra-flota'); }   // v2.9: también quita el espacio extra al pie de la página
+  /* v2.9: la barra va SIEMPRE justo DEBAJO del campo (antes iba encima): en el celular, al seleccionar texto, el menú del sistema (cortar / copiar / pegar)
+     aparece arriba de la selección y tapaba la barra. Solo si debajo no hay lugar (campo al pie de la pantalla o teclado abierto) se pone encima.
+     Se mide con visualViewport (la parte realmente visible, sin el teclado) y se oculta si el campo quedó fuera de la pantalla. */
+  /* v2.9: si el campo está tan abajo que no hay lugar para la barra debajo (típico en el celular con el teclado abierto), `acomodar` sube la página
+     para dejarle lugar en vez de taparle el texto poniéndola encima. Solo se pide al enfocar el campo o al abrirse/cerrarse el teclado, no al hacer scroll. */
+  function colocarBarraFlota(acomodar) {
     if (!campoFlota || !document.body.contains(campoFlota)) return void ocultarBarraFlota();
+    if (acomodar === true) {
+      const v = window.visualViewport, pisoV = v ? v.offsetTop + v.height : window.innerHeight, rr = campoFlota.getBoundingClientRect();
+      if (rr.bottom + 6 + (barraFlota.offsetHeight || 44) > pisoV - 6 && rr.top >= (v ? v.offsetTop : 0)) {
+        document.body.classList.add('con-barra-flota');                                   // espacio extra al pie para poder subir el campo aunque sea lo último de la página
+        campoFlota.scrollIntoView({ block: 'center', behavior: 'instant' });
+      }
+    }
+    const vv = window.visualViewport, techo = vv ? vv.offsetTop : 0, piso = vv ? vv.offsetTop + vv.height : window.innerHeight;   // límites visibles
     const r = campoFlota.getBoundingClientRect();
-    if (r.bottom < 0 || r.top > window.innerHeight) { barraFlota.hidden = true; return; }
+    if (r.bottom < techo || r.top > piso) { barraFlota.hidden = true; return; }
     barraFlota.hidden = false;
     const bw = barraFlota.offsetWidth, bh = barraFlota.offsetHeight;
-    let arriba = r.top - bh - 6; if (arriba < 6) arriba = Math.min(r.bottom + 6, window.innerHeight - bh - 6);
-    barraFlota.style.top = `${arriba}px`; barraFlota.style.left = `${Math.max(6, Math.min(r.left, window.innerWidth - bw - 6))}px`;
+    let y = r.bottom + 6;                                                                  // debajo del campo
+    if (y + bh > piso - 6) y = r.top - bh - 6 >= techo + 6 ? r.top - bh - 6 : Math.max(techo + 6, piso - bh - 6);   // sin lugar: encima del campo (o pegada al borde visible)
+    barraFlota.style.top = `${y}px`; barraFlota.style.left = `${Math.max(6, Math.min(r.left, window.innerWidth - bw - 6))}px`;
   }
   document.addEventListener('focusin', (e) => {
     const t = e.target;
-    if (t && t.dataset && t.dataset.rico === 'flota') { campoFlota = t; colocarBarraFlota(); }
+    if (t && t.dataset && t.dataset.rico === 'flota') { campoFlota = t; colocarBarraFlota(true); }
     else if (!barraFlota.contains(t)) ocultarBarraFlota();
   });
   document.addEventListener('focusout', (e) => { if (e.target === campoFlota) setTimeout(() => { if (document.activeElement !== campoFlota) ocultarBarraFlota(); }, 120); });
-  window.addEventListener('scroll', colocarBarraFlota, true); window.addEventListener('resize', colocarBarraFlota);
+  window.addEventListener('scroll', () => colocarBarraFlota(), true); window.addEventListener('resize', () => colocarBarraFlota());
+  if (window.visualViewport) { window.visualViewport.addEventListener('resize', () => colocarBarraFlota(true)); window.visualViewport.addEventListener('scroll', () => colocarBarraFlota()); }   // v2.9: al abrirse / cerrarse el teclado del celular
   barraFlota.addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });   // los botones no le quitan el foco (ni la selección) al campo
   barraFlota.addEventListener('click', (e) => {
     const b = e.target.closest('[data-fmt]');
@@ -1849,6 +1940,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let perfCargando = false, perfCargadas = false;
   const imgsLocales = new Map();                              // id de imagen → dataURL (se ve al instante, sin pedirla al servidor)
   const nodosEntradas = new Map();                            // id de entrada → tarjeta ya pintada
+  const imgsCargadas = new Set();                             // v2.9: ids de imágenes de perfil que ya terminaron de cargar (para quitarles el círculo de carga)
   let editandoFrase = false;                                  // el dueño está escribiendo su frase (no se repinta la cabecera mientras tanto)
   let perfilQ = '';                                           // v2.8.1: texto del buscador del perfil (ya normalizado: minúsculas y sin tildes)
   let perfilArmado = '', firmaFrase = '';                     // qué perfil tiene armada la pantalla / huella de la frase pintada
@@ -1892,7 +1984,7 @@ document.addEventListener('DOMContentLoaded', () => {
     perfPend.length = 0; perfGen++; colaPerf = Promise.resolve();
     perfServidor = { frases: { M: '', xB: '' }, entradas: [] }; perfVista = { frases: { M: '', xB: '' }, entradas: [] };
     perfCargadas = false; perfilVer = quien; editandoFrase = false; perfilArmado = ''; firmaFrase = ''; refs = null;
-    nodosEntradas.clear(); imgsLocales.clear(); $('perfilCuerpo').replaceChildren();
+    nodosEntradas.clear(); imgsLocales.clear(); imgsCargadas.clear(); $('perfilCuerpo').replaceChildren();
     mostrarVista('muro'); marcarSelector();
   }
   /* Tocar la foto de una persona (la de una publicación o de un comentario) abre su perfil. Las fotos dentro de botones (corazones, selector) y la
@@ -1956,6 +2048,12 @@ document.addEventListener('DOMContentLoaded', () => {
       mio ? h('button', { class: 'btn-icono perfil__editar', type: 'button', 'aria-label': 'Editar mi frase', title: 'Editar mi frase', onclick: () => { editandoFrase = true; pintarFrase(); } }, icono('edit')) : null);
   }
 
+  /* v2.9: una imagen terminó de cargar (o falló): se recuerda y se le quita el círculo de carga */
+  function marcarImgLista(id, ev) {
+    imgsCargadas.add(id);
+    const b = ev && ev.currentTarget && ev.currentTarget.closest ? ev.currentTarget.closest('.entrada__img') : null;
+    if (b) b.setAttribute('data-listo', '1');
+  }
   /* Una entrada: ícono + título (como una categoría), el texto con formato, las imágenes y el pie (quién la escribió, cuándo, editar y borrar: los dos pueden con cualquiera) */
   function crearEntrada(e) {
     const imgs = e.imagenes || [];
@@ -1965,11 +2063,15 @@ document.addEventListener('DOMContentLoaded', () => {
       h('header', { class: 'entrada__cab' }, icono(e.icono), h('h3', { class: 'post__titulo entrada__titulo' }, inline(e.titulo))),
       e.texto ? h('div', { class: 'entrada__caja' }, md(e.texto, 'post__texto entrada__texto')) : null,
       imgs.length ? h('div', { class: 'entrada__imgs entrada__imgs--' + Math.min(imgs.length, 4) }, imgs.map((i) =>
-        h('button', { class: 'entrada__img', type: 'button', 'data-k': i.id, 'aria-label': 'Ver imagen grande', onclick: () => abrirVisor(srcImg(i), planoDe(e.titulo)) },
-          h('img', { src: srcImg(i), alt: '', loading: 'lazy', decoding: 'async', draggable: 'false' })))) : null,
+        /* v2.9: mientras la imagen carga se ve un círculo girando (CSS ::after) y la imagen está transparente; al terminar (load o error) se marca data-listo.
+           La lista imgsCargadas recuerda las que ya cargaron, así al actualizarse la tarjeta no vuelve a aparecer el círculo. */
+        h('button', { class: 'entrada__img', type: 'button', 'data-k': i.id, 'data-listo': imgsCargadas.has(i.id) ? '1' : null, 'aria-label': 'Ver imagen grande', onclick: () => abrirVisor(srcImg(i), planoDe(e.titulo)) },
+          h('img', { onload: marcarImgLista.bind(null, i.id), onerror: marcarImgLista.bind(null, i.id), src: srcImg(i), alt: '', loading: 'lazy', decoding: 'async', draggable: 'false' })))) : null,
       h('footer', { class: 'entrada__pie' },
         avatar(e.autor, 'avatar--mini'),
         h('time', { class: 'autor__hora', 'data-ts': e.creado, text: hora(e.creado), title: new Date(e.creado).toLocaleString('es-AR') }),
+        /* v2.9: círculo girando mientras la entrada se está guardando en el servidor (se ve ya, pero todavía no está confirmada) */
+        h('span', { class: 'entrada__guardando', role: 'status', hidden: !e._pend }, h('span', { class: 'giro giro--chico' }), h('span', { text: 'Guardando…' })),
         h('button', { class: 'post__accion post__accion--der', type: 'button', 'aria-label': 'Editar entrada', onclick: () => abrirEntrada(e) }, icono('edit')),
         h('button', { class: 'post__accion post__accion--peligro', type: 'button', 'aria-label': 'Eliminar entrada', onclick: () => borrarEntrada(e) }, icono('delete'))));
     [...el.children].forEach((c) => c.setAttribute('data-k', c.className.split(' ')[0] || c.tagName));   // claves para morph(), igual que en las publicaciones
@@ -1988,7 +2090,7 @@ document.addEventListener('DOMContentLoaded', () => {
     nodosEntradas.forEach((el, id) => { if (!visibles.has(id)) { nodosEntradas.delete(id); salirTarjeta(el); } });
     let orden = 0; const ordenadas = [];
     lista.forEach((e) => {
-      const firma = JSON.stringify([e.icono, e.titulo, e.texto, (e.imagenes || []).map((i) => i.id), e.autor, e.actualizado, yo]);
+      const firma = JSON.stringify([e.icono, e.titulo, e.texto, (e.imagenes || []).map((i) => i.id), e.autor, e.actualizado, !!e._pend, yo]);   // v2.9: también cambia al confirmarse
       let el = nodosEntradas.get(e.id);
       if (!el) {
         el = crearEntrada(e); el._firma = firma;
@@ -2005,16 +2107,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     refs.cuenta.textContent = todas.length ? (perfilQ ? `${lista.length} de ${todas.length}` : String(todas.length)) : '';
     refs.vacio.hidden = lista.length > 0 || !perfCargadas;
+    refs.vacio.classList.remove('perfil__vacio--cargando');
     refs.vacio.textContent = todas.length ? 'Ninguna entrada coincide con esa búsqueda.' : (perfilVer === yo ? 'Todavía no hay nada en tu perfil. ¡Añade tu primera entrada!' : `Todavía no hay nada en el perfil de ${NOMBRE_ESCENA[perfilVer]}. Puedes añadir la primera entrada.`);
-    if (!perfCargadas && !lista.length) { refs.vacio.hidden = false; refs.vacio.textContent = 'Cargando el perfil…'; }
+    /* v2.9: mientras se cargan las entradas del servidor se ve un círculo girando con "Cargando el perfil…" */
+    if (!perfCargadas && !lista.length) { refs.vacio.hidden = false; refs.vacio.classList.add('perfil__vacio--cargando'); refs.vacio.replaceChildren(h('span', { class: 'giro', role: 'status', 'aria-label': 'Cargando' }), h('span', { text: 'Cargando el perfil…' })); }
   }
 
   /* ----- Acciones instantáneas del perfil (misma idea que el motor de v2.7) ----- */
   /* Aplica una acción sobre una copia del estado (crear / editar / borrar entradas, cambiar una frase). Es idempotente: si el servidor ya la tenía, no pasa nada */
   function aplicarOpPerfil(v, op) {
     if (op.k === 'frase') v.frases[op.quien] = op.frase;
-    else if (op.k === 'crear') { if (!v.entradas.some((e) => e.id === op.entrada.id)) v.entradas.push(clon(op.entrada)); }
-    else if (op.k === 'editar') { const e = v.entradas.find((x) => x.id === op.id); if (e) Object.assign(e, op.campos, { actualizado: op.t, imagenes: op.imagenes.map((i) => ({ id: i.id, w: i.w, h: i.h })) }); }
+    else if (op.k === 'crear') { if (!v.entradas.some((e) => e.id === op.entrada.id)) v.entradas.push({ ...clon(op.entrada), _pend: true }); }   // v2.9: _pend = todavía sin confirmar (muestra el círculo "Guardando…")
+    else if (op.k === 'editar') { const e = v.entradas.find((x) => x.id === op.id); if (e) Object.assign(e, op.campos, { actualizado: op.t, _pend: true, imagenes: op.imagenes.map((i) => ({ id: i.id, w: i.w, h: i.h })) }); }
     else if (op.k === 'borrar') v.entradas = v.entradas.filter((e) => e.id !== op.id);
   }
   /* Lo que se ve = lo último que confirmó el servidor + las acciones que todavía no confirmó */

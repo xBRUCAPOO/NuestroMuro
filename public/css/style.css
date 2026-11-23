@@ -892,3 +892,39 @@ body[data-vista="perfiles"] [data-solo-muro] { display: none !important; }   /* 
 .ent-img { position: relative; aspect-ratio: 1; overflow: hidden; border-radius: var(--radio-md); background: var(--color-tarjeta-2); animation: pop var(--mov-medio) var(--ease-rebote); }
 .ent-img img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .ent-img__quitar { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border-radius: 50%; background: color-mix(in srgb, var(--color-negro) 65%, transparent); color: var(--color-blanco); }
+
+/* ============================================================
+   v2.9 — Barras de formato debajo, círculo de carga y respuestas a comentarios
+   ============================================================ */
+/* Barra de formato debajo del cuadro de texto: se pega a su borde inferior (el cuadro pierde las esquinas de abajo y la barra las de arriba) */
+.formato--abajo { margin-top: -6px; border: 1px solid var(--color-gris); border-top: none; border-radius: 0 0 var(--radio-md) var(--radio-md); }
+textarea.campo__entrada:has(+ .formato--abajo) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+
+/* Círculo girando de "cargando" (con el color del perfil si está dentro de uno). .giro--chico es la versión pequeña del pie de las entradas */
+.giro { display: inline-block; flex-shrink: 0; width: 22px; height: 22px; border: 3px solid color-mix(in srgb, var(--c-texto, var(--yo-texto)) 25%, transparent); border-top-color: var(--c-texto, var(--yo-texto)); border-radius: 50%; animation: giro .8s linear infinite; }
+.giro--chico { width: 14px; height: 14px; border-width: 2px; }
+.perfil__vacio--cargando { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.entrada__guardando { display: inline-flex; align-items: center; gap: 6px; font-family: var(--fuente-hud); font-size: 11.5px; color: var(--color-texto-suave); }
+/* Imágenes de las entradas: círculo girando encima hasta que la imagen carga (data-listo); mientras tanto la imagen está transparente y aparece suave */
+.entrada__img::after { content: ''; position: absolute; inset: 0; margin: auto; width: 30px; height: 30px; border-radius: 50%; border: 3px solid color-mix(in srgb, var(--c-texto) 25%, transparent); border-top-color: var(--c-texto); animation: giro .8s linear infinite; pointer-events: none; }
+.entrada__img[data-listo]::after { display: none; }
+.entrada__img img { transition: transform var(--mov-medio) var(--ease-suave), opacity var(--mov-medio) var(--ease-suave); }
+.entrada__img:not([data-listo]) img { opacity: 0; }
+.entrada__imgs--1 .entrada__img:not([data-listo]) { min-height: 160px; }   /* una sola imagen: sin altura propia hasta cargar, se le da lugar al círculo */
+@media (prefers-reduced-motion: reduce) { .giro, .entrada__img::after, .cargando__icono { animation-duration: 1.2s !important; } }   /* el círculo sigue girando aunque se pidan pocas animaciones (si no, no se entiende que está cargando) */
+
+/* Respuestas a comentarios (hilos anidados). Cada comentario va dentro de un .hilo; sus respuestas, en .respuestas con una línea a la izquierda */
+.hilo { display: flex; flex-direction: column; gap: 6px; }
+.respuestas { display: flex; flex-direction: column; gap: 8px; margin-left: 4px; padding-left: 8px; border-left: 2px solid var(--color-gris); }   /* sangría corta para que en el celular quede lugar para el texto */
+.respuestas--plana { margin-left: 0; padding-left: 0; border-left: none; }   /* pasado el nivel máximo de sangría las respuestas siguen alineadas */
+.comentario--borrado { background: transparent; border-left-color: var(--color-gris); }
+.comentario__borrado { font-size: 13px; font-style: italic; color: var(--color-texto-suave); }
+.comentario__a { display: inline-flex; align-items: center; gap: 2px; color: var(--c-texto); }
+.comentario__a .material-symbols-rounded { font-size: 14px; }
+.comentario__acc { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin-top: 2px; }
+.comentario__btn { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px 3px 6px; font-family: var(--fuente-hud); font-size: 11.5px; color: var(--color-texto-suave); border-radius: var(--radio-sm); transition: background var(--mov-rapido) var(--ease-suave), color var(--mov-rapido) var(--ease-suave); }
+.comentario__btn .material-symbols-rounded { font-size: 16px; }
+.comentario__btn:hover, .comentario__btn[aria-pressed="true"] { background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--c-texto); }
+.comentar--resp { align-items: center; padding-left: 4px; }
+/* Espacio al pie de la página mientras la barra de formato flotante está abierta: deja subir el campo para que la barra quepa debajo (ver colocarBarraFlota) */
+body.con-barra-flota { padding-bottom: 120px; }
