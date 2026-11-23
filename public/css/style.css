@@ -36,6 +36,7 @@
   --color-fondo: #0D0D0F;
   --color-fondo-2: color-mix(in srgb, var(--color-principal) 38%, var(--color-fondo));   /* gris del degradado de fondo */
   --color-tarjeta: #17171B;
+  --color-caja-texto: color-mix(in srgb, var(--color-negro) 30%, var(--color-tarjeta));   /* v2.8.1: caja más oscura donde va el texto de las entradas de perfil */
   --color-tarjeta-2: #212126;
   --color-texto: #ECECEF;
   --color-texto-suave: #A3A3AC;
@@ -132,6 +133,7 @@
   --color-fondo: #F3F3F5;
   --color-fondo-2: #E2E2E7;
   --color-tarjeta: var(--color-blanco);
+  --color-caja-texto: color-mix(in srgb, var(--color-negro) 6%, var(--color-tarjeta));    /* v2.8.1: en el tema claro, apenas más oscura que la tarjeta */
   --color-tarjeta-2: #EDEDF0;
   --color-texto: #19191D;
   --color-texto-suave: #5B5B65;
@@ -856,18 +858,19 @@ body[data-vista="perfiles"] [data-solo-muro] { display: none !important; }   /* 
 .perfil__subtitulo .material-symbols-rounded { color: var(--c-texto); }
 .perfil__cuenta { font-family: var(--fuente-hud); font-size: 13px; font-weight: 400; color: var(--color-texto-suave); }
 .perfil__vacio { margin: 0; padding: 22px 12px; text-align: center; color: var(--color-texto-suave); border: 1px dashed var(--color-gris); border-radius: var(--radio-md); }
-.perfil__lista { column-count: 1; column-gap: 14px; }   /* igual que el muro: más columnas en pantallas anchas */
-@media (min-width: 640px) { .perfil__lista { column-count: 2; } }
-@media (min-width: 1024px) { .perfil__lista { column-count: 3; } }
+/* v2.8.1: las entradas van SIEMPRE una arriba de la otra (una sola columna, también en pantallas anchas); antes se repartían en 2-3 columnas como el muro */
+.perfil__lista { display: flex; flex-direction: column; gap: 14px; }
+.perfil__buscador { flex: none; width: 100%; }   /* v2.8.1: buscador de entradas bajo la cabecera del perfil */
 
-/* Entrada de perfil: misma tarjeta que una publicación, con el color de quien la escribió */
-.entrada { --c: var(--color-acento); --c-texto: var(--color-acento-texto); position: relative; break-inside: avoid; display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; padding: 14px; background: color-mix(in srgb, var(--c) 7%, var(--color-tarjeta)); border: 1.5px solid color-mix(in srgb, var(--c) 78%, transparent); border-radius: var(--radio-md); box-shadow: var(--sombra-tarjeta); }
-.entrada[data-autor="M"] { --c: var(--color-m-vivo); --c-texto: var(--color-m-texto); }
-.entrada[data-autor="xB"] { --c: var(--color-xb); --c-texto: var(--color-xb-texto); }
+/* Entrada de perfil (v2.8.1): tarjeta con el color del PERFIL donde está (azul en el de M, rojo en el de xB; quien la escribió se ve en el pie). Arriba el ícono de
+   color + el título (tipografía de los títulos del muro), sin cuadro gris; abajo el texto dentro de una caja más oscura */
+.entrada { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 14px; background: color-mix(in srgb, var(--c) 7%, var(--color-tarjeta)); border: 1.5px solid color-mix(in srgb, var(--c) 78%, transparent); border-radius: var(--radio-md); box-shadow: var(--sombra-tarjeta); }
 .entrada.entra { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: calc(var(--i, 0) * 50ms); }
 .entrada.sale { animation: post-sale var(--mov-medio) var(--ease-entrada) forwards; }
-.entrada__titulo { align-self: flex-start; max-width: 100%; cursor: default; font-weight: 600; overflow-wrap: anywhere; }
-.entrada__titulo:hover { border-color: var(--color-acento); }
+.entrada__cab { display: flex; align-items: center; gap: 10px; }
+.entrada__cab > .material-symbols-rounded { font-size: 30px; color: var(--c-texto); flex-shrink: 0; }   /* el logo, con el color del perfil */
+.entrada__titulo { margin: 0; min-width: 0; font-size: 19px; }
+.entrada__caja { padding: 10px 12px; background: var(--color-caja-texto); border: 1px solid color-mix(in srgb, var(--c) 22%, var(--color-gris)); border-radius: var(--radio-md); }   /* caja más oscura que la tarjeta, en los dos temas */
 .entrada__texto { font-size: 14px; }
 .entrada__imgs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .entrada__imgs--1 { grid-template-columns: 1fr; }

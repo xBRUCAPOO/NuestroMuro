@@ -1850,6 +1850,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const imgsLocales = new Map();                              // id de imagen → dataURL (se ve al instante, sin pedirla al servidor)
   const nodosEntradas = new Map();                            // id de entrada → tarjeta ya pintada
   let editandoFrase = false;                                  // el dueño está escribiendo su frase (no se repinta la cabecera mientras tanto)
+  let perfilQ = '';                                           // v2.8.1: texto del buscador del perfil (ya normalizado: minúsculas y sin tildes)
   let perfilArmado = '', firmaFrase = '';                     // qué perfil tiene armada la pantalla / huella de la frase pintada
   let refs = null;                                            // elementos del perfil armado (cabecera, lista…)
   const chipPerfiles = h('button', { class: 'chip', type: 'button', 'data-vista': 'perfiles' }, icono('account_circle'), h('span', { text: 'Perfiles' }));
@@ -1911,6 +1912,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const cuenta = h('span', { class: 'perfil__cuenta' });
     const lista = h('div', { class: 'perfil__lista' });
     const vacio = h('p', { class: 'perfil__vacio', hidden: true });
+    /* v2.8.1: buscador de entradas, debajo de la cabecera (bio). Solo se muestra si el perfil ya tiene alguna entrada (lo decide pintarPerfil) */
+    perfilQ = '';
+    const campoBusca = h('input', { class: 'campo__entrada', type: 'search', placeholder: 'Buscar en este perfil…', 'aria-label': 'Buscar en este perfil', autocomplete: 'off', autocapitalize: 'none', spellcheck: 'false' });
+    campoBusca.addEventListener('input', () => { perfilQ = normalizar(campoBusca.value.trim()); pintarPerfil(); });
+    campoBusca.addEventListener('keydown', (e) => { if (e.key === 'Escape' && campoBusca.value) { e.stopPropagation(); campoBusca.value = ''; perfilQ = ''; pintarPerfil(); } });
+    const buscador = h('label', { class: 'buscador perfil__buscador', hidden: true }, icono('search'), campoBusca);
     $('perfilCuerpo').dataset.quien = q;
     $('perfilCuerpo').replaceChildren(
       h('header', { class: 'perfil__cab' },
@@ -1918,11 +1925,12 @@ document.addEventListener('DOMContentLoaded', () => {
         h('div', { class: 'perfil__datos' }, h('h2', { class: 'perfil__nombre' }, nombre, h('span', { class: 'perfil__id', text: q })), fraseCaja),
         /* Cerrar sesión: solo en el perfil propio (antes estaba en la foto de la barra) */
         mio ? h('button', { class: 'btn btn--peligro perfil__salir', type: 'button', onclick: cerrarSesion }, icono('logout'), h('span', { text: 'Cerrar sesión' })) : null),
+      buscador,
       h('div', { class: 'perfil__barra' },
         h('h3', { class: 'perfil__subtitulo' }, icono('badge'), h('span', { text: mio ? 'Sobre mí' : `Sobre ${nombre}` }), cuenta),
         h('button', { class: 'btn btn--yo', type: 'button', onclick: () => abrirEntrada() }, icono('add'), h('span', { text: 'Añadir entrada' }))),
       lista, vacio);
-    refs = { fraseCaja, cuenta, lista, vacio };
+    refs = { fraseCaja, cuenta, lista, vacio, buscador };
   }
 
   /* Frase corta bajo el nombre. Solo su dueño la edita (lápiz → campo → guardar); la otra persona solo la lee */
@@ -1952,8 +1960,10 @@ document.addEventListener('DOMContentLoaded', () => {
   function crearEntrada(e) {
     const imgs = e.imagenes || [];
     const el = h('article', { class: 'entrada', 'data-autor': e.autor, 'data-id': e.id },
-      h('header', { class: 'entrada__cab' }, h('span', { class: 'chip chip--cat chip--activo entrada__titulo' }, icono(e.icono), h('span', {}, inline(e.titulo, true)))),
-      e.texto ? md(e.texto, 'post__texto entrada__texto') : null,
+      /* v2.8.1: sin cuadro gris: el ícono va solo, con el color del perfil, y el título con la tipografía de los títulos del muro (.post__titulo);
+         el texto va debajo, dentro de una caja más oscura (.entrada__caja) y admite viñetas, lista numerada y links */
+      h('header', { class: 'entrada__cab' }, icono(e.icono), h('h3', { class: 'post__titulo entrada__titulo' }, inline(e.titulo))),
+      e.texto ? h('div', { class: 'entrada__caja' }, md(e.texto, 'post__texto entrada__texto')) : null,
       imgs.length ? h('div', { class: 'entrada__imgs entrada__imgs--' + Math.min(imgs.length, 4) }, imgs.map((i) =>
         h('button', { class: 'entrada__img', type: 'button', 'data-k': i.id, 'aria-label': 'Ver imagen grande', onclick: () => abrirVisor(srcImg(i), planoDe(e.titulo)) },
           h('img', { src: srcImg(i), alt: '', loading: 'lazy', decoding: 'async', draggable: 'false' })))) : null,
@@ -1971,7 +1981,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (vista !== 'perfiles' || !yo) return;
     if (perfilArmado !== perfilVer + '|' + yo || !refs) armarPerfil();
     pintarFrase();
-    const lista = perfVista.entradas.filter((e) => e.perfil === perfilVer), visibles = new Set(lista.map((e) => e.id));
+    const todas = perfVista.entradas.filter((e) => e.perfil === perfilVer);
+    refs.buscador.hidden = !todas.length;                                // v2.8.1: el buscador solo aparece si ya se añadió algo
+    /* v2.8.1: la búsqueda mira el título y el texto (sin importar mayúsculas ni tildes) */
+    const lista = perfilQ ? todas.filter((e) => perfilQ.split(/\s+/).every((w) => normalizar(e.titulo + ' ' + e.texto).includes(w))) : todas, visibles = new Set(lista.map((e) => e.id));
     nodosEntradas.forEach((el, id) => { if (!visibles.has(id)) { nodosEntradas.delete(id); salirTarjeta(el); } });
     let orden = 0; const ordenadas = [];
     lista.forEach((e) => {
@@ -1990,9 +2003,9 @@ document.addEventListener('DOMContentLoaded', () => {
       while (cursor && cursor.classList && cursor.classList.contains('sale')) cursor = cursor.nextSibling;
       if (cursor === el) cursor = cursor.nextSibling; else refs.lista.insertBefore(el, cursor);
     });
-    refs.cuenta.textContent = lista.length ? String(lista.length) : '';
+    refs.cuenta.textContent = todas.length ? (perfilQ ? `${lista.length} de ${todas.length}` : String(todas.length)) : '';
     refs.vacio.hidden = lista.length > 0 || !perfCargadas;
-    refs.vacio.textContent = perfilVer === yo ? 'Todavía no hay nada en tu perfil. ¡Añade tu primera entrada!' : `Todavía no hay nada en el perfil de ${NOMBRE_ESCENA[perfilVer]}. Puedes añadir la primera entrada.`;
+    refs.vacio.textContent = todas.length ? 'Ninguna entrada coincide con esa búsqueda.' : (perfilVer === yo ? 'Todavía no hay nada en tu perfil. ¡Añade tu primera entrada!' : `Todavía no hay nada en el perfil de ${NOMBRE_ESCENA[perfilVer]}. Puedes añadir la primera entrada.`);
     if (!perfCargadas && !lista.length) { refs.vacio.hidden = false; refs.vacio.textContent = 'Cargando el perfil…'; }
   }
 
@@ -2091,6 +2104,26 @@ document.addEventListener('DOMContentLoaded', () => {
     $('entSinIconos').hidden = hay > 0;
   });
   $('entTituloCampo').addEventListener('input', previaEntrada);
+  /* v2.8.1: barra de formato completa sobre el texto de la entrada (negrita, cursiva, tachado, código, título, cita, viñetas, lista numerada, enlace y "ver cómo queda"),
+     con los mismos botones que la de las notas: aplicarFormato() hace el trabajo sobre este cuadro de texto */
+  function actualizarVistaEntrada() {
+    const caja = $('entTextoPrevia');
+    if (caja.hidden) return;
+    const v = $('entTexto').value.trim();
+    caja.replaceChildren(v ? md(v, 'post__texto') : h('span', { class: 'campo__ayuda', text: 'Todavía no escribiste nada.' }));
+  }
+  $('entBarraFormato').addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });   // los botones no le quitan el foco (ni la selección) al texto
+  $('entBarraFormato').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-fmt]'); if (!b) return;
+    if (b.dataset.fmt === 'vista') {
+      const ver = $('entTextoPrevia').hidden;
+      $('entTextoPrevia').hidden = !ver; b.setAttribute('aria-pressed', String(ver));
+      b.querySelector('.material-symbols-rounded').textContent = ver ? 'visibility_off' : 'visibility';
+      actualizarVistaEntrada(); return;
+    }
+    aplicarFormato(b.dataset.fmt, $('entTexto'));
+  });
+  $('entTexto').addEventListener('input', actualizarVistaEntrada);
   /* Miniaturas de las imágenes de la ventana, cada una con su botón para quitarla */
   function pintarImgsEnt() {
     $('entImgs').replaceChildren(...entImgs.map((i) => h('div', { class: 'ent-img' },
@@ -2121,6 +2154,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('entTitulo').textContent = entEditando ? 'Editar entrada' : `Nueva entrada en el perfil de ${NOMBRE_ESCENA[entPerfil]}`;
     $('entTextoGuardar').textContent = entEditando ? 'Guardar' : 'Añadir';
     $('entTituloCampo').value = d.titulo; $('entTexto').value = d.texto;
+    $('entTextoPrevia').hidden = true; $('entBtnVista').setAttribute('aria-pressed', 'false'); $('entBtnVista').querySelector('.material-symbols-rounded').textContent = 'visibility';   // v2.8.1: la vista previa empieza cerrada
     entImgs = d.imgs.map((i) => ({ ...i })); pintarImgsEnt();
     elegirIconoEnt(d.icono);
     abrirModal(modalEnt);
