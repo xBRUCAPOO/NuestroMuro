@@ -331,8 +331,11 @@ textarea.campo__entrada { resize: vertical; min-height: 96px; }
 /* v2.7: el tachado va SOLO en el texto (antes la línea también cruzaba el icono de la casilla). Se dibuja como una línea que avanza de izquierda a derecha. */
 .lista__item.hecho { color: var(--color-texto-suave); }
 .lista__item.hecho .material-symbols-rounded { transform: scale(1.1); }
-.lista__texto { display: inline; min-width: 0; background: linear-gradient(currentColor, currentColor) no-repeat 0 58% / 0% 1.5px; -webkit-box-decoration-break: clone; box-decoration-break: clone; transition: background-size var(--mov-medio) var(--ease-suave), color var(--mov-medio) var(--ease-suave); }
-.lista__item.hecho .lista__texto { background-size: 100% 1.5px; }
+/* v2.8: tachado REAL (text-decoration: line-through) solo sobre el texto (el ícono de la casilla queda fuera y no se tacha). Antes se dibujaba una
+   línea con un degradado de fondo y se veía mal con textos de varias líneas o con cursiva/negrita; el tachado real sigue cada línea y cada trozo con formato.
+   Se anima apareciendo con el color (text-decoration-color pasa de transparente al color del texto). */
+.lista__texto { display: inline; min-width: 0; text-decoration: line-through; text-decoration-color: transparent; text-decoration-thickness: 1.5px; transition: text-decoration-color var(--mov-medio) var(--ease-suave), color var(--mov-medio) var(--ease-suave); }
+.lista__item.hecho .lista__texto { text-decoration-color: currentColor; }
 .lista__item { transition: background-color var(--mov-rapido) var(--ease-suave), color var(--mov-medio) var(--ease-suave), transform var(--mov-rapido) var(--ease-suave); }
 .lista__item .material-symbols-rounded { transition: transform var(--mov-medio) var(--ease-rebote), color var(--mov-medio) var(--ease-suave); }
 .progreso { height: 6px; background: var(--color-gris); border-radius: var(--radio-sm); overflow: hidden; }
@@ -822,3 +825,67 @@ html { scroll-behavior: smooth; }
   *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0ms !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
 }
 .svg-filtros { position: absolute; width: 0; height: 0; overflow: hidden; }   /* v2.7: contenedor del filtro SVG de la escena (no ocupa lugar) */
+
+/* ============================================================
+   v2.8 — PERFILES
+   Qué hace: estilos de la pestaña "Perfiles": selector Mely / Bruu, cabecera (foto grande, nombre, frase, cerrar sesión), barra "Sobre mí / Sobre Bruu",
+   entradas (ícono + título, texto con formato, imágenes, pie) y las miniaturas de la ventana de entrada.
+   Para qué sirve: que el perfil se vea como el muro (mismas tarjetas con el color de su autor) y todo use variables del :root (nada de colores sueltos).
+   ============================================================ */
+body[data-vista="perfiles"] [data-solo-muro] { display: none !important; }   /* en la pestaña Perfiles se esconden buscador, filtros de autor y categoría, contador y muro */
+.perfiles { display: flex; flex-direction: column; gap: 14px; }
+.perfiles__selector { align-self: flex-start; }
+.perfil-sel { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px 6px 8px; font-size: 14px; }
+.perfil-sel .avatar--mini { width: 24px; height: 24px; }
+.perfil { --c: var(--color-acento); --c-texto: var(--color-acento-texto); display: flex; flex-direction: column; gap: 14px; animation: aparecer var(--mov-medio) var(--ease-suave); }
+.perfil[data-quien="M"] { --c: var(--color-m-vivo); --c-texto: var(--color-m-texto); }       /* el perfil de M va en azul… */
+.perfil[data-quien="xB"] { --c: var(--color-xb); --c-texto: var(--color-xb-texto); }          /* …y el de xB en rojo */
+.perfil__cab { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; padding: 18px; background: color-mix(in srgb, var(--c) 7%, var(--color-tarjeta)); border: 1.5px solid color-mix(in srgb, var(--c) 78%, transparent); border-radius: var(--radio-md); box-shadow: var(--sombra-tarjeta); }
+.avatar--perfil { width: 96px; height: 96px; }
+.perfil__datos { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 6px; }
+.perfil__nombre { display: flex; align-items: baseline; gap: 8px; margin: 0; font-family: var(--fuente-titulo); font-size: 28px; line-height: 1.1; }
+.perfil__id { font-family: var(--fuente-hud); font-size: 13px; color: var(--c-texto); }
+.perfil__frase-caja { display: flex; align-items: center; gap: 6px; min-height: 40px; }
+.perfil__frase { margin: 0; font-size: 15px; overflow-wrap: anywhere; min-width: 0; }
+.perfil__frase--vacia { color: var(--color-texto-suave); font-style: italic; }
+.perfil__frase-caja--edita .campo__entrada { flex: 1; min-width: 0; }
+.perfil__editar { flex-shrink: 0; color: var(--color-texto-suave); }
+.perfil__salir { margin-left: auto; }
+.perfil__barra { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.perfil__subtitulo { display: flex; align-items: center; gap: 8px; margin: 0; font-family: var(--fuente-titulo); font-size: 18px; }
+.perfil__subtitulo .material-symbols-rounded { color: var(--c-texto); }
+.perfil__cuenta { font-family: var(--fuente-hud); font-size: 13px; font-weight: 400; color: var(--color-texto-suave); }
+.perfil__vacio { margin: 0; padding: 22px 12px; text-align: center; color: var(--color-texto-suave); border: 1px dashed var(--color-gris); border-radius: var(--radio-md); }
+.perfil__lista { column-count: 1; column-gap: 14px; }   /* igual que el muro: más columnas en pantallas anchas */
+@media (min-width: 640px) { .perfil__lista { column-count: 2; } }
+@media (min-width: 1024px) { .perfil__lista { column-count: 3; } }
+
+/* Entrada de perfil: misma tarjeta que una publicación, con el color de quien la escribió */
+.entrada { --c: var(--color-acento); --c-texto: var(--color-acento-texto); position: relative; break-inside: avoid; display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; padding: 14px; background: color-mix(in srgb, var(--c) 7%, var(--color-tarjeta)); border: 1.5px solid color-mix(in srgb, var(--c) 78%, transparent); border-radius: var(--radio-md); box-shadow: var(--sombra-tarjeta); }
+.entrada[data-autor="M"] { --c: var(--color-m-vivo); --c-texto: var(--color-m-texto); }
+.entrada[data-autor="xB"] { --c: var(--color-xb); --c-texto: var(--color-xb-texto); }
+.entrada.entra { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: calc(var(--i, 0) * 50ms); }
+.entrada.sale { animation: post-sale var(--mov-medio) var(--ease-entrada) forwards; }
+.entrada__titulo { align-self: flex-start; max-width: 100%; cursor: default; font-weight: 600; overflow-wrap: anywhere; }
+.entrada__titulo:hover { border-color: var(--color-acento); }
+.entrada__texto { font-size: 14px; }
+.entrada__imgs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.entrada__imgs--1 { grid-template-columns: 1fr; }
+.entrada__imgs--3 .entrada__img:first-child { grid-column: 1 / -1; }
+.entrada__img { display: block; position: relative; padding: 0; border: 0; overflow: hidden; aspect-ratio: 4 / 3; border-radius: var(--radio-md); background: var(--color-tarjeta-2); cursor: zoom-in; }
+.entrada__img img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform var(--mov-medio) var(--ease-suave); }
+.entrada__img:hover img { transform: scale(1.04); }
+.entrada__imgs--1 .entrada__img { aspect-ratio: auto; }
+.entrada__imgs--1 .entrada__img img { height: auto; max-height: 380px; object-fit: contain; }
+.entrada__pie { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+
+/* Tocar la foto de una persona abre su perfil: se nota con el cursor y un pequeño agrandado */
+#app .autor .avatar, #app .comentario__cab .avatar, #app .entrada__pie .avatar { cursor: pointer; transition: transform var(--mov-rapido) var(--ease-suave); }
+#app .autor .avatar:hover, #app .comentario__cab .avatar:hover, #app .entrada__pie .avatar:hover { transform: scale(1.12); }
+
+/* Miniaturas de las imágenes en la ventana de entrada */
+.ent-imgs { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.ent-imgs:empty { display: none; }
+.ent-img { position: relative; aspect-ratio: 1; overflow: hidden; border-radius: var(--radio-md); background: var(--color-tarjeta-2); animation: pop var(--mov-medio) var(--ease-rebote); }
+.ent-img img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.ent-img__quitar { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border-radius: 50%; background: color-mix(in srgb, var(--color-negro) 65%, transparent); color: var(--color-blanco); }

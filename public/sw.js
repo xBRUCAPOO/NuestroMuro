@@ -4,14 +4,14 @@
    - Página, CSS, JS e iconos: primero se piden a internet (así, apenas se hace push a GitHub y Cloudflare publica, la app se
      actualiza sola) y solo si no hay conexión se usa la copia guardada.
    - /api/posts (el muro): también primero internet; sin conexión se muestra lo último que se vio.
-   - Fotos (/api/imagen/…): primero la copia guardada (una foto nunca cambia).
+   - Fotos (/api/imagen/… y, v2.8, /api/perfiles/imagen/… de los perfiles): primero la copia guardada (una imagen nunca cambia).
    - Fuentes de Google: se guardan y se refrescan en segundo plano.
    - Avisos del celular (v2.5): cuando el servidor manda un "toque" de push se piden los avisos nuevos y se muestran como notificación.
    - Todo lo demás de la API (login, votos, publicar…): siempre a internet, nunca se guarda.
    Para qué sirve: que sea una app instalable, rápida y que siempre muestre la última versión publicada.
    Cambiar VERSION fuerza a renovar las copias guardadas (no hace falta tocarlo en cada push: la red tiene prioridad).
    ============================================================ */
-const VERSION = 'v2.7.0';   // v2.4: fotos de perfil en el cascarón guardado; v2.5: avisos del celular (push); v2.7: fotos en gris de la escena de inicio de sesión
+const VERSION = 'v2.8.0';   // v2.8: imágenes de los perfiles (/api/perfiles/imagen/…) también primero desde la copia guardada; v2.4: fotos de perfil en el cascarón guardado; v2.5: avisos del celular (push); v2.7: fotos en gris de la escena de inicio de sesión
 const CACHE_ESTATICO = `muro-estatico-${VERSION}`;   // cascarón de la app
 const CACHE_DATOS = 'muro-datos';                     // listado del muro y fotos
 const CACHE_FUENTES = 'muro-fuentes';                 // Google Fonts
@@ -69,7 +69,7 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   if (url.pathname === '/api/posts') return void e.respondWith(redPrimero(request, CACHE_DATOS));
-  if (url.pathname.startsWith('/api/imagen/')) return void e.respondWith(cachePrimero(request, CACHE_DATOS));
+  if (url.pathname.startsWith('/api/imagen/') || url.pathname.startsWith('/api/perfiles/imagen/')) return void e.respondWith(cachePrimero(request, CACHE_DATOS));
   if (url.pathname.startsWith('/api/')) return;               // login, yo, votos…: siempre a la red
   if (url.pathname === '/sw.js') return;                      // el propio service worker lo gestiona el navegador
   e.respondWith(redPrimero(request, CACHE_ESTATICO));         // página, CSS, JS, iconos

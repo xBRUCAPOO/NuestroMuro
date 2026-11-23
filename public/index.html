@@ -36,7 +36,8 @@
     <h1 class="appbar__titulo">♥️♠️ Nuestro Muro ♠️♥️</h1>
     <span class="appbar__espacio">
       <button class="btn-icono" id="btnTema" type="button" data-tema-boton aria-label="Cambiar a tema claro"><span class="material-symbols-rounded">light_mode</span></button>
-      <button class="yo-chip" id="btnYo" type="button" aria-label="Cambiar de identidad" hidden></button>
+      <!-- v2.8: tocar mi foto abre mi perfil (cerrar sesión ahora está dentro del perfil) -->
+      <button class="yo-chip" id="btnYo" type="button" aria-label="Ver mi perfil" hidden></button>
     </span>
   </header>
 
@@ -48,7 +49,8 @@
       <span class="material-symbols-rounded ayuda-hero__icono">partner_heart</span>
       <h2 class="ayuda-hero__titulo">Nuestro muro</h2>
       <p class="ayuda-hero__texto">Acá está todo lo que nos importa: notas, listas, encuestas, fotos, links y planes. Los dos podemos agregar cosas.</p>
-      <label class="buscador">
+      <!-- v2.8: data-solo-muro = se esconde en la pestaña "Perfiles" (el buscador solo busca en el muro) -->
+      <label class="buscador" data-solo-muro>
         <span class="material-symbols-rounded">search</span>
         <input class="campo__entrada" id="buscador" type="search" placeholder="Buscar en el muro…" aria-label="Buscar en el muro" autocomplete="off" autocapitalize="none" spellcheck="false">
       </label>
@@ -58,28 +60,36 @@
     <!-- v2.2: los tres grupos de filtros (tipo de publicación · quién la subió · categoría) quedan separados por líneas finas horizontales -->
     <div class="filtros">
       <nav class="ayuda-indice filtros__tipos" id="filtroTipos" aria-label="Filtrar por tipo"></nav>
-      <hr class="separador" aria-hidden="true">
-      <div class="segmento" id="filtroAutor" role="group" aria-label="Filtrar por autor">
+      <!-- v2.8: la pestaña "Perfiles" (último chip de arriba) esconde los filtros de autor y categoría y el muro: lo marcado con data-solo-muro -->
+      <hr class="separador" aria-hidden="true" data-solo-muro>
+      <div class="segmento" id="filtroAutor" role="group" aria-label="Filtrar por autor" data-solo-muro>
         <button class="segmento__btn segmento__btn--activo" type="button" data-autor="">Todos</button>
         <button class="segmento__btn segmento__btn--m" type="button" data-autor="M">M</button>
         <button class="segmento__btn segmento__btn--xb" type="button" data-autor="xB">xB</button>
       </div>
-      <hr class="separador" aria-hidden="true">
+      <hr class="separador" aria-hidden="true" data-solo-muro>
       <!-- NUEVO v2.1: fila de categorías (script.js crea los botones: Todas, Sin categoría, cada categoría y "Nueva").
            Va en horizontal y, si no entran todas, se desliza hacia los lados (dedo, rueda del mouse o barra) -->
-      <nav class="cat-barra" id="filtroCategorias" aria-label="Filtrar por categoría"></nav>
+      <nav class="cat-barra" id="filtroCategorias" aria-label="Filtrar por categoría" data-solo-muro></nav>
     </div>
-    <div class="ayuda-acciones"><span class="contador-lista" id="cuenta" aria-live="polite"></span></div>
+    <div class="ayuda-acciones" data-solo-muro><span class="contador-lista" id="cuenta" aria-live="polite"></span></div>
 
     <!-- El muro: tarjetas en columnas tipo Pinterest (las crea script.js) -->
-    <section class="muro" id="muro" aria-label="Publicaciones"></section>
+    <section class="muro" id="muro" aria-label="Publicaciones" data-solo-muro></section>
+
+    <!-- NUEVO v2.8: PERFILES. Se ve al tocar la pestaña "Perfiles" o la foto de una persona. Arriba el selector Mely / Bruu; abajo (lo dibuja script.js)
+         la cabecera del perfil (foto, nombre, frase) y sus entradas (ícono + título + texto + imágenes) que pueden añadir, editar y borrar los dos -->
+    <section class="perfiles" id="vistaPerfiles" aria-label="Perfiles" hidden>
+      <div class="segmento perfiles__selector" id="perfilSelector" role="tablist" aria-label="Elegir perfil"></div>
+      <div class="perfil" id="perfilCuerpo" aria-live="polite"></div>
+    </section>
 
     <!-- Estado vacío / cargando -->
-    <div class="vacio" id="vacio" hidden>
+    <div class="vacio" id="vacio" hidden data-solo-muro>
       <span class="material-symbols-rounded">dashboard_customize</span>
       <p id="vacioTexto">Todavía no hay nada en el muro. ¡Toca el botón + y sube lo primero!</p>
     </div>
-    <div class="vacio" id="cargando"><span class="material-symbols-rounded cargando__icono">progress_activity</span><p>Cargando el muro…</p></div>
+    <div class="vacio" id="cargando" data-solo-muro><span class="material-symbols-rounded cargando__icono">progress_activity</span><p>Cargando el muro…</p></div>
   </main>
 
   <!-- Botón flotante para publicar (toma el color de quien tiene la sesión: azul M / rojo xB) -->
@@ -87,10 +97,10 @@
 
   <!-- Pie: versión y fecha de la última modificación de index.html (actualizar cada vez que se edite este archivo) -->
   <footer class="pie">
-    <!-- v2.7.0: todo se actualiza al instante (si el servidor falla se deshace y avisa), lista completada en verde, descripción en lista y encuesta, formato de texto en todos los campos, menos color de la persona, animaciones más fluidas y escena de inicio de sesión; v2.6.0: cambio instantáneo de los días del plan y tipos de día al crear el plan; v2.5.0: notificaciones (campanita + avisos del celular); v2.4.0: fotos de perfil (carta azul M / roja xB) en vez de las iniciales; v2.3.0: tipo "plan" en lugar de "video" -->
-    <span id="pieVersion">Versión 2.7.0</span>
+    <!-- v2.8.0: perfiles (pestaña "Perfiles" y foto de cada persona: frase, entradas con ícono, título, texto con formato e imágenes), cerrar sesión pasa al perfil propio y el tachado de las listas se ve bien en varias líneas; v2.7.0: todo se actualiza al instante (si el servidor falla se deshace y avisa), lista completada en verde, descripción en lista y encuesta, formato de texto en todos los campos, menos color de la persona, animaciones más fluidas y escena de inicio de sesión; v2.6.0: cambio instantáneo de los días del plan y tipos de día al crear el plan; v2.5.0: notificaciones (campanita + avisos del celular); v2.4.0: fotos de perfil (carta azul M / roja xB) en vez de las iniciales; v2.3.0: tipo "plan" en lugar de "video" -->
+    <span id="pieVersion">Versión 2.8.0</span>
     <span aria-hidden="true">·</span>
-    <span id="pieFecha">21/11/2026</span>
+    <span id="pieFecha">23/11/2026</span>
   </footer>
 
   <!-- ===================== VENTANA DE ACCESO (solo la primera vez) =====================
@@ -221,6 +231,43 @@
       <div class="modal__acciones">
         <button class="btn btn--fantasma" type="button" data-cerrar>Cancelar</button>
         <button class="btn btn--yo" id="btnCrearCat" type="submit"><span class="material-symbols-rounded">check</span>Crear</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ===================== NUEVA ENTRADA / EDITAR ENTRADA DE UN PERFIL (NUEVO v2.8) =====================
+       Como una categoría + un texto: se elige un ícono (de fonts.google.com/icons), se escribe un título y debajo el texto (con formato), y se pueden
+       adjuntar imágenes (hasta 4, se achican solas). La grilla de íconos y las miniaturas las dibuja script.js -->
+  <div class="modal-fondo" id="modalEntrada" hidden>
+    <form class="modal" id="formEntrada" role="dialog" aria-modal="true" aria-labelledby="entTitulo" novalidate>
+      <div class="modal__cabecera">
+        <h2 class="modal__titulo" id="entTitulo">Nueva entrada</h2>
+        <button class="btn-icono" type="button" data-cerrar aria-label="Cerrar"><span class="material-symbols-rounded">close</span></button>
+      </div>
+      <div class="modal__cuerpo">
+        <div class="campo"><span class="campo__etiqueta">Ícono</span>
+          <label class="buscador">
+            <span class="material-symbols-rounded">search</span>
+            <input class="campo__entrada" id="entBuscarIcono" type="search" placeholder="Buscar ícono (ej.: comida, música, viaje)" aria-label="Buscar ícono" autocomplete="off" autocapitalize="none" spellcheck="false">
+          </label>
+          <div class="iconos-grilla" id="entIconos" role="group" aria-label="Íconos disponibles"></div>
+          <p class="campo__ayuda" id="entSinIconos" hidden>No hay íconos con ese nombre.</p></div>
+        <label class="campo"><span class="campo__etiqueta">Título</span>
+          <input class="campo__entrada" id="entTituloCampo" type="text" maxlength="80" placeholder="Ej.: Comida favorita, Lo que me da miedo…" autocomplete="off" data-rico="flota"></label>
+        <div class="cat-previa" aria-live="polite"><span class="campo__etiqueta">Así se verá:</span><span class="chip chip--cat chip--activo" id="entPrevia"></span></div>
+        <label class="campo"><span class="campo__etiqueta">Texto</span>
+          <textarea class="campo__entrada" id="entTexto" rows="5" maxlength="3000" placeholder="Escribe lo que quieras contar…" data-rico="flota"></textarea>
+          <p class="campo__ayuda">Selecciona texto y usa la barra que aparece (o Ctrl/Cmd + B, I, K): *negrita*, _cursiva_, ~tachado~, [texto](https://…). Para listas empieza la línea con - .</p></label>
+        <div class="campo"><span class="campo__etiqueta" id="entEtiquetaImgs">Imágenes (hasta 4)</span>
+          <input id="entInputImg" type="file" accept="image/*" multiple hidden>
+          <div class="ent-imgs" id="entImgs"></div>
+          <button class="foto-elegir" id="btnEntImg" type="button"><span class="material-symbols-rounded">add_photo_alternate</span><span id="entTextoImg">Añadir imágenes</span></button>
+          <p class="campo__ayuda">Las imágenes se achican automáticamente para que pesen poco.</p></div>
+      </div>
+      <p class="mensaje-form" id="errorEntrada" role="alert"></p>
+      <div class="modal__acciones">
+        <button class="btn btn--fantasma" type="button" data-cerrar>Cancelar</button>
+        <button class="btn btn--yo" id="btnGuardarEntrada" type="submit"><span class="material-symbols-rounded">check</span><span id="entTextoGuardar">Añadir</span></button>
       </div>
     </form>
   </div>

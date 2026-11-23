@@ -190,7 +190,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (el.hidden) return;
     if (typeof ocultarBarraFlota === 'function') ocultarBarraFlota();   // v2.7: la barra de formato flotante no queda suelta al cerrar una ventana
     el.classList.add('saliendo');
-    setTimeout(() => { el.hidden = true; el.classList.remove('saliendo'); if (!document.querySelector('.modal-fondo:not([hidden])')) document.body.classList.remove('modal-abierto'); }, 160);
+    /* v2.8: si la ventana se volvió a abrir mientras se cerraba (ej.: el servidor rechazó lo que se acababa de enviar y se reabre con lo escrito), el cierre pendiente se cancela */
+    setTimeout(() => { if (!el.classList.contains('saliendo')) return; el.hidden = true; el.classList.remove('saliendo'); if (!document.querySelector('.modal-fondo:not([hidden])')) document.body.classList.remove('modal-abierto'); }, 160);
   }
   /* Confirmación propia (reemplaza a confirm()): devuelve una promesa true/false */
   function confirmar({ titulo, texto, boton = 'Aceptar' }) {
@@ -297,22 +298,25 @@ document.addEventListener('DOMContentLoaded', () => {
     $('app').inert = false;
     $('btnNuevo').hidden = false;
     const chip = $('btnYo'); chip.hidden = false; chip.replaceChildren(avatar(quien));   // v2.4: foto en vez de la inicial
-    chip.setAttribute('aria-label', `Sesión de ${quien}: tocar para cambiar de identidad`);
+    chip.setAttribute('aria-label', `Sesión de ${quien}: tocar para ver mi perfil`);   // v2.8
     ultimaFirma = ''; nodos.forEach((n) => n.remove()); nodos.clear();   // otra identidad = se vuelve a pintar todo
     categorias = []; ultimaFirmaCats = ''; filtro.cat = '';              // v2.1: también se vuelven a pedir las categorías
     avisos = []; noLeidas = 0; avisosVistos.clear(); primeraCargaAvisos = true; pintarContador();   // v2.5: notificaciones de la otra identidad
     $('btnNotif').hidden = false; sincronizarPush();
     comentariosAbiertos.clear(); borradores.clear();                     // v2.2: al cambiar de identidad no quedan comentarios desplegados ni borradores de la otra persona
     pintarFiltroCategorias();
+    reiniciarPerfiles(quien);                                            // v2.8: perfiles de la sesión anterior fuera; se vuelve a la pestaña del muro
     cargar();
   }
-  /* Tocar la inicial de quien soy: confirmar y salir (vuelve a aparecer la ventana de acceso) */
-  $('btnYo').addEventListener('click', async () => {
+  /* v2.8: tocar mi foto abre MI PERFIL (ahí está el botón "Cerrar sesión", que antes estaba en la foto) */
+  $('btnYo').addEventListener('click', () => { if (yo) abrirPerfil(yo); });
+  /* Cerrar sesión: confirmar y salir (vuelve a aparecer la ventana de acceso). v2.8: lo llama el botón del perfil propio */
+  async function cerrarSesion() {
     if (!(await confirmar({ titulo: `Sesión de ${yo}`, texto: '¿Quieres cerrar la sesión para entrar como otra identidad?', boton: 'Cerrar sesión' }))) return;
     /* v2.7: la ventana de acceso aparece al instante; el cierre de sesión en el servidor sigue en segundo plano (el nuevo inicio de sesión lo espera) */
     salidaEnCurso = bajaPushDeEstaSesion().catch(() => {}).then(() => api('/salir', { metodo: 'POST' })).catch(() => { /* aunque falle, ya se muestra el acceso */ });   // v2.5: este dispositivo deja de recibir los avisos de esta persona
-    yo = null; sesion++; pendientes.length = 0; mostrarAcceso();
-  });
+    yo = null; sesion++; pendientes.length = 0; perfPend.length = 0; mostrarAcceso();   // v2.8: tampoco quedan cambios de perfil pendientes de esta sesión
+  }
 
   /* ============================================================
      EL MURO — estado, filtros y pintado
@@ -582,6 +586,7 @@ document.addEventListener('DOMContentLoaded', () => {
     c.addEventListener('click', () => {
       filtro.tipo = valor;
       document.querySelectorAll('#filtroTipos .chip').forEach((x) => x.classList.toggle('chip--activo', x === c));
+      if (vista !== 'muro') mostrarVista('muro');   // v2.8: si se estaba viendo un perfil, tocar Todo / Nota / Lista… vuelve al muro
       pintar();
     });
     $('filtroTipos').append(c);
@@ -1250,7 +1255,7 @@ document.addEventListener('DOMContentLoaded', () => {
     catsElegidas = new Set(catsDe(p).map((c) => c.id)); pintarCatsComposer(); reiniciarVistaTexto();   // v2.1: sus categorías actuales quedan marcadas
     abrirModal($('modalNuevo'));
   }
-  $('btnNuevo').addEventListener('click', abrirNuevo);
+  $('btnNuevo').addEventListener('click', () => (vista === 'perfiles' ? abrirEntrada() : abrirNuevo()));   // v2.8: en la pestaña "Perfiles" el + añade una entrada al perfil que se está viendo
   document.querySelectorAll('#modalNuevo [data-cerrar]').forEach((b) => b.addEventListener('click', () => cerrarModal($('modalNuevo'))));
   $('modalNuevo').addEventListener('mousedown', (e) => { if (e.target === $('modalNuevo')) cerrarModal($('modalNuevo')); });   // clic afuera = cerrar
 
@@ -1701,14 +1706,15 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----- Foto: elegir y comprimir en el celular antes de subir ----- */
   /* Qué hace: reduce la foto a un máximo de 1280 px y la guarda como JPEG bajando la calidad hasta que pese poco (≈ 800 KB como máximo).
      Para qué sirve: las fotos se guardan en la base de datos D1, que admite filas de ~2 MB; así caben muchas y cargan rápido. */
-  async function comprimirFoto(archivo) {
+  /* v2.8: parámetros opcionales (lado máximo en px y tope de caracteres en base64) para que las imágenes de los perfiles pesen menos que una foto de publicación */
+  async function comprimirFoto(archivo, { lado: ladoMax = 1280, maxChars: topeChars = 1100000 } = {}) {
     let bmp;
     try { bmp = await createImageBitmap(archivo, { imageOrientation: 'from-image' }); }
     catch (e) {                                                          // respaldo para navegadores sin createImageBitmap con opciones
       bmp = await new Promise((ok, mal) => { const url = URL.createObjectURL(archivo), im = new Image(); im.onload = () => { URL.revokeObjectURL(url); ok(im); }; im.onerror = mal; im.src = url; });
     }
-    const MAX_CHARS = 1100000;                                           // tope de la foto en base64 (el servidor admite 1.400.000)
-    let lado = 1280, calidad = 0.82, dataUrl, w, hh;
+    const MAX_CHARS = topeChars;                                         // tope de la foto en base64 (el servidor admite 1.400.000)
+    let lado = ladoMax, calidad = 0.82, dataUrl, w, hh;
     for (let intento = 0; intento < 8; intento++) {
       const origW = bmp.naturalWidth || bmp.width, origH = bmp.naturalHeight || bmp.height, k = Math.min(1, lado / Math.max(origW, origH));
       w = Math.max(1, Math.round(origW * k)); hh = Math.max(1, Math.round(origH * k));
@@ -1785,7 +1791,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* Reabre el formulario con lo que se había escrito cuando el servidor rechazó una publicación o una edición (v2.7) */
   function restaurarFormulario(op) {
-    if (!$('modalNuevo').hidden) return;                                // ya hay otro formulario abierto: no se pisa
+    if (!$('modalNuevo').hidden && !$('modalNuevo').classList.contains('saliendo')) return;   // ya hay otro formulario abierto: no se pisa (v2.8: una ventana que se está cerrando no cuenta como abierta)
     const c = op.form.cuerpo;
     if (op.k === 'editar') {
       const p = posts.find((x) => x.id === op.id); if (!p) return;
@@ -1815,8 +1821,339 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (!$('modalConfirmar').hidden) { if ($('confNo').onclick) $('confNo').onclick(); }
     else if (!$('modalCategoria').hidden) cerrarModal($('modalCategoria'));   // v2.1: la ventana de nueva categoría está por encima del formulario
     else if (!$('modalNotif').hidden) cerrarModal($('modalNotif'));          // v2.5
+    else if (!$('modalEntrada').hidden) cerrarModal($('modalEntrada'));      // v2.8: ventana de entrada de perfil
     else if (!$('modalNuevo').hidden) cerrarModal($('modalNuevo'));
   });
+
+  /* ============================================================
+     v2.8 — PERFILES
+     Qué hace: cada persona (Mely = M, Bruu = xB) tiene un perfil con su foto, su nombre y una frase corta ("bio") que SOLO edita su dueño, y
+     una lista de ENTRADAS: cada una con un ícono (de fonts.google.com/icons) + un título + un texto con formato + hasta 4 imágenes. Las
+     entradas las pueden añadir, editar y borrar LOS DOS en cualquiera de los dos perfiles.
+     Se entra por la pestaña "Perfiles" (junto a Todo, Nota, Lista…) con el selector Mely / Bruu, o tocando la foto de una persona (la mía, arriba
+     a la derecha, abre mi perfil; la de una publicación o comentario, el de su autor). El botón "Cerrar sesión" ahora está en el perfil propio.
+     Todo es instantáneo como el resto de la app (v2.7): lo que se hace se ve ya mismo y se manda al servidor en segundo plano, de a una acción y en
+     orden; si el servidor la rechaza, la pantalla vuelve a lo que dice el servidor, sale un aviso de error y la ventana se reabre con lo escrito.
+     Lo que se ve es siempre "último estado confirmado por el servidor" + "acciones todavía sin confirmar" (recomponerPerfiles).
+     Para qué sirve: tener a mano la información de cada uno (gustos, datos, fotos…) dentro de la misma página.
+     ============================================================ */
+  const LIM_PERFIL = { frase: 120, titulo: 80, texto: 3000, imagenes: 4 };   // iguales a los del servidor (functions/_lib/perfiles.js)
+  const AVISO_ERROR_PERFIL = { frase: 'No se pudo guardar la frase', crear: 'No se pudo añadir la entrada', editar: 'No se pudieron guardar los cambios de la entrada', borrar: 'No se pudo eliminar la entrada' };
+  let vista = 'muro';                                         // 'muro' | 'perfiles' (qué pestaña se ve)
+  let perfilVer = 'M';                                        // perfil que se está viendo
+  let perfServidor = { frases: { M: '', xB: '' }, entradas: [] };   // lo último que confirmó el servidor
+  let perfVista = { frases: { M: '', xB: '' }, entradas: [] };      // lo que se ve: servidor + acciones sin confirmar
+  const perfPend = [];                                        // acciones de perfil sin confirmar, en orden: { k: 'frase' | 'crear' | 'editar' | 'borrar', sesion, … }
+  let colaPerf = Promise.resolve();                           // las acciones se mandan de a una y en orden
+  let perfGen = 0;                                            // sube con cada acción confirmada o rechazada (descarta actualizaciones automáticas viejas)
+  let perfCargando = false, perfCargadas = false;
+  const imgsLocales = new Map();                              // id de imagen → dataURL (se ve al instante, sin pedirla al servidor)
+  const nodosEntradas = new Map();                            // id de entrada → tarjeta ya pintada
+  let editandoFrase = false;                                  // el dueño está escribiendo su frase (no se repinta la cabecera mientras tanto)
+  let perfilArmado = '', firmaFrase = '';                     // qué perfil tiene armada la pantalla / huella de la frase pintada
+  let refs = null;                                            // elementos del perfil armado (cabecera, lista…)
+  const chipPerfiles = h('button', { class: 'chip', type: 'button', 'data-vista': 'perfiles' }, icono('account_circle'), h('span', { text: 'Perfiles' }));
+  $('filtroTipos').append(chipPerfiles);                      // la pestaña "Perfiles" va al final de la fila Todo / Nota / Lista…
+  chipPerfiles.addEventListener('click', () => mostrarVista('perfiles'));
+  const planoDe = (t) => String(t || '').replace(/[*_~`]/g, '');   // título sin las marcas de formato (para el pie del visor y las etiquetas)
+  const srcImg = (i) => imgsLocales.get(i.id) || `/api/perfiles/imagen/${i.id}`;   // si la imagen se acaba de subir se usa la copia local
+
+  /* Selector Mely / Bruu (se arma una sola vez; marcarSelector() cambia cuál está activo y pone "(yo)") */
+  const botonesSel = ['M', 'xB'].map((q) => h('button', { class: `segmento__btn segmento__btn--${q === 'M' ? 'm' : 'xb'} perfil-sel`, type: 'button', role: 'tab', 'data-quien': q, onclick: () => elegirPerfil(q) },
+    avatar(q, 'avatar--mini'), h('span', { text: NOMBRE_ESCENA[q] })));
+  $('perfilSelector').append(...botonesSel);
+  function marcarSelector() {
+    botonesSel.forEach((b) => {
+      const q = b.dataset.quien, activo = q === perfilVer;
+      b.classList.toggle('segmento__btn--activo', activo); b.setAttribute('aria-selected', String(activo));
+      b.querySelector('span:not(.avatar)').textContent = NOMBRE_ESCENA[q] + (q === yo ? ' (yo)' : '');
+    });
+  }
+
+  /* Cambia entre el muro y los perfiles: esconde / muestra cada parte (lo marcado con data-solo-muro se esconde con CSS según body[data-vista]) y
+     deja activa la ficha que corresponde en la fila de arriba */
+  function mostrarVista(v) {
+    vista = v; document.body.dataset.vista = v;
+    $('vistaPerfiles').hidden = v !== 'perfiles';
+    document.querySelectorAll('#filtroTipos .chip').forEach((x) => x.classList.toggle('chip--activo', v === 'perfiles' ? x === chipPerfiles : x !== chipPerfiles && x.dataset.tipo === filtro.tipo));
+    $('btnNuevo').setAttribute('aria-label', v === 'perfiles' ? 'Nueva entrada en el perfil' : 'Nueva publicación');
+    if (v === 'perfiles') { marcarSelector(); pintarPerfil(); cargarPerfiles(); }
+  }
+  /* Abre el perfil de una persona (tocando su foto) y sube para verlo */
+  function abrirPerfil(q) {
+    perfilVer = q === 'xB' ? 'xB' : 'M';
+    mostrarVista('perfiles'); armarPerfil(); pintarPerfil();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  function elegirPerfil(q) { if (q === perfilVer) return; perfilVer = q; marcarSelector(); armarPerfil(); pintarPerfil(); }
+  /* Al iniciar sesión: se descarta todo lo de la sesión anterior y se vuelve al muro */
+  function reiniciarPerfiles(quien) {
+    perfPend.length = 0; perfGen++; colaPerf = Promise.resolve();
+    perfServidor = { frases: { M: '', xB: '' }, entradas: [] }; perfVista = { frases: { M: '', xB: '' }, entradas: [] };
+    perfCargadas = false; perfilVer = quien; editandoFrase = false; perfilArmado = ''; firmaFrase = ''; refs = null;
+    nodosEntradas.clear(); imgsLocales.clear(); $('perfilCuerpo').replaceChildren();
+    mostrarVista('muro'); marcarSelector();
+  }
+  /* Tocar la foto de una persona (la de una publicación o de un comentario) abre su perfil. Las fotos dentro de botones (corazones, selector) y la
+     de la cabecera del propio perfil no hacen nada. */
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('.avatar');
+    if (!a || !yo || !a.closest('#app') || a.closest('button, a, .perfil__cab')) return;
+    const q = a.classList.contains('avatar--xB') ? 'xB' : a.classList.contains('avatar--M') ? 'M' : null;
+    if (q) abrirPerfil(q);
+  });
+
+  /* ----- Pantalla del perfil: se arma una vez por perfil (cabecera + barra + lista) y después solo se actualizan las partes que cambian ----- */
+  function armarPerfil() {
+    const q = perfilVer, mio = q === yo, nombre = NOMBRE_ESCENA[q];
+    perfilArmado = q + '|' + yo; firmaFrase = ''; nodosEntradas.clear();
+    const fraseCaja = h('div', { class: 'perfil__frase-caja' });
+    const cuenta = h('span', { class: 'perfil__cuenta' });
+    const lista = h('div', { class: 'perfil__lista' });
+    const vacio = h('p', { class: 'perfil__vacio', hidden: true });
+    $('perfilCuerpo').dataset.quien = q;
+    $('perfilCuerpo').replaceChildren(
+      h('header', { class: 'perfil__cab' },
+        avatar(q, 'avatar--perfil'),
+        h('div', { class: 'perfil__datos' }, h('h2', { class: 'perfil__nombre' }, nombre, h('span', { class: 'perfil__id', text: q })), fraseCaja),
+        /* Cerrar sesión: solo en el perfil propio (antes estaba en la foto de la barra) */
+        mio ? h('button', { class: 'btn btn--peligro perfil__salir', type: 'button', onclick: cerrarSesion }, icono('logout'), h('span', { text: 'Cerrar sesión' })) : null),
+      h('div', { class: 'perfil__barra' },
+        h('h3', { class: 'perfil__subtitulo' }, icono('badge'), h('span', { text: mio ? 'Sobre mí' : `Sobre ${nombre}` }), cuenta),
+        h('button', { class: 'btn btn--yo', type: 'button', onclick: () => abrirEntrada() }, icono('add'), h('span', { text: 'Añadir entrada' }))),
+      lista, vacio);
+    refs = { fraseCaja, cuenta, lista, vacio };
+  }
+
+  /* Frase corta bajo el nombre. Solo su dueño la edita (lápiz → campo → guardar); la otra persona solo la lee */
+  function pintarFrase() {
+    const q = perfilVer, mio = q === yo, f = perfVista.frases[q] || '';
+    const firma = JSON.stringify([f, mio, editandoFrase]);
+    if (firma === firmaFrase) return;
+    firmaFrase = firma;
+    if (mio && editandoFrase) {
+      const campo = h('input', { class: 'campo__entrada', type: 'text', maxlength: LIM_PERFIL.frase, value: f, placeholder: 'Una frase corta sobre ti…', 'aria-label': 'Tu frase', autocomplete: 'off', 'data-rico': 'flota' });
+      const guardar = () => { editandoFrase = false; const nueva = campo.value.trim(); if (nueva !== f) encolarPerfil({ k: 'frase', quien: q, frase: nueva }); else { firmaFrase = ''; pintarFrase(); } };
+      const cancelar = () => { editandoFrase = false; firmaFrase = ''; pintarFrase(); };
+      campo.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); guardar(); } else if (e.key === 'Escape') { e.stopPropagation(); cancelar(); } });
+      refs.fraseCaja.replaceChildren(campo,
+        h('button', { class: 'btn-icono', type: 'button', 'aria-label': 'Guardar frase', title: 'Guardar', onclick: guardar }, icono('check')),
+        h('button', { class: 'btn-icono', type: 'button', 'aria-label': 'Cancelar', title: 'Cancelar', onclick: cancelar }, icono('close')));
+      refs.fraseCaja.classList.add('perfil__frase-caja--edita'); campo.focus(); campo.setSelectionRange(campo.value.length, campo.value.length);
+      return;
+    }
+    refs.fraseCaja.classList.remove('perfil__frase-caja--edita');
+    refs.fraseCaja.replaceChildren(
+      h('p', { class: 'perfil__frase' + (f ? '' : ' perfil__frase--vacia') }, f ? inline(f, true) : (mio ? 'Escribe una frase corta sobre ti…' : 'Todavía no escribió una frase.')),
+      mio ? h('button', { class: 'btn-icono perfil__editar', type: 'button', 'aria-label': 'Editar mi frase', title: 'Editar mi frase', onclick: () => { editandoFrase = true; pintarFrase(); } }, icono('edit')) : null);
+  }
+
+  /* Una entrada: ícono + título (como una categoría), el texto con formato, las imágenes y el pie (quién la escribió, cuándo, editar y borrar: los dos pueden con cualquiera) */
+  function crearEntrada(e) {
+    const imgs = e.imagenes || [];
+    const el = h('article', { class: 'entrada', 'data-autor': e.autor, 'data-id': e.id },
+      h('header', { class: 'entrada__cab' }, h('span', { class: 'chip chip--cat chip--activo entrada__titulo' }, icono(e.icono), h('span', {}, inline(e.titulo, true)))),
+      e.texto ? md(e.texto, 'post__texto entrada__texto') : null,
+      imgs.length ? h('div', { class: 'entrada__imgs entrada__imgs--' + Math.min(imgs.length, 4) }, imgs.map((i) =>
+        h('button', { class: 'entrada__img', type: 'button', 'data-k': i.id, 'aria-label': 'Ver imagen grande', onclick: () => abrirVisor(srcImg(i), planoDe(e.titulo)) },
+          h('img', { src: srcImg(i), alt: '', loading: 'lazy', decoding: 'async', draggable: 'false' })))) : null,
+      h('footer', { class: 'entrada__pie' },
+        avatar(e.autor, 'avatar--mini'),
+        h('time', { class: 'autor__hora', 'data-ts': e.creado, text: hora(e.creado), title: new Date(e.creado).toLocaleString('es-AR') }),
+        h('button', { class: 'post__accion post__accion--der', type: 'button', 'aria-label': 'Editar entrada', onclick: () => abrirEntrada(e) }, icono('edit')),
+        h('button', { class: 'post__accion post__accion--peligro', type: 'button', 'aria-label': 'Eliminar entrada', onclick: () => borrarEntrada(e) }, icono('delete'))));
+    [...el.children].forEach((c) => c.setAttribute('data-k', c.className.split(' ')[0] || c.tagName));   // claves para morph(), igual que en las publicaciones
+    return el;
+  }
+
+  /* Pinta el perfil que se está viendo: frase y entradas (las nuevas entran con animación, las que cambiaron se actualizan en el lugar, las borradas salen) */
+  function pintarPerfil() {
+    if (vista !== 'perfiles' || !yo) return;
+    if (perfilArmado !== perfilVer + '|' + yo || !refs) armarPerfil();
+    pintarFrase();
+    const lista = perfVista.entradas.filter((e) => e.perfil === perfilVer), visibles = new Set(lista.map((e) => e.id));
+    nodosEntradas.forEach((el, id) => { if (!visibles.has(id)) { nodosEntradas.delete(id); salirTarjeta(el); } });
+    let orden = 0; const ordenadas = [];
+    lista.forEach((e) => {
+      const firma = JSON.stringify([e.icono, e.titulo, e.texto, (e.imagenes || []).map((i) => i.id), e.autor, e.actualizado, yo]);
+      let el = nodosEntradas.get(e.id);
+      if (!el) {
+        el = crearEntrada(e); el._firma = firma;
+        el.classList.add('entra'); el.style.setProperty('--i', Math.min(orden++, 10));
+        el.addEventListener('animationend', () => el.classList.remove('entra'), { once: true });
+        nodosEntradas.set(e.id, el);
+      } else if (el._firma !== firma) { morph(el, crearEntrada(e), true); el._firma = firma; }
+      ordenadas.push(el);
+    });
+    let cursor = refs.lista.firstChild;
+    ordenadas.forEach((el) => {
+      while (cursor && cursor.classList && cursor.classList.contains('sale')) cursor = cursor.nextSibling;
+      if (cursor === el) cursor = cursor.nextSibling; else refs.lista.insertBefore(el, cursor);
+    });
+    refs.cuenta.textContent = lista.length ? String(lista.length) : '';
+    refs.vacio.hidden = lista.length > 0 || !perfCargadas;
+    refs.vacio.textContent = perfilVer === yo ? 'Todavía no hay nada en tu perfil. ¡Añade tu primera entrada!' : `Todavía no hay nada en el perfil de ${NOMBRE_ESCENA[perfilVer]}. Puedes añadir la primera entrada.`;
+    if (!perfCargadas && !lista.length) { refs.vacio.hidden = false; refs.vacio.textContent = 'Cargando el perfil…'; }
+  }
+
+  /* ----- Acciones instantáneas del perfil (misma idea que el motor de v2.7) ----- */
+  /* Aplica una acción sobre una copia del estado (crear / editar / borrar entradas, cambiar una frase). Es idempotente: si el servidor ya la tenía, no pasa nada */
+  function aplicarOpPerfil(v, op) {
+    if (op.k === 'frase') v.frases[op.quien] = op.frase;
+    else if (op.k === 'crear') { if (!v.entradas.some((e) => e.id === op.entrada.id)) v.entradas.push(clon(op.entrada)); }
+    else if (op.k === 'editar') { const e = v.entradas.find((x) => x.id === op.id); if (e) Object.assign(e, op.campos, { actualizado: op.t, imagenes: op.imagenes.map((i) => ({ id: i.id, w: i.w, h: i.h })) }); }
+    else if (op.k === 'borrar') v.entradas = v.entradas.filter((e) => e.id !== op.id);
+  }
+  /* Lo que se ve = lo último que confirmó el servidor + las acciones que todavía no confirmó */
+  function recomponerPerfiles() {
+    const v = { frases: { ...perfServidor.frases }, entradas: perfServidor.entradas.map(clon) };
+    perfPend.forEach((op) => aplicarOpPerfil(v, op));
+    v.entradas.sort((a, b) => b.creado - a.creado);
+    perfVista = v; pintarPerfil();
+  }
+  /* Se ve ya y se manda en segundo plano (a la cola) */
+  function encolarPerfil(op) {
+    op.sesion = sesion; op.t = Date.now();
+    perfPend.push(op); recomponerPerfiles();
+    colaPerf = colaPerf.then(() => enviarOpPerfil(op));
+  }
+  async function enviarOpPerfil(op) {
+    if (op.sesion !== sesion || !perfPend.includes(op)) return;       // cambió la sesión mientras esperaba
+    try {
+      let r;
+      if (op.k === 'frase') r = await api(`/perfiles/bio/${op.quien}`, { metodo: 'PUT', cuerpo: { frase: op.frase } });
+      else if (op.k === 'crear') r = await api('/perfiles/entradas', { metodo: 'POST', cuerpo: { id: op.id, perfil: op.entrada.perfil, ...op.campos, imagenes: op.nuevas } });
+      else if (op.k === 'editar') r = await api(`/perfiles/entradas/${op.id}`, { metodo: 'PUT', cuerpo: { ...op.campos, conservar: op.conservar, imagenes: op.nuevas } });
+      else r = await api(`/perfiles/entradas/${op.id}`, { metodo: 'DELETE' });
+      if (op.sesion !== sesion) return;
+      /* Confirmada: pasa a ser lo que dice el servidor */
+      if (op.k === 'frase') perfServidor.frases[op.quien] = r.frase;
+      else if (op.k === 'borrar') perfServidor.entradas = perfServidor.entradas.filter((e) => e.id !== op.id);
+      else perfServidor.entradas = [...perfServidor.entradas.filter((e) => e.id !== r.entrada.id), r.entrada];
+      perfPend.splice(perfPend.indexOf(op), 1); perfGen++; recomponerPerfiles();
+      if (!perfPend.length) cargarPerfiles();                          // por si la otra persona también cambió algo
+    } catch (err) {
+      if (op.sesion !== sesion) return;
+      /* Rechazada: se quita de lo pendiente (la pantalla vuelve a lo que dice el servidor), aviso de error y, si era una entrada, se reabre la ventana con lo escrito */
+      perfPend.splice(perfPend.indexOf(op), 1); perfGen++; recomponerPerfiles();
+      avisar(`${AVISO_ERROR_PERFIL[op.k]}: ${err.message}`, 'error');
+      if (op.form && (op.k === 'crear' || op.k === 'editar')) restaurarEntrada(op);
+      if (op.k === 'frase') { firmaFrase = ''; pintarFrase(); }
+      cargarPerfiles();
+    }
+  }
+  /* Pide los perfiles al servidor (con ETag no gasta datos si nada cambió). Si hay acciones sin confirmar, o algo se confirmó mientras tanto, la respuesta se descarta */
+  async function cargarPerfiles() {
+    if (!yo || perfCargando) return;
+    perfCargando = true;
+    const gen = perfGen, ses = sesion;
+    try {
+      const r = await api('/perfiles');
+      if (gen !== perfGen || ses !== sesion || perfPend.length) return;
+      perfServidor = { frases: { M: r.perfiles.M.frase, xB: r.perfiles.xB.frase }, entradas: r.entradas };
+      perfCargadas = true; recomponerPerfiles();
+    } catch (e) { /* sin conexión: se reintenta en el próximo ciclo */ }
+    finally { perfCargando = false; }
+  }
+  setInterval(() => { if (document.visibilityState === 'visible' && vista === 'perfiles' && yo) cargarPerfiles(); }, 12000);   // actualización automática solo mientras se ve un perfil
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && vista === 'perfiles') cargarPerfiles(); });
+
+  async function borrarEntrada(e) {
+    if (!(await confirmar({ titulo: 'Eliminar entrada', texto: `Se borrará «${planoDe(e.titulo)}» del perfil de ${NOMBRE_ESCENA[e.perfil]} para los dos y no se puede deshacer.`, boton: 'Eliminar' }))) return;
+    encolarPerfil({ k: 'borrar', id: e.id });                         // desaparece al instante (si el servidor falla vuelve con un aviso)
+  }
+
+  /* ----- Ventana de entrada (nueva / editar) ----- */
+  const modalEnt = $('modalEntrada');
+  let entEditando = null;                                  // entrada que se está editando (null = nueva)
+  let entPerfil = 'M';                                     // perfil donde se añade la entrada nueva
+  let entIcono = 'star';                                   // ícono elegido
+  let entImgs = [];                                        // imágenes de la ventana, en orden: { id, w, h, nuevo, dataUrl }
+  let entProcesando = 0;                                   // imágenes que todavía se están achicando
+  /* Muestra cómo quedará la ficha (ícono + título) mientras se escribe */
+  function previaEntrada() { $('entPrevia').replaceChildren(icono(entIcono), h('span', { text: $('entTituloCampo').value.trim() || 'Título' })); }
+  function elegirIconoEnt(nombre) {
+    entIcono = nombre;
+    $('entIconos').querySelectorAll('.icono-op').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.n === nombre)));
+    previaEntrada();
+  }
+  /* La grilla de íconos (los mismos de las categorías) se crea la primera vez que se abre la ventana */
+  function crearGrillaIconosEnt() {
+    if ($('entIconos').children.length) return;
+    $('entIconos').replaceChildren(...ICONOS_CAT.map(([n, alias]) => h('button', {
+      class: 'icono-op', type: 'button', title: n.replace(/_/g, ' '), 'aria-label': n.replace(/_/g, ' '), 'aria-pressed': 'false',
+      'data-n': n, 'data-b': normalizar(`${n.replace(/_/g, ' ')} ${alias}`), onclick: () => elegirIconoEnt(n) }, icono(n))));
+  }
+  $('entBuscarIcono').addEventListener('input', () => {
+    const palabras = normalizar($('entBuscarIcono').value.trim()).split(/\s+/).filter(Boolean);
+    let hay = 0;
+    $('entIconos').querySelectorAll('.icono-op').forEach((b) => { const ok = palabras.every((w) => b.dataset.b.includes(w)); b.hidden = !ok; if (ok) hay++; });
+    $('entSinIconos').hidden = hay > 0;
+  });
+  $('entTituloCampo').addEventListener('input', previaEntrada);
+  /* Miniaturas de las imágenes de la ventana, cada una con su botón para quitarla */
+  function pintarImgsEnt() {
+    $('entImgs').replaceChildren(...entImgs.map((i) => h('div', { class: 'ent-img' },
+      h('img', { src: i.nuevo ? i.dataUrl : srcImg(i), alt: '', draggable: 'false' }),
+      h('button', { class: 'btn-icono ent-img__quitar', type: 'button', 'aria-label': 'Quitar imagen', title: 'Quitar', onclick: () => { entImgs = entImgs.filter((x) => x !== i); pintarImgsEnt(); } }, icono('close')))));
+    const lleno = entImgs.length >= LIM_PERFIL.imagenes;
+    $('btnEntImg').hidden = lleno;
+    $('entTextoImg').textContent = entProcesando ? 'Procesando imágenes…' : (entImgs.length ? 'Añadir otra imagen' : 'Añadir imágenes');
+    $('btnGuardarEntrada').disabled = entProcesando > 0;             // no se guarda hasta que terminen de achicarse
+  }
+  $('btnEntImg').addEventListener('click', () => $('entInputImg').click());
+  $('entInputImg').addEventListener('change', async () => {
+    const archivos = [...$('entInputImg').files].slice(0, Math.max(0, LIM_PERFIL.imagenes - entImgs.length)); $('entInputImg').value = '';
+    if (!archivos.length) return void ($('errorEntrada').textContent = `Máximo ${LIM_PERFIL.imagenes} imágenes por entrada.`);
+    $('errorEntrada').textContent = ''; entProcesando += archivos.length; pintarImgsEnt();
+    for (const a of archivos) {
+      try { const f = await comprimirFoto(a, { lado: 1024, maxChars: 450000 }); entImgs.push({ id: uuid(), w: f.w, h: f.h, nuevo: true, dataUrl: f.dataUrl }); }
+      catch (e) { $('errorEntrada').textContent = 'No se pudo leer una de las imágenes. Prueba con otra.'; }
+      entProcesando--; pintarImgsEnt();
+    }
+  });
+  /* Abre la ventana: sin argumentos = entrada nueva en el perfil que se ve; con una entrada = editarla; "borrador" = lo que se había escrito (si el servidor rechazó el envío) */
+  function abrirEntrada(entrada, borrador) {
+    entEditando = entrada || null; entPerfil = entrada ? entrada.perfil : (borrador ? borrador.perfil : perfilVer);
+    const d = borrador || (entrada ? { icono: entrada.icono, titulo: entrada.titulo, texto: entrada.texto, imgs: (entrada.imagenes || []).map((i) => ({ id: i.id, w: i.w, h: i.h, nuevo: false })) } : { icono: 'star', titulo: '', texto: '', imgs: [] });
+    $('formEntrada').reset(); $('errorEntrada').textContent = ''; $('entBuscarIcono').value = ''; $('entSinIconos').hidden = true; entProcesando = 0;
+    crearGrillaIconosEnt(); $('entIconos').querySelectorAll('.icono-op').forEach((b) => { b.hidden = false; });
+    $('entTitulo').textContent = entEditando ? 'Editar entrada' : `Nueva entrada en el perfil de ${NOMBRE_ESCENA[entPerfil]}`;
+    $('entTextoGuardar').textContent = entEditando ? 'Guardar' : 'Añadir';
+    $('entTituloCampo').value = d.titulo; $('entTexto').value = d.texto;
+    entImgs = d.imgs.map((i) => ({ ...i })); pintarImgsEnt();
+    elegirIconoEnt(d.icono);
+    abrirModal(modalEnt);
+    const op = $('entIconos').querySelector('.icono-op[aria-pressed="true"]');                      // el ícono elegido queda a la vista dentro de la grilla
+    if (op) { const g = $('entIconos'); g.scrollTop = Math.max(0, op.getBoundingClientRect().top - g.getBoundingClientRect().top + g.scrollTop - g.clientHeight / 2); }
+    setTimeout(() => $('entTituloCampo').focus(), 80);
+  }
+  document.querySelectorAll('#modalEntrada [data-cerrar]').forEach((b) => b.addEventListener('click', () => cerrarModal(modalEnt)));
+  modalEnt.addEventListener('mousedown', (e) => { if (e.target === modalEnt) cerrarModal(modalEnt); });
+  $('formEntrada').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const titulo = $('entTituloCampo').value.trim();
+    if (!titulo) { $('errorEntrada').textContent = 'Ponle un título a la entrada.'; $('entTituloCampo').focus(); return; }
+    if (entProcesando) return;
+    const campos = { icono: entIcono, titulo, texto: $('entTexto').value.trim() };
+    const form = { perfil: entPerfil, ...campos, imgs: entImgs.map((i) => ({ ...i })) };       // copia para reabrir la ventana si el servidor rechaza
+    const nuevas = entImgs.filter((i) => i.nuevo).map((i) => ({ id: i.id, imagen: i.dataUrl, w: i.w, h: i.h }));
+    entImgs.forEach((i) => { if (i.nuevo) imgsLocales.set(i.id, i.dataUrl); });                   // las imágenes se ven ya mismo con la copia local
+    const imagenes = entImgs.map((i) => ({ id: i.id, w: i.w, h: i.h }));
+    if (entEditando) encolarPerfil({ k: 'editar', id: entEditando.id, campos, imagenes, conservar: entImgs.filter((i) => !i.nuevo).map((i) => i.id), nuevas, form });
+    else {
+      const id = uuid(), ahora = Date.now();
+      encolarPerfil({ k: 'crear', id, campos, nuevas, form, entrada: { id, perfil: entPerfil, ...campos, autor: yo, creado: ahora, actualizado: ahora, imagenes } });
+    }
+    cerrarModal(modalEnt);
+  });
+  /* Reabre la ventana con lo que se había escrito cuando el servidor rechazó una entrada nueva o una edición */
+  function restaurarEntrada(op) {
+    if (!modalEnt.hidden && !modalEnt.classList.contains('saliendo')) return;   // ya hay otra ventana abierta: no se pisa (una que se está cerrando no cuenta)
+    const entrada = op.k === 'editar' ? (perfVista.entradas.find((e) => e.id === op.id) || null) : null;
+    if (op.k === 'editar' && !entrada) return;                         // la entrada ya no existe
+    abrirEntrada(entrada, op.form);
+  }
 
   /* ============================================================
      ONDA AL TOCAR (igual que ÉLIX)

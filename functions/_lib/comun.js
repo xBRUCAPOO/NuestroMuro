@@ -77,6 +77,19 @@ const TABLAS = [
   `CREATE INDEX IF NOT EXISTS idx_notif_para ON notificaciones(para, creado DESC)`,
   /* NUEVO v2.5: dispositivos que activaron los avisos del celular (Web Push). endpoint = dirección que da el navegador; quien = identidad con sesión en ese dispositivo */
   `CREATE TABLE IF NOT EXISTS suscripciones (endpoint TEXT PRIMARY KEY, quien TEXT NOT NULL, creado INTEGER NOT NULL)`,
+  /* NUEVO v2.8: perfiles. Cada persona (M / xB) tiene un perfil con una frase corta ("bio") que solo edita su dueño y una lista de entradas
+     (ícono + título + texto con formato + imágenes) que PUEDEN añadir, editar y borrar los dos.
+     - perfiles: una fila por dueño con su frase.
+     - perfil_entradas: las entradas; "perfil" = de quién es el perfil donde está, "autor" = quién la escribió.
+     - perfil_imagenes: las imágenes de cada entrada (una fila por imagen, así ninguna fila de D1 se pasa del tamaño máximo). Se sirven por /api/perfiles/imagen/ID.
+     Todo es CREATE IF NOT EXISTS: en una base ya desplegada solo se agregan las tablas nuevas, no se toca nada de lo anterior. */
+  `CREATE TABLE IF NOT EXISTS perfiles (quien TEXT PRIMARY KEY, frase TEXT, actualizado INTEGER NOT NULL DEFAULT 0)`,
+  `CREATE TABLE IF NOT EXISTS perfil_entradas (
+     id TEXT PRIMARY KEY, perfil TEXT NOT NULL, icono TEXT NOT NULL, titulo TEXT NOT NULL, texto TEXT,
+     autor TEXT NOT NULL, creado INTEGER NOT NULL, actualizado INTEGER NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_pentradas_perfil ON perfil_entradas(perfil, creado DESC)`,
+  `CREATE TABLE IF NOT EXISTS perfil_imagenes (id TEXT PRIMARY KEY, entrada TEXT NOT NULL, orden INTEGER NOT NULL, imagen TEXT NOT NULL, w INTEGER, h INTEGER)`,
+  `CREATE INDEX IF NOT EXISTS idx_pimagenes_entrada ON perfil_imagenes(entrada, orden)`,
 ];
 let preparada = null;   // promesa: la preparación corre una sola vez por instancia del servidor
 
