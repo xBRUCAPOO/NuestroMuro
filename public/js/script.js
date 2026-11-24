@@ -961,16 +961,33 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* NUEVO v2.10: animación de Like. Qué hace: sobre el corazón que se acaba de tocar nace un anillo que se expande y salen volando corazoncitos en todas
-     direcciones (el rebote del propio corazón lo hace el CSS: corazon-late). Para qué sirve: que dar un like se sienta y se note.
+     direcciones (el rebote del propio corazón lo hace animarCorazon(), justo arriba). Para qué sirve: que dar un like se sienta y se note.
      Los elementos se ponen en el <body> (posición fija sobre el corazón) para que no los borre el repintado de la tarjeta, y se quitan solos al terminar. */
+  /* v2.10.1: rebote del corazón del botón. Se hace con la Web Animations API directamente sobre el ícono (no con una clase CSS) para que no se corte
+     ni se vea roto aunque el like se quite a mitad de la animación. Dar like: se achica, salta, rebota y se asienta (+ corazoncitos); quitar like: un
+     pequeño "desinflado" suave. Con "reducir movimiento" activado en el sistema no se anima. */
+  function animarCorazon(boton, daLike) {
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const ic = boton.querySelector('.material-symbols-rounded'); if (!ic || !ic.animate) return;
+    ic.getAnimations().forEach((a) => a.cancel());                       // si se toca rápido, se empieza de cero sin dejar el corazón torcido
+    if (daLike) {
+      ic.animate([
+        { transform: 'scale(1) rotate(0deg)', offset: 0 }, { transform: 'scale(.7) rotate(-10deg)', offset: .14 }, { transform: 'scale(1.4) rotate(9deg)', offset: .38 },
+        { transform: 'scale(.88) rotate(-5deg)', offset: .58 }, { transform: 'scale(1.12) rotate(2deg)', offset: .78 }, { transform: 'scale(1) rotate(0deg)', offset: 1 },
+      ], { duration: 780, easing: 'ease-in-out' });
+      explosionCorazones(boton);
+    } else {
+      ic.animate([{ transform: 'scale(1)' }, { transform: 'scale(.72)', offset: .4 }, { transform: 'scale(1)' }], { duration: 320, easing: 'ease-out' });
+    }
+  }
   function explosionCorazones(boton) {
     const ic = boton.querySelector('.material-symbols-rounded') || boton, r = ic.getBoundingClientRect();
     const capa = h('div', { class: 'corazon-fx', 'aria-hidden': 'true', style: `left:${Math.round(r.left + r.width / 2)}px;top:${Math.round(r.top + r.height / 2)}px` }, h('span', { class: 'corazon-fx__onda' }));
     const N = 10;
     for (let i = 0; i < N; i++) {
-      const ang = (i / N) * Math.PI * 2 + (Math.random() - 0.5) * 0.5, dist = 34 + Math.random() * 38;
+      const ang = (i / N) * Math.PI * 2 + (Math.random() - 0.5) * 0.5, dist = 48 + Math.random() * 52;   // se alejan entre 48 y 100 px del corazón
       const chispa = h('span', { class: 'corazon-fx__chispa' + (i % 3 === 0 ? ' corazon-fx__chispa--clara' : ''),
-        style: `--dx:${Math.round(Math.cos(ang) * dist)}px;--dy:${Math.round(Math.sin(ang) * dist - 16)}px;--rot:${Math.round((Math.random() - 0.5) * 90)}deg;--esc:${(0.55 + Math.random() * 0.75).toFixed(2)};--ret:${i * 12}ms` }, icono('favorite', true));
+        style: `--dx:${Math.round(Math.cos(ang) * dist)}px;--dy:${Math.round(Math.sin(ang) * dist - 16)}px;--rot:${Math.round((Math.random() - 0.5) * 90)}deg;--esc:${(0.6 + Math.random() * 0.8).toFixed(2)};--ret:${i * 12}ms` }, icono('favorite', true));
       capa.append(chispa);
     }
     document.body.append(capa);
@@ -992,7 +1009,7 @@ document.addEventListener('DOMContentLoaded', () => {
       /* v2.1: categorías de la publicación; tocar una filtra el muro por ella */
       cats.length ? h('div', { class: 'post__cats' }, cats.map((c) => h('button', { class: 'post__cat', type: 'button', title: `Ver la categoría ${c.nombre}`, onclick: () => elegirCategoria(c.id, true) }, icono(c.icono), h('span', { text: c.nombre })))) : null,
       h('div', { class: 'post__pie' },
-        h('button', { class: 'post__accion post__accion--corazon' + (meGusta ? ' activo' : ''), type: 'button', 'aria-pressed': String(meGusta), 'aria-label': 'Me gusta', onclick: (ev) => { if (!meGusta) explosionCorazones(ev.currentTarget); accion(p, { accion: 'corazon' }); } },   // v2.10: al dar like (no al quitarlo) salen corazoncitos
+        h('button', { class: 'post__accion post__accion--corazon' + (meGusta ? ' activo' : ''), type: 'button', 'aria-pressed': String(meGusta), 'aria-label': 'Me gusta', onclick: (ev) => { animarCorazon(ev.currentTarget, !meGusta); accion(p, { accion: 'corazon' }); } },   // v2.10.1: rebote del corazón (like o quitar like) y, al dar like, corazoncitos
           icono('favorite', meGusta), cor.length ? h('span', { class: 'corazones' }, fotosOrdenadas(cor).map((q) => avatar(q, 'avatar--mini'))) : null),
         /* v2.2: botón de comentarios con su cantidad; despliega/pliega la sección */
         h('button', { class: 'post__accion post__accion--comentar' + (abiertos ? ' activo' : ''), type: 'button', 'aria-expanded': String(abiertos), 'aria-label': nComs ? `Comentarios (${nComs})` : 'Comentar', onclick: () => alternarComentarios(p) },
@@ -2143,7 +2160,7 @@ document.addEventListener('DOMContentLoaded', () => {
       imgs.length ? h('div', { class: 'entrada__imgs entrada__imgs--' + Math.min(imgs.length, 4) }, imgs.map((i) =>
         /* v2.9: mientras la imagen carga se ve un círculo girando (CSS ::after) y la imagen está transparente; al terminar (load o error) se marca data-listo.
            La lista imgsCargadas recuerda las que ya cargaron, así al actualizarse la tarjeta no vuelve a aparecer el círculo. */
-        h('button', { class: 'entrada__img', type: 'button', 'data-k': i.id, 'data-listo': imgsCargadas.has(i.id) ? '1' : null, 'aria-label': 'Ver imagen grande', onclick: () => abrirVisor(srcImg(i), planoDe(e.titulo)) },
+        h('button', { class: 'entrada__img', type: 'button', style: imgs.length === 1 && i.w && i.h ? `aspect-ratio:${i.w} / ${i.h}` : null, 'data-k': i.id, 'data-listo': imgsCargadas.has(i.id) ? '1' : null, 'aria-label': 'Ver imagen grande', onclick: () => abrirVisor(srcImg(i), planoDe(e.titulo)) },
           h('img', { onload: marcarImgLista.bind(null, i.id), onerror: marcarImgLista.bind(null, i.id), src: srcImg(i), alt: '', loading: 'lazy', decoding: 'async', draggable: 'false' })))) : null,
       h('footer', { class: 'entrada__pie' },
         avatar(e.autor, 'avatar--mini'),
@@ -2171,7 +2188,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!obsEntradas) obsEntradas = new IntersectionObserver((regs) => {
       let n = 0;
       regs.filter((r) => r.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top).forEach((r) => { obsEntradas.unobserve(r.target); revelarEntrada(r.target, n++); });
-    }, { rootMargin: '0px 0px -40px 0px', threshold: 0 });               // se revela cuando asoma 40 px por abajo (sirve también para entradas muy altas)
+      /* si se hizo scroll tan rápido que una tarjeta quedó ya por encima de la pantalla sin llegar a verse, aparece sin animación (no queda un hueco vacío) */
+      regs.filter((r) => !r.isIntersecting && r.boundingClientRect.bottom < 0).forEach((r) => { obsEntradas.unobserve(r.target); r.target.classList.remove('entrada--espera'); });
+    }, { rootMargin: '0px 0px -90px 0px', threshold: 0 });               // se revela cuando asoma 90 px por abajo: así se alcanza a ver entera la animación
     obsEntradas.observe(el);
   }
 

@@ -304,7 +304,7 @@ textarea.campo__entrada { resize: vertical; min-height: 96px; }
 .post__accion .material-symbols-rounded { font-size: 20px; }
 .post__accion:hover { background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c-texto); }
 .post__accion--corazon.activo { color: var(--c-texto); }
-.post__accion--corazon.activo .material-symbols-rounded { animation: corazon-late calc(var(--mov-lento) * 1.6) var(--ease-suave); }
+/* v2.10.1: el rebote del corazón ya no es una animación CSS ligada a la clase .activo (se cortaba y el corazón se veía roto al quitar el like): lo hace animarCorazon() en script.js */
 .post__accion--der { margin-left: auto; }
 .post__accion--peligro:hover { background: var(--color-error-suave); color: var(--color-error-texto); }
 .corazones { display: inline-flex; gap: 3px; margin-left: 2px; }
@@ -443,7 +443,6 @@ textarea.campo__entrada { resize: vertical; min-height: 96px; }
 @keyframes toast-entra { from { opacity: 0; transform: translateY(16px) scale(.96); } }
 @keyframes toast-sale { to { opacity: 0; transform: translateY(8px); } }
 @keyframes post-sale { to { opacity: 0; transform: scale(.94); } }                           /* publicación que se borra */
-@keyframes corazon-late { 0% { transform: scale(1) rotate(0); filter: none; } 12% { transform: scale(.68) rotate(-10deg); } 36% { transform: scale(1.45) rotate(9deg); filter: drop-shadow(0 0 7px var(--yo-texto)); } 55% { transform: scale(.86) rotate(-5deg); } 74% { transform: scale(1.18) rotate(3deg); } 100% { transform: scale(1) rotate(0); filter: none; } }   /* v2.10: like más notorio y fluido: se achica, salta, rebota y se asienta con un destello */
 @keyframes giro { to { transform: rotate(360deg); } }
 @keyframes esqueleto-pulso { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }                /* latido suave de la cajita de carga */
 @keyframes vt-salir { to { opacity: 0; } }
@@ -774,7 +773,7 @@ textarea.comentar__campo { flex: 1; min-width: 0; min-height: 38px; max-height: 
 .lista-bloque--completa .lista__item .material-symbols-rounded { color: var(--color-completo-texto); }
 .lista-bloque--completa .progreso__texto { color: var(--color-completo-texto); }
 .completado { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 12px; border: 1.5px solid var(--color-completo); border-radius: var(--radio-md); background: var(--color-completo-suave); color: var(--color-completo-texto); font-family: var(--fuente-titulo); font-size: 14px; font-weight: 800; letter-spacing: 0.18em; animation: completado-entra var(--mov-lento) var(--ease-rebote) backwards; }
-.completado .material-symbols-rounded { font-size: 22px; }
+.completado .material-symbols-rounded { font-size: 24px; }
 @keyframes completado-entra { from { opacity: 0; transform: translateY(-6px) scale(.92); } }
 
 /* ---------- Barra de formato flotante (campos de una línea: título, elementos de lista, opciones y comentarios) ---------- */
@@ -811,7 +810,6 @@ textarea.comentar__campo { flex: 1; min-width: 0; min-height: 38px; max-height: 
 html { scroll-behavior: smooth; }
 /* las tarjetas ya no se vuelven a crear al cambiar: se actualizan "en el lugar", así los colores, barras y tachados se mueven en vez de saltar */
 .post__accion .material-symbols-rounded, .post__tipo { transition: transform var(--mov-medio) var(--ease-rebote), color var(--mov-medio) var(--ease-suave), font-variation-settings var(--mov-medio) var(--ease-suave); }
-.post__accion--corazon.activo .material-symbols-rounded { animation: corazon-late calc(var(--mov-lento) * 1.6) var(--ease-suave); }
 .progreso__barra, .opcion__barra { transition: width var(--mov-lento) var(--ease-salida); }
 .opcion { transition: border-color var(--mov-rapido) var(--ease-suave), transform var(--mov-rapido) var(--ease-suave), background-color var(--mov-rapido) var(--ease-suave); }
 .opcion--mia { background: color-mix(in srgb, var(--yo) 8%, var(--color-fondo)); }
@@ -877,8 +875,9 @@ body[data-vista="perfiles"] [data-solo-muro] { display: none !important; }   /* 
 .entrada__img { display: block; position: relative; padding: 0; border: 0; overflow: hidden; aspect-ratio: 4 / 3; border-radius: var(--radio-md); background: var(--color-tarjeta-2); cursor: zoom-in; }
 .entrada__img img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform var(--mov-medio) var(--ease-suave); }
 .entrada__img:hover img { transform: scale(1.04); }
-.entrada__imgs--1 .entrada__img { aspect-ratio: auto; }
-.entrada__imgs--1 .entrada__img img { height: auto; max-height: 380px; object-fit: contain; }
+/* v2.10.1: con una sola imagen el botón reserva su lugar con la proporción real de la foto (la pone script.js en style) para que, al terminar de cargar, nada se corra y las animaciones no se traben */
+.entrada__imgs--1 .entrada__img { max-height: 380px; }
+.entrada__imgs--1 .entrada__img img { height: 100%; object-fit: contain; }
 .entrada__pie { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
 
 /* Tocar la foto de una persona abre su perfil: se nota con el cursor y un pequeño agrandado */
@@ -909,7 +908,6 @@ textarea.campo__entrada:has(+ .formato--abajo) { border-bottom-left-radius: 0; b
 .entrada__img[data-listo]::after { display: none; }
 .entrada__img img { transition: transform var(--mov-medio) var(--ease-suave), opacity var(--mov-medio) var(--ease-suave); }
 .entrada__img:not([data-listo]) img { opacity: 0; }
-.entrada__imgs--1 .entrada__img:not([data-listo]) { min-height: 160px; }   /* una sola imagen: sin altura propia hasta cargar, se le da lugar al círculo */
 @media (prefers-reduced-motion: reduce) { .giro, .entrada__img::after, .cargando__icono { animation-duration: 1.2s !important; } }   /* el círculo sigue girando aunque se pidan pocas animaciones (si no, no se entiende que está cargando) */
 
 /* Respuestas a comentarios (hilos anidados). Cada comentario va dentro de un .hilo; sus respuestas, en .respuestas con una línea a la izquierda */
@@ -960,16 +958,22 @@ body[data-vista="perfiles"] { overflow-x: clip; }
 
 /* Entradas del perfil: esperan transparentes hasta que se ven; entonces entran desde el costado izquierdo o derecho de la pantalla, alternando */
 .entrada--espera { opacity: 0; }
-.entrada.entra-izq { animation: entra-izq calc(var(--mov-lento) * 1.5) var(--ease-salida) backwards; animation-delay: calc(var(--i, 0) * 90ms); }
-.entrada.entra-der { animation: entra-der calc(var(--mov-lento) * 1.5) var(--ease-salida) backwards; animation-delay: calc(var(--i, 0) * 90ms); }
-@keyframes entra-izq { from { opacity: 0; transform: translateX(-100vw) rotate(-2deg); } }
-@keyframes entra-der { from { opacity: 0; transform: translateX(100vw) rotate(2deg); } }
+/* v2.10.1: curva más suave (la anterior, tipo expo, recorría casi todo el camino en los primeros milisegundos y luego "se arrastraba": se veía trabado),
+   sin giro y con will-change para que el navegador la pase a la tarjeta gráfica. Cada tarjeta lleva su propio retraso (--i) y empieza cuando ELLA se ve. */
+.entrada.entra-izq, .entrada.entra-der { will-change: transform, opacity; animation-duration: 820ms; animation-timing-function: cubic-bezier(.22, .72, .28, 1); animation-fill-mode: backwards; animation-delay: calc(var(--i, 0) * 180ms); }
+.entrada.entra-izq { animation-name: entra-izq; }
+.entrada.entra-der { animation-name: entra-der; }
+@keyframes entra-izq { from { opacity: 0; transform: translate3d(-105vw, 0, 0); } 35% { opacity: 1; } }
+@keyframes entra-der { from { opacity: 0; transform: translate3d(105vw, 0, 0); } 35% { opacity: 1; } }
 
+/* v2.10.1: el botón del corazón no recorta lo que se sale (el corazón crece y rota al dar like y quedaba cortado = "roto"); su ondita de toque se quita porque ya tiene su propia animación */
+.post__accion--corazon { overflow: visible; }
+.post__accion--corazon .onda { display: none; }
 /* Animación de Like (la crea explosionCorazones() en script.js): un anillo que se expande y corazoncitos que salen volando y se desvanecen */
 .corazon-fx { position: fixed; z-index: 400; width: 0; height: 0; pointer-events: none; }
 .corazon-fx__onda { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--yo-texto); animation: corazon-onda 620ms var(--ease-salida) forwards; }
-.corazon-fx__chispa { position: absolute; left: 0; top: 0; color: var(--yo-texto); line-height: 0; animation: corazon-chispa 950ms cubic-bezier(.15, .75, .3, 1) var(--ret, 0ms) backwards forwards; }
+.corazon-fx__chispa { position: absolute; left: 0; top: 0; color: var(--yo-texto); line-height: 0; animation: corazon-chispa 950ms cubic-bezier(.15, .75, .3, 1) var(--ret, 0ms) both; }   /* v2.10.1: "both" (antes "backwards forwards" era inválido y los corazoncitos quedaban quietos) */
 .corazon-fx__chispa--clara { color: color-mix(in srgb, var(--yo-texto) 55%, var(--color-blanco)); }
-.corazon-fx__chispa .material-symbols-rounded { font-size: 18px; }
+.corazon-fx__chispa .material-symbols-rounded { font-size: 24px; }
 @keyframes corazon-onda { from { transform: scale(.3); opacity: .9; } to { transform: scale(3.6); opacity: 0; } }
 @keyframes corazon-chispa { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.2) rotate(0); } 15% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 26px)) scale(var(--esc)) rotate(var(--rot)); } }
