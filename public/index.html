@@ -32,6 +32,8 @@
       <button class="btn-icono" id="btnInstalar" type="button" aria-label="Instalar la app" hidden><span class="material-symbols-rounded">install_mobile</span></button>
       <!-- NUEVO v2.5: campanita de notificaciones (con contador de no leídas); script.js la muestra al iniciar sesión -->
       <button class="btn-icono notif-btn" id="btnNotif" type="button" aria-label="Notificaciones" hidden><span class="material-symbols-rounded">notifications</span><span class="notif-btn__badge" id="notifBadge" hidden>0</span></button>
+      <!-- NUEVO v2.10: dentro de un perfil la campanita se cambia por este botón para volver al muro (el CSS los intercambia según body[data-vista]; script.js le da la acción) -->
+      <button class="btn-icono" id="btnVolver" type="button" aria-label="Volver al muro" title="Volver al muro"><span class="material-symbols-rounded">arrow_back</span></button>
     </span>
     <h1 class="appbar__titulo">♥️♠️ Nuestro Muro ♠️♥️</h1>
     <span class="appbar__espacio">
@@ -45,7 +47,8 @@
   <main class="contenedor pila" id="app">
 
     <!-- Portada + buscador -->
-    <section class="tarjeta ayuda-hero">
+    <!-- v2.10: data-solo-muro = en la vista de Perfiles la portada también se esconde (el perfil se ve solo, como en Steam) -->
+    <section class="tarjeta ayuda-hero" data-solo-muro>
       <span class="material-symbols-rounded ayuda-hero__icono">partner_heart</span>
       <h2 class="ayuda-hero__titulo">Nuestro muro</h2>
       <p class="ayuda-hero__texto">Acá está todo lo que nos importa: notas, listas, encuestas, fotos, links y planes. Los dos podemos agregar cosas.</p>
@@ -58,7 +61,8 @@
 
     <!-- Filtros: por tipo de publicación (script.js crea los chips) y por autor -->
     <!-- v2.2: los tres grupos de filtros (tipo de publicación · quién la subió · categoría) quedan separados por líneas finas horizontales -->
-    <div class="filtros">
+    <!-- v2.10: los filtros (etiquetas) también se esconden en la vista de Perfiles -->
+    <div class="filtros" data-solo-muro>
       <nav class="ayuda-indice filtros__tipos" id="filtroTipos" aria-label="Filtrar por tipo"></nav>
       <!-- v2.8: la pestaña "Perfiles" (último chip de arriba) esconde los filtros de autor y categoría y el muro: lo marcado con data-solo-muro -->
       <hr class="separador" aria-hidden="true" data-solo-muro>
@@ -80,7 +84,8 @@
     <!-- NUEVO v2.8: PERFILES. Se ve al tocar la pestaña "Perfiles" o la foto de una persona. Arriba el selector Mely / Bruu; abajo (lo dibuja script.js)
          la cabecera del perfil (foto, nombre, frase) y sus entradas (ícono + título + texto + imágenes) que pueden añadir, editar y borrar los dos -->
     <section class="perfiles" id="vistaPerfiles" aria-label="Perfiles" hidden>
-      <div class="segmento perfiles__selector" id="perfilSelector" role="tablist" aria-label="Elegir perfil"></div>
+      <!-- v2.10: el selector ocupa todo el ancho: las dos cartas juntas al centro, los nombres en los extremos, la elegida a color y la otra en gris (lo arma script.js) -->
+      <div class="perfiles__selector" id="perfilSelector" role="tablist" aria-label="Elegir perfil"></div>
       <div class="perfil" id="perfilCuerpo" aria-live="polite"></div>
     </section>
 
@@ -97,8 +102,8 @@
 
   <!-- Pie: versión y fecha de la última modificación de index.html (actualizar cada vez que se edite este archivo) -->
   <footer class="pie">
-    <!-- v2.9.0: respuestas a comentarios (hilos), barras de formato debajo del campo de texto y círculo de carga en las entradas de perfil; v2.8.1: buscador en los perfiles, entradas siempre en una columna con otro diseño (ícono de color, título como en el muro, texto en caja oscura) y barra de formato completa (links, viñetas, lista numerada); v2.8.0: perfiles (pestaña "Perfiles" y foto de cada persona: frase, entradas con ícono, título, texto con formato e imágenes), cerrar sesión pasa al perfil propio y el tachado de las listas se ve bien en varias líneas; v2.7.0: todo se actualiza al instante (si el servidor falla se deshace y avisa), lista completada en verde, descripción en lista y encuesta, formato de texto en todos los campos, menos color de la persona, animaciones más fluidas y escena de inicio de sesión; v2.6.0: cambio instantáneo de los días del plan y tipos de día al crear el plan; v2.5.0: notificaciones (campanita + avisos del celular); v2.4.0: fotos de perfil (carta azul M / roja xB) en vez de las iniciales; v2.3.0: tipo "plan" en lugar de "video" -->
-    <span id="pieVersion">Versión 2.9.0</span>
+    <!-- v2.10.0: perfil estilo Steam (solo se ve el perfil, la campanita pasa a "volver al muro"), selector de perfiles con las cartas, entradas que aparecen desde los costados al verse, animación de Like con corazoncitos, M siempre a la derecha de xB en las fotos y más iconos; v2.9.0: respuestas a comentarios (hilos), barras de formato debajo del campo de texto y círculo de carga en las entradas de perfil; v2.8.1: buscador en los perfiles, entradas siempre en una columna con otro diseño (ícono de color, título como en el muro, texto en caja oscura) y barra de formato completa (links, viñetas, lista numerada); v2.8.0: perfiles (pestaña "Perfiles" y foto de cada persona: frase, entradas con ícono, título, texto con formato e imágenes), cerrar sesión pasa al perfil propio y el tachado de las listas se ve bien en varias líneas; v2.7.0: todo se actualiza al instante (si el servidor falla se deshace y avisa), lista completada en verde, descripción en lista y encuesta, formato de texto en todos los campos, menos color de la persona, animaciones más fluidas y escena de inicio de sesión; v2.6.0: cambio instantáneo de los días del plan y tipos de día al crear el plan; v2.5.0: notificaciones (campanita + avisos del celular); v2.4.0: fotos de perfil (carta azul M / roja xB) en vez de las iniciales; v2.3.0: tipo "plan" en lugar de "video" -->
+    <span id="pieVersion">Versión 2.10.0</span>
     <span aria-hidden="true">·</span>
     <span id="pieFecha">23/11/2026</span>
   </footer>

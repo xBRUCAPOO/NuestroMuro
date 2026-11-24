@@ -304,7 +304,7 @@ textarea.campo__entrada { resize: vertical; min-height: 96px; }
 .post__accion .material-symbols-rounded { font-size: 20px; }
 .post__accion:hover { background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c-texto); }
 .post__accion--corazon.activo { color: var(--c-texto); }
-.post__accion--corazon.activo .material-symbols-rounded { animation: corazon-late var(--mov-lento) var(--ease-rebote); }
+.post__accion--corazon.activo .material-symbols-rounded { animation: corazon-late calc(var(--mov-lento) * 1.6) var(--ease-suave); }
 .post__accion--der { margin-left: auto; }
 .post__accion--peligro:hover { background: var(--color-error-suave); color: var(--color-error-texto); }
 .corazones { display: inline-flex; gap: 3px; margin-left: 2px; }
@@ -443,7 +443,7 @@ textarea.campo__entrada { resize: vertical; min-height: 96px; }
 @keyframes toast-entra { from { opacity: 0; transform: translateY(16px) scale(.96); } }
 @keyframes toast-sale { to { opacity: 0; transform: translateY(8px); } }
 @keyframes post-sale { to { opacity: 0; transform: scale(.94); } }                           /* publicación que se borra */
-@keyframes corazon-late { 0%, 100% { transform: scale(1); } 40% { transform: scale(1.35); } 60% { transform: scale(.92); } }
+@keyframes corazon-late { 0% { transform: scale(1) rotate(0); filter: none; } 12% { transform: scale(.68) rotate(-10deg); } 36% { transform: scale(1.45) rotate(9deg); filter: drop-shadow(0 0 7px var(--yo-texto)); } 55% { transform: scale(.86) rotate(-5deg); } 74% { transform: scale(1.18) rotate(3deg); } 100% { transform: scale(1) rotate(0); filter: none; } }   /* v2.10: like más notorio y fluido: se achica, salta, rebota y se asienta con un destello */
 @keyframes giro { to { transform: rotate(360deg); } }
 @keyframes esqueleto-pulso { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }                /* latido suave de la cajita de carga */
 @keyframes vt-salir { to { opacity: 0; } }
@@ -811,7 +811,7 @@ textarea.comentar__campo { flex: 1; min-width: 0; min-height: 38px; max-height: 
 html { scroll-behavior: smooth; }
 /* las tarjetas ya no se vuelven a crear al cambiar: se actualizan "en el lugar", así los colores, barras y tachados se mueven en vez de saltar */
 .post__accion .material-symbols-rounded, .post__tipo { transition: transform var(--mov-medio) var(--ease-rebote), color var(--mov-medio) var(--ease-suave), font-variation-settings var(--mov-medio) var(--ease-suave); }
-.post__accion--corazon.activo .material-symbols-rounded { animation: corazon-late var(--mov-lento) var(--ease-rebote); }
+.post__accion--corazon.activo .material-symbols-rounded { animation: corazon-late calc(var(--mov-lento) * 1.6) var(--ease-suave); }
 .progreso__barra, .opcion__barra { transition: width var(--mov-lento) var(--ease-salida); }
 .opcion { transition: border-color var(--mov-rapido) var(--ease-suave), transform var(--mov-rapido) var(--ease-suave), background-color var(--mov-rapido) var(--ease-suave); }
 .opcion--mia { background: color-mix(in srgb, var(--yo) 8%, var(--color-fondo)); }
@@ -836,9 +836,8 @@ html { scroll-behavior: smooth; }
    ============================================================ */
 body[data-vista="perfiles"] [data-solo-muro] { display: none !important; }   /* en la pestaña Perfiles se esconden buscador, filtros de autor y categoría, contador y muro */
 .perfiles { display: flex; flex-direction: column; gap: 14px; }
-.perfiles__selector { align-self: flex-start; }
-.perfil-sel { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px 6px 8px; font-size: 14px; }
-.perfil-sel .avatar--mini { width: 24px; height: 24px; }
+/* v2.10: el selector de perfiles (reemplaza al segmento chico de v2.8) se estira a todo el ancho de la pantalla; ver el bloque v2.10 del final */
+.perfiles__selector { display: flex; align-items: center; }
 .perfil { --c: var(--color-acento); --c-texto: var(--color-acento-texto); display: flex; flex-direction: column; gap: 14px; animation: aparecer var(--mov-medio) var(--ease-suave); }
 .perfil[data-quien="M"] { --c: var(--color-m-vivo); --c-texto: var(--color-m-texto); }       /* el perfil de M va en azul… */
 .perfil[data-quien="xB"] { --c: var(--color-xb); --c-texto: var(--color-xb-texto); }          /* …y el de xB en rojo */
@@ -928,3 +927,49 @@ textarea.campo__entrada:has(+ .formato--abajo) { border-bottom-left-radius: 0; b
 .comentar--resp { align-items: center; padding-left: 4px; }
 /* Espacio al pie de la página mientras la barra de formato flotante está abierta: deja subir el campo para que la barra quepa debajo (ver colocarBarraFlota) */
 body.con-barra-flota { padding-bottom: 120px; }
+
+/* ============================================================
+   v2.10 — Perfil estilo Steam, selector con cartas, entradas que aparecen desde los costados y animación de Like
+   ============================================================ */
+/* En un perfil la campanita se cambia por la flecha "volver al muro" (la portada y las etiquetas ya se esconden con data-solo-muro) */
+#btnVolver { display: none; }
+body[data-vista="perfiles"] #btnVolver { display: inline-flex; }
+body[data-vista="perfiles"] #btnNotif { display: none !important; }
+/* Las entradas entran desde fuera de la pantalla: se recorta lo que sobra a los lados para que no aparezca scroll horizontal */
+body[data-vista="perfiles"] { overflow-x: clip; }
+
+/* Selector Mely / Bruu a todo el ancho de la pantalla: [nombre M][carta M][carta xB][nombre xB]; cada botón es una mitad */
+.perfiles__selector { width: 100vw; margin-inline: calc(50% - 50vw); padding-inline: 16px; gap: 0; }
+.perfil-sel { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 0; background: none; border: 0; color: var(--color-gris-claro); transition: color var(--mov-medio) var(--ease-suave), transform var(--mov-rapido) var(--ease-suave); }
+.perfil-sel:active { transform: scale(.97); }
+.perfil-sel--activo { color: var(--color-texto); }
+.perfil-sel__nombre { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; font-family: var(--fuente-titulo); font-size: clamp(22px, 7vw, 34px); font-weight: 800; line-height: 1.05; transition: font-weight var(--mov-medio) var(--ease-suave); }
+.perfil-sel--xb .perfil-sel__nombre { align-items: flex-end; }
+.perfil-sel:not(.perfil-sel--activo) .perfil-sel__nombre { font-weight: 600; }
+.perfil-sel__txt { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.perfil-sel__yo { font-family: var(--fuente-hud); font-size: 12px; font-weight: 400; color: var(--color-texto-suave); }
+/* Carta: la imagen a color y, encima, la gris; la gris se desvanece cuando el perfil está elegido */
+.perfil-sel__carta { position: relative; flex-shrink: 0; display: block; height: clamp(72px, 22vw, 104px); aspect-ratio: 256 / 240; }
+.perfil-sel__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; transition: opacity var(--mov-medio) var(--ease-suave), transform var(--mov-medio) var(--ease-rebote); }
+.perfil-sel__img--gris { opacity: 1; }
+.perfil-sel--activo .perfil-sel__img--gris { opacity: 0; }
+.perfil-sel--activo .perfil-sel__carta { transform: translateY(-2px); }
+.perfil-sel__carta { transition: transform var(--mov-medio) var(--ease-rebote); }
+.perfil-sel--m .perfil-sel__carta { margin-right: -6px; }    /* las dos cartas quedan pegadas en el centro */
+.perfil-sel--xb .perfil-sel__carta { margin-left: -6px; }
+
+/* Entradas del perfil: esperan transparentes hasta que se ven; entonces entran desde el costado izquierdo o derecho de la pantalla, alternando */
+.entrada--espera { opacity: 0; }
+.entrada.entra-izq { animation: entra-izq calc(var(--mov-lento) * 1.5) var(--ease-salida) backwards; animation-delay: calc(var(--i, 0) * 90ms); }
+.entrada.entra-der { animation: entra-der calc(var(--mov-lento) * 1.5) var(--ease-salida) backwards; animation-delay: calc(var(--i, 0) * 90ms); }
+@keyframes entra-izq { from { opacity: 0; transform: translateX(-100vw) rotate(-2deg); } }
+@keyframes entra-der { from { opacity: 0; transform: translateX(100vw) rotate(2deg); } }
+
+/* Animación de Like (la crea explosionCorazones() en script.js): un anillo que se expande y corazoncitos que salen volando y se desvanecen */
+.corazon-fx { position: fixed; z-index: 400; width: 0; height: 0; pointer-events: none; }
+.corazon-fx__onda { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--yo-texto); animation: corazon-onda 620ms var(--ease-salida) forwards; }
+.corazon-fx__chispa { position: absolute; left: 0; top: 0; color: var(--yo-texto); line-height: 0; animation: corazon-chispa 950ms cubic-bezier(.15, .75, .3, 1) var(--ret, 0ms) backwards forwards; }
+.corazon-fx__chispa--clara { color: color-mix(in srgb, var(--yo-texto) 55%, var(--color-blanco)); }
+.corazon-fx__chispa .material-symbols-rounded { font-size: 18px; }
+@keyframes corazon-onda { from { transform: scale(.3); opacity: .9; } to { transform: scale(3.6); opacity: 0; } }
+@keyframes corazon-chispa { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.2) rotate(0); } 15% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 26px)) scale(var(--esc)) rotate(var(--rot)); } }

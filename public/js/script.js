@@ -152,6 +152,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const q = quien === 'xB' ? 'xB' : 'M';   // solo existen dos identidades (el servidor ya lo valida)
     return h('span', { class: `avatar avatar--${q}` + (clase ? ' ' + clase : ''), title: q }, h('img', { src: `/img/avatar-${q}.png`, alt: q, decoding: 'async', draggable: 'false' }));
   };
+  /* NUEVO v2.10: cuando aparecen las fotos de las dos personas juntas (corazones, votos…), la de M va SIEMPRE a la derecha de la de xB, sin importar quién lo hizo primero.
+     Devuelve una copia de la lista con xB antes que M. */
+  const fotosOrdenadas = (lista) => [...lista].sort((a, b) => (a === 'M') - (b === 'M'));
   const normalizar = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();   // minúsculas y sin tildes
   const pausa = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -806,7 +809,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return h('button', { class: 'opcion' + (o.votos.includes(yo) ? ' opcion--mia' : ''), type: 'button', 'aria-pressed': String(o.votos.includes(yo)), onclick: () => accion(p, { accion: 'voto', opcion: i }) },
           h('span', { class: 'opcion__barra', style: `--ancho:${ancho}%;--corte:${corte}%` }),
           h('span', { class: 'opcion__texto' }, inline(o.t, true)),   // v2.7: la opción acepta formato
-          h('span', { class: 'opcion__votos' }, o.votos.map((v) => avatar(v, 'avatar--mini'))));
+          h('span', { class: 'opcion__votos' }, fotosOrdenadas(o.votos).map((v) => avatar(v, 'avatar--mini'))));
       })));
       partes.push(h('span', { class: 'progreso__texto', text: total ? `${total} ${total === 1 ? 'voto' : 'votos'}` : 'Todavía nadie votó' }));
     }
@@ -957,6 +960,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (comentariosAbiertos.has(p.id)) { const c = nodos.get(p.id) && nodos.get(p.id).querySelector('.comentar__campo'); if (c) c.focus(); }
   }
 
+  /* NUEVO v2.10: animación de Like. Qué hace: sobre el corazón que se acaba de tocar nace un anillo que se expande y salen volando corazoncitos en todas
+     direcciones (el rebote del propio corazón lo hace el CSS: corazon-late). Para qué sirve: que dar un like se sienta y se note.
+     Los elementos se ponen en el <body> (posición fija sobre el corazón) para que no los borre el repintado de la tarjeta, y se quitan solos al terminar. */
+  function explosionCorazones(boton) {
+    const ic = boton.querySelector('.material-symbols-rounded') || boton, r = ic.getBoundingClientRect();
+    const capa = h('div', { class: 'corazon-fx', 'aria-hidden': 'true', style: `left:${Math.round(r.left + r.width / 2)}px;top:${Math.round(r.top + r.height / 2)}px` }, h('span', { class: 'corazon-fx__onda' }));
+    const N = 10;
+    for (let i = 0; i < N; i++) {
+      const ang = (i / N) * Math.PI * 2 + (Math.random() - 0.5) * 0.5, dist = 34 + Math.random() * 38;
+      const chispa = h('span', { class: 'corazon-fx__chispa' + (i % 3 === 0 ? ' corazon-fx__chispa--clara' : ''),
+        style: `--dx:${Math.round(Math.cos(ang) * dist)}px;--dy:${Math.round(Math.sin(ang) * dist - 16)}px;--rot:${Math.round((Math.random() - 0.5) * 90)}deg;--esc:${(0.55 + Math.random() * 0.75).toFixed(2)};--ret:${i * 12}ms` }, icono('favorite', true));
+      capa.append(chispa);
+    }
+    document.body.append(capa);
+    setTimeout(() => capa.remove(), 1300);
+  }
+
   /* ----- Tarjeta completa ----- */
   function crearTarjeta(p) {
     const mia = p.autor === yo, cor = (p.datos && p.datos.corazones) || [], meGusta = cor.includes(yo);
@@ -972,8 +992,8 @@ document.addEventListener('DOMContentLoaded', () => {
       /* v2.1: categorías de la publicación; tocar una filtra el muro por ella */
       cats.length ? h('div', { class: 'post__cats' }, cats.map((c) => h('button', { class: 'post__cat', type: 'button', title: `Ver la categoría ${c.nombre}`, onclick: () => elegirCategoria(c.id, true) }, icono(c.icono), h('span', { text: c.nombre })))) : null,
       h('div', { class: 'post__pie' },
-        h('button', { class: 'post__accion post__accion--corazon' + (meGusta ? ' activo' : ''), type: 'button', 'aria-pressed': String(meGusta), 'aria-label': 'Me gusta', onclick: () => accion(p, { accion: 'corazon' }) },
-          icono('favorite', meGusta), cor.length ? h('span', { class: 'corazones' }, cor.map((q) => avatar(q, 'avatar--mini'))) : null),
+        h('button', { class: 'post__accion post__accion--corazon' + (meGusta ? ' activo' : ''), type: 'button', 'aria-pressed': String(meGusta), 'aria-label': 'Me gusta', onclick: (ev) => { if (!meGusta) explosionCorazones(ev.currentTarget); accion(p, { accion: 'corazon' }); } },   // v2.10: al dar like (no al quitarlo) salen corazoncitos
+          icono('favorite', meGusta), cor.length ? h('span', { class: 'corazones' }, fotosOrdenadas(cor).map((q) => avatar(q, 'avatar--mini'))) : null),
         /* v2.2: botón de comentarios con su cantidad; despliega/pliega la sección */
         h('button', { class: 'post__accion post__accion--comentar' + (abiertos ? ' activo' : ''), type: 'button', 'aria-expanded': String(abiertos), 'aria-label': nComs ? `Comentarios (${nComs})` : 'Comentar', onclick: () => alternarComentarios(p) },
           icono('chat_bubble', abiertos || nComs > 0), nComs ? h('span', { class: 'contador', text: String(nComs) }) : null),
@@ -988,7 +1008,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Pinta el muro: crea las tarjetas nuevas, ACTUALIZA EN EL LUGAR las que cambiaron (v2.7: morph, así las transiciones se animan), saca con
      animación las que ya no están y las ordena. Solo las tarjetas recién aparecidas llevan la animación de entrada. */
   function salirTarjeta(el) {
-    el.classList.remove('entra'); el.classList.add('sale');
+    el.classList.remove('entra', 'entrada--espera', 'entra-izq', 'entra-der'); el.classList.add('sale');   // v2.10: también quita las clases de aparición de las entradas de perfil
     el.addEventListener('animationend', () => el.remove(), { once: true });
     setTimeout(() => el.remove(), 450);                                  // respaldo por si la animación no corre (pestaña oculta)
   }
@@ -1466,8 +1486,10 @@ document.addEventListener('DOMContentLoaded', () => {
      Quien creó una categoría puede borrarla (botón de papelera). Para qué sirve: clasificar y luego filtrar el muro.
      ============================================================ */
   /* Iconos que se pueden elegir: [nombre del icono en Material Symbols, palabras en español para el buscador] */
+  /* v2.10: se agregan ~50 iconos nuevos al final de la lista y "location_on" (lugar / ubicación / location) pasa a estar entre los primeros para encontrarlo sin buscar */
   const ICONOS_CAT = [
     ['favorite', 'corazon amor'],
+    ['location_on', 'lugar ubicacion location mapa'],
     ['heart_broken', 'corazon roto'],
     ['volunteer_activism', 'regalo ayuda'],
     ['redeem', 'regalo'],
@@ -1525,7 +1547,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ['hiking', 'caminata'],
     ['travel_explore', 'mundo'],
     ['public', 'mundo planeta'],
-    ['location_on', 'lugar ubicacion'],
     ['home', 'casa'],
     ['cottage', 'cabana'],
     ['apartment', 'edificio'],
@@ -1722,7 +1743,54 @@ document.addEventListener('DOMContentLoaded', () => {
     ['flag_circle', 'bandera'],
     ['hourglass_top', 'tiempo'],
     ['timer', 'temporizador'],
-    ['alarm_on', 'alarma']
+    ['alarm_on', 'alarma'],
+    ['my_location', 'mi ubicacion gps'],
+    ['near_me', 'cerca navegacion'],
+    ['navigation', 'navegar ruta'],
+    ['nightlight', 'luna noche'],
+    ['satellite_alt', 'satelite'],
+    ['emoji_food_beverage', 'cafe te taza'],
+    ['emoji_transportation', 'transporte'],
+    ['egg_alt', 'huevo'],
+    ['kebab_dining', 'brochette comida'],
+    ['dinner_dining', 'cena'],
+    ['breakfast_dining', 'desayuno'],
+    ['loyalty', 'etiqueta fidelidad'],
+    ['watch', 'reloj pulsera'],
+    ['local_library', 'biblioteca'],
+    ['biotech', 'biologia'],
+    ['album', 'disco album'],
+    ['attach_file', 'adjunto'],
+    ['verified', 'verificado'],
+    ['tour', 'bandera meta'],
+    ['bug_report', 'bicho insecto'],
+    ['villa', 'casa quinta'],
+    ['bathtub', 'banera'],
+    ['soup_kitchen', 'sopa olla'],
+    ['coffee_maker', 'cafetera'],
+    ['blender', 'licuadora'],
+    ['construction', 'obra construccion'],
+    ['credit_card', 'tarjeta credito'],
+    ['paid', 'dinero'],
+    ['event_available', 'evento confirmado'],
+    ['history', 'historia pasado'],
+    ['update', 'actualizar'],
+    ['done_all', 'listo hecho'],
+    ['sentiment_neutral', 'neutral carita'],
+    ['sentiment_dissatisfied', 'triste carita'],
+    ['mood_bad', 'mal humor'],
+    ['psychiatry', 'mente'],
+    ['stars', 'estrellas'],
+    ['temple_buddhist', 'templo'],
+    ['church', 'iglesia'],
+    ['castle', 'castillo'],
+    ['museum', 'museo'],
+    ['festival', 'festival carpa'],
+    ['tsunami', 'ola'],
+    ['flood', 'inundacion'],
+    ['air', 'viento'],
+    ['thermostat', 'temperatura'],
+    ['swap_horiz', 'intercambio']
   ];
   let iconoCat = 'label';                 // icono elegido en la ventana de nueva categoría
   let alCrearCategoria = null;            // qué hacer cuando se crea (ej.: marcarla en el formulario de publicar)
@@ -1951,17 +2019,27 @@ document.addEventListener('DOMContentLoaded', () => {
   const planoDe = (t) => String(t || '').replace(/[*_~`]/g, '');   // título sin las marcas de formato (para el pie del visor y las etiquetas)
   const srcImg = (i) => imgsLocales.get(i.id) || `/api/perfiles/imagen/${i.id}`;   // si la imagen se acaba de subir se usa la copia local
 
-  /* Selector Mely / Bruu (se arma una sola vez; marcarSelector() cambia cuál está activo y pone "(yo)") */
-  const botonesSel = ['M', 'xB'].map((q) => h('button', { class: `segmento__btn segmento__btn--${q === 'M' ? 'm' : 'xb'} perfil-sel`, type: 'button', role: 'tab', 'data-quien': q, onclick: () => elegirPerfil(q) },
-    avatar(q, 'avatar--mini'), h('span', { text: NOMBRE_ESCENA[q] })));
+  /* Selector Mely / Bruu (se arma una sola vez; marcarSelector() cambia cuál está activo y pone "(yo)").
+     v2.10: ocupa todo el ancho y se ve así: [Mely] carta de M · carta de xB [Bruu]. Los nombres quedan en los extremos y las dos cartas juntas en el centro;
+     la persona elegida se ve a color (nombre blanco y grande) y la otra en su versión gris (/img/avatar-*-gris.png). M va a la izquierda y xB a la derecha. */
+  const botonesSel = ['M', 'xB'].map((q) => {
+    const nombre = h('span', { class: 'perfil-sel__nombre' }, h('span', { class: 'perfil-sel__txt', text: NOMBRE_ESCENA[q] }), h('span', { class: 'perfil-sel__yo', text: '(yo)', hidden: true }));
+    const carta = h('span', { class: 'perfil-sel__carta', 'aria-hidden': 'true' },
+      h('img', { class: 'perfil-sel__img', src: `/img/avatar-${q}.png`, alt: '', draggable: 'false' }),
+      h('img', { class: 'perfil-sel__img perfil-sel__img--gris', src: `/img/avatar-${q}-gris.png`, alt: '', draggable: 'false' }));
+    return h('button', { class: `perfil-sel perfil-sel--${q === 'M' ? 'm' : 'xb'}`, type: 'button', role: 'tab', 'aria-label': NOMBRE_ESCENA[q], 'data-quien': q, onclick: () => elegirPerfil(q) },
+      ...(q === 'M' ? [nombre, carta] : [carta, nombre]));   // M: nombre a la izquierda y carta hacia el centro; xB: carta hacia el centro y nombre a la derecha
+  });
   $('perfilSelector').append(...botonesSel);
   function marcarSelector() {
     botonesSel.forEach((b) => {
       const q = b.dataset.quien, activo = q === perfilVer;
-      b.classList.toggle('segmento__btn--activo', activo); b.setAttribute('aria-selected', String(activo));
-      b.querySelector('span:not(.avatar)').textContent = NOMBRE_ESCENA[q] + (q === yo ? ' (yo)' : '');
+      b.classList.toggle('perfil-sel--activo', activo); b.setAttribute('aria-selected', String(activo));
+      b.querySelector('.perfil-sel__yo').hidden = q !== yo;
     });
   }
+  /* v2.10: la campanita se cambia por una flecha para volver al muro mientras se ve un perfil (el intercambio lo hace el CSS) */
+  $('btnVolver').addEventListener('click', () => { mostrarVista('muro'); window.scrollTo({ top: 0 }); });
 
   /* Cambia entre el muro y los perfiles: esconde / muestra cada parte (lo marcado con data-solo-muro se esconde con CSS según body[data-vista]) y
      deja activa la ficha que corresponde en la fila de arriba */
@@ -1999,7 +2077,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----- Pantalla del perfil: se arma una vez por perfil (cabecera + barra + lista) y después solo se actualizan las partes que cambian ----- */
   function armarPerfil() {
     const q = perfilVer, mio = q === yo, nombre = NOMBRE_ESCENA[q];
-    perfilArmado = q + '|' + yo; firmaFrase = ''; nodosEntradas.clear();
+    perfilArmado = q + '|' + yo; firmaFrase = ''; nodosEntradas.clear(); if (obsEntradas) obsEntradas.disconnect();   // v2.10: se deja de vigilar lo del perfil anterior
     const fraseCaja = h('div', { class: 'perfil__frase-caja' });
     const cuenta = h('span', { class: 'perfil__cuenta' });
     const lista = h('div', { class: 'perfil__lista' });
@@ -2045,7 +2123,7 @@ document.addEventListener('DOMContentLoaded', () => {
     refs.fraseCaja.classList.remove('perfil__frase-caja--edita');
     refs.fraseCaja.replaceChildren(
       h('p', { class: 'perfil__frase' + (f ? '' : ' perfil__frase--vacia') }, f ? inline(f, true) : (mio ? 'Escribe una frase corta sobre ti…' : 'Todavía no escribió una frase.')),
-      mio ? h('button', { class: 'btn-icono perfil__editar', type: 'button', 'aria-label': 'Editar mi frase', title: 'Editar mi frase', onclick: () => { editandoFrase = true; pintarFrase(); } }, icono('edit')) : null);
+      ...(mio ? [h('button', { class: 'btn-icono perfil__editar', type: 'button', 'aria-label': 'Editar mi frase', title: 'Editar mi frase', onclick: () => { editandoFrase = true; pintarFrase(); } }, icono('edit'))] : []));   // v2.10: antes se pasaba null a replaceChildren y en el perfil de la otra persona se veía el texto "null" junto a su frase
   }
 
   /* v2.9: una imagen terminó de cargar (o falló): se recuerda y se le quita el círculo de carga */
@@ -2078,6 +2156,25 @@ document.addEventListener('DOMContentLoaded', () => {
     return el;
   }
 
+  /* NUEVO v2.10: las entradas del perfil aparecen de a una SOLO cuando entran en pantalla (IntersectionObserver), no todas juntas al abrir el perfil.
+     Entran desde los costados de la pantalla alternando: la 1.ª desde la izquierda, la 2.ª desde la derecha, la 3.ª desde la izquierda… (según su
+     lugar en la lista). Antes de verse están transparentes (entrada--espera) pero ocupan su lugar, así el scroll no salta. */
+  let obsEntradas = null;
+  function revelarEntrada(el, n) {
+    const lugar = [...(el.parentNode ? el.parentNode.children : [el])].filter((x) => x.classList.contains('entrada') && !x.classList.contains('sale')).indexOf(el);
+    el.style.setProperty('--i', Math.min(n, 5));                          // si entran varias a la vez, van escalonadas
+    el.classList.remove('entrada--espera'); el.classList.add(lugar % 2 ? 'entra-der' : 'entra-izq');
+    el.addEventListener('animationend', () => el.classList.remove('entra-izq', 'entra-der'), { once: true });
+  }
+  function vigilarEntrada(el) {
+    if (!('IntersectionObserver' in window)) { el.classList.remove('entrada--espera'); return; }   // navegador viejo: aparecen sin animación
+    if (!obsEntradas) obsEntradas = new IntersectionObserver((regs) => {
+      let n = 0;
+      regs.filter((r) => r.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top).forEach((r) => { obsEntradas.unobserve(r.target); revelarEntrada(r.target, n++); });
+    }, { rootMargin: '0px 0px -40px 0px', threshold: 0 });               // se revela cuando asoma 40 px por abajo (sirve también para entradas muy altas)
+    obsEntradas.observe(el);
+  }
+
   /* Pinta el perfil que se está viendo: frase y entradas (las nuevas entran con animación, las que cambiaron se actualizan en el lugar, las borradas salen) */
   function pintarPerfil() {
     if (vista !== 'perfiles' || !yo) return;
@@ -2087,15 +2184,14 @@ document.addEventListener('DOMContentLoaded', () => {
     refs.buscador.hidden = !todas.length;                                // v2.8.1: el buscador solo aparece si ya se añadió algo
     /* v2.8.1: la búsqueda mira el título y el texto (sin importar mayúsculas ni tildes) */
     const lista = perfilQ ? todas.filter((e) => perfilQ.split(/\s+/).every((w) => normalizar(e.titulo + ' ' + e.texto).includes(w))) : todas, visibles = new Set(lista.map((e) => e.id));
-    nodosEntradas.forEach((el, id) => { if (!visibles.has(id)) { nodosEntradas.delete(id); salirTarjeta(el); } });
-    let orden = 0; const ordenadas = [];
+    nodosEntradas.forEach((el, id) => { if (!visibles.has(id)) { nodosEntradas.delete(id); if (obsEntradas) obsEntradas.unobserve(el); salirTarjeta(el); } });
+    const ordenadas = [];
     lista.forEach((e) => {
       const firma = JSON.stringify([e.icono, e.titulo, e.texto, (e.imagenes || []).map((i) => i.id), e.autor, e.actualizado, !!e._pend, yo]);   // v2.9: también cambia al confirmarse
       let el = nodosEntradas.get(e.id);
       if (!el) {
         el = crearEntrada(e); el._firma = firma;
-        el.classList.add('entra'); el.style.setProperty('--i', Math.min(orden++, 10));
-        el.addEventListener('animationend', () => el.classList.remove('entra'), { once: true });
+        el.classList.add('entrada--espera'); vigilarEntrada(el);        // v2.10: aparece con animación cuando se ve en pantalla (ver vigilarEntrada)
         nodosEntradas.set(e.id, el);
       } else if (el._firma !== firma) { morph(el, crearEntrada(e), true); el._firma = firma; }
       ordenadas.push(el);
