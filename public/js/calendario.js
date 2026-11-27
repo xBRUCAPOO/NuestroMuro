@@ -109,7 +109,7 @@
       h('div', { class: 'tarjeta calv__cab' }, icono('calendar_month'), h('h2', { class: 'calv__titulo', text: 'Calendario de amor' }),
         h('p', { class: 'calv__sub', text: 'Las fechas que nos importan, con aviso antes de que lleguen. Los días de cada plan aparecen solos.' })),
       h('div', { class: 'segmento calv__pestanas', role: 'tablist' }, btnMes, btnLista), cuerpo);
-    function ponerPestana(p) { pestana = p; btnMes.classList.toggle('segmento__btn--activo', p === 'mes'); btnLista.classList.toggle('segmento__btn--activo', p === 'lista'); pintar(); }
+    function ponerPestana(p) { pestana = p; animar = true; btnMes.classList.toggle('segmento__btn--activo', p === 'mes'); btnLista.classList.toggle('segmento__btn--activo', p === 'lista'); pintar(); }
 
     function pintar() {
       if (pestana === 'mes') pintarMes(); else pintarLista();
@@ -117,22 +117,39 @@
 
     /* ---------- Calendario del mes ---------- */
     let obsAncho = null;
+    /* [v3.1] Animaciones de entrada: solo cuando se abre el calendario, se cambia de mes o de pestaña (no cada vez que se repinta por un cambio de datos).
+       dirMes = 1 (mes siguiente: entra desde la derecha) | -1 (anterior: desde la izquierda) | 0 (sin dirección). El CSS las apaga/acorta según Ajustes. */
+    let animar = true, dirMes = 0;
     function pintarMes() {
+      const entra = animar, dir = dirMes; animar = false; dirMes = 0;
       const hoy = M.hoy(), { a, m } = mes, total = new Date(a, m, 0).getDate();
       const nav = h('div', { class: 'calv__nav' },
         h('button', { class: 'btn-icono', type: 'button', 'aria-label': 'Mes anterior', onclick: () => cambiarMes(-1) }, icono('chevron_left')),
-        h('strong', { class: 'calv__mes', text: `${MESES[m - 1]} ${a}`, 'aria-live': 'polite' }),
+        h('strong', { class: 'calv__mes' + (entra ? ' calv__mes--entra' : ''), text: `${MESES[m - 1]} ${a}`, 'aria-live': 'polite' }),
         h('button', { class: 'btn-icono', type: 'button', 'aria-label': 'Mes siguiente', onclick: () => cambiarMes(1) }, icono('chevron_right')),
-        h('button', { class: 'btn btn--fantasma calv__hoy', type: 'button', onclick: () => { mes = { a: Number(hoy.slice(0, 4)), m: Number(hoy.slice(5, 7)) }; pintarMes(); } }, icono('today'), 'Hoy'),
+        h('button', { class: 'btn btn--fantasma calv__hoy', type: 'button', onclick: () => { mes = { a: Number(hoy.slice(0, 4)), m: Number(hoy.slice(5, 7)) }; animar = true; pintarMes(); } }, icono('today'), 'Hoy'),
         feriadosSwitch());
       const semana = h('div', { class: 'calv__semana', 'aria-hidden': 'true' }, ...LETRAS.map((l) => h('span', { text: l })));
       const celdas = [], vacias = (diaSemana(ISO(a, m, 1)) + 6) % 7;
       for (let i = 0; i < vacias; i++) celdas.push(h('span', { class: 'calv__vacio', 'aria-hidden': 'true' }));
-      const grupos = new Map();                                                // grupo de plan → [{ f, color }] (para unirlos con una línea)
+      /* [v3.1] Primero se calcula qué hay en cada día y qué días van UNIDOS (grupos): los días de un mismo plan Y los días de una fecha con rango ("Semana de la Dulzura").
+         grupos: clave → [{ f, color }] en orden de fecha. filaDe(n) = fila de la rejilla donde cae el día n (0 = primera semana). */
+      const grupos = new Map(), porDia = [], filaDe = (n) => Math.floor((vacias + n - 1) / 7);
       for (let n = 1; n <= total; n++) {
         const f = ISO(a, m, n), lista = diasEn(f, null, feriados);
         const orden = [...lista].sort((x, y) => (x.categoria === 'feriado') - (y.categoria === 'feriado'));   // los feriados al final
-        const c = h('button', { class: 'calv__dia' + (f === hoy ? ' calv__dia--hoy' : '') + (orden.length ? ' calv__dia--con' : '') + (orden.length && orden.every((d) => expirada(d, hoy)) ? ' calv__dia--exp' : ''), type: 'button', 'data-f': f,
+        porDia.push({ n, f, orden });
+        orden.forEach((d) => {
+          const clave = d.grupo ? 'g:' + d.grupo : (d.finDia ? 'r:' + d.id : '');          // plan → por su grupo; rango → por la fecha misma
+          if (clave) { if (!grupos.has(clave)) grupos.set(clave, []); grupos.get(clave).push({ f, n, color: colorDe(d) }); }
+        });
+      }
+      /* Filas que necesitan un HUECO debajo: cuando el siguiente día unido cae en otra fila, se deja espacio justo encima de ese día para que la línea baje y apunte hacia él */
+      const huecos = new Set();
+      grupos.forEach((l) => { for (let i = 0; i < l.length - 1; i++) { const fa = filaDe(l[i].n), fb = filaDe(l[i + 1].n); if (fb > fa) huecos.add(fb - 1); } });
+      let pos = vacias;                                                          // cuántas celdas de la rejilla van puestas (para saber cuándo termina una fila)
+      porDia.forEach(({ n, f, orden }) => {
+        const c = h('button', { class: 'calv__dia' + (f === hoy ? ' calv__dia--hoy' : '') + (orden.length ? ' calv__dia--con' : '') + (orden.length && orden.every((d) => expirada(d, hoy)) ? ' calv__dia--exp' : ''), type: 'button', 'data-f': f, 'data-fila': String(filaDe(n)),
           'aria-label': `${etiquetaLarga(f)}${orden.length ? ': ' + orden.map((d) => d.nombre).join(', ') : ''}`, onclick: () => abrirDia(f) },
           h('span', { class: 'calv__num', text: String(n) }),
           orden.length ? h('span', { class: 'calv__marcas' }, ...orden.slice(0, MAX_MARCAS).map((d) => {
@@ -140,34 +157,51 @@
             mk.style.setProperty('--c', colorDe(d)); return mk;
           }), orden.length > MAX_MARCAS ? h('span', { class: 'calv__mas', text: `+${orden.length - MAX_MARCAS}` }) : null) : null);
         if (orden.length) c.style.setProperty('--c', colorDe(orden[0]));
-        orden.forEach((d) => { if (d.grupo) { if (!grupos.has(d.grupo)) grupos.set(d.grupo, []); grupos.get(d.grupo).push({ f, color: colorDe(d) }); } });
-        celdas.push(c);
-      }
-      const rejilla = h('div', { class: 'calv__dias' }, ...celdas);
-      const lineas = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); lineas.setAttribute('class', 'calv__lineas'); lineas.setAttribute('aria-hidden', 'true');
+        c.style.setProperty('--i', String(n - 1));                               // v3.1: posición para la entrada escalonada (animación)
+        celdas.push(c); pos++;
+        if (pos % 7 === 0 && huecos.has(filaDe(n))) celdas.push(h('span', { class: 'calv__hueco', 'data-fila': String(filaDe(n)), 'aria-hidden': 'true' }));   // espacio para la línea que baja
+      });
+      const rejilla = h('div', { class: 'calv__dias' + (entra ? ' calv__dias--entra' + (dir > 0 ? ' calv__dias--sig' : dir < 0 ? ' calv__dias--ant' : '') : '') }, ...celdas);
+      const lineas = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); lineas.setAttribute('class', 'calv__lineas' + (entra ? ' calv__lineas--anim' : '')); lineas.setAttribute('aria-hidden', 'true');
+      if (entra) setTimeout(() => lineas.classList.remove('calv__lineas--anim'), 1800);   // las líneas se dibujan con animación solo la primera vez (no al redibujar por cambio de tamaño)
       const caja = h('div', { class: 'calv__rejilla' }, rejilla, lineas);
-      const leyenda = h('p', { class: 'campo__ayuda calv__ayuda' }, icono('link'), 'Los días de un mismo plan se ven unidos por una línea. Toca un día para ver todo lo que tiene.');
+      const leyenda = h('p', { class: 'campo__ayuda calv__ayuda' }, icono('link'), 'Los días que van unidos (los de un plan y las fechas de varios días) se ven con una línea del mismo color; si el siguiente cae en otra semana, una flecha baja hasta él. Toca un día para ver todo lo que tiene.');
       cuerpo.replaceChildren(h('div', { class: 'tarjeta calv__tarjeta' }, nav, semana, caja, leyenda));
       const dibujar = () => dibujarLineas(lineas, caja, grupos);
       requestAnimationFrame(dibujar);
       if (obsAncho) obsAncho.disconnect();
       if (typeof ResizeObserver !== 'undefined') { obsAncho = new ResizeObserver(dibujar); obsAncho.observe(caja); }
     }
-    function cambiarMes(n) { const d = new Date(mes.a, mes.m - 1 + n, 1); mes = { a: d.getFullYear(), m: d.getMonth() + 1 }; pintarMes(); }
-    /* Une con una línea los días de un mismo plan (de uno al siguiente, en orden) pasando por el centro de cada día */
+    function cambiarMes(n) { const d = new Date(mes.a, mes.m - 1 + n, 1); mes = { a: d.getFullYear(), m: d.getMonth() + 1 }; animar = true; dirMes = n; pintarMes(); }
+    /* [v3.1] Une con una línea los días que van juntos (planes y rangos), de uno al siguiente y en el color de esos días.
+       - Mismo renglón: línea punteada entre los puntos de cada día.
+       - Siguiente día en otro renglón: la línea baja al hueco que se dejó, corre hasta la columna del día y baja con una flecha que apunta a él (codo con flecha).
+       Cada grupo usa un "carril" (alto distinto) para que dos grupos en los mismos días no se tapen. */
     function dibujarLineas(svg, caja, grupos) {
       const r0 = caja.getBoundingClientRect();
       svg.setAttribute('viewBox', `0 0 ${r0.width} ${r0.height}`); svg.replaceChildren();
-      const NS = 'http://www.w3.org/2000/svg';
+      const NS = 'http://www.w3.org/2000/svg', carriles = new Map();
+      const el = (tag, at) => { const e = document.createElementNS(NS, tag); Object.keys(at).forEach((k) => e.setAttribute(k, at[k])); return e; };
       grupos.forEach((lista) => {
         if (lista.length < 2) return;
-        const pts = lista.sort((x, y) => (x.f < y.f ? -1 : 1)).map((x) => { const el = caja.querySelector(`[data-f="${x.f}"]`); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.left - r0.left + r.width / 2, y: r.top - r0.top + r.height - 7, color: x.color }; }).filter(Boolean);
+        const carril = Math.min(2, Math.max(...lista.map((x) => carriles.get(x.f) || 0))); lista.forEach((x) => carriles.set(x.f, carril + 1));
+        const pts = lista.slice().sort((x, y) => (x.f < y.f ? -1 : 1)).map((x) => {
+          const e = caja.querySelector(`[data-f="${x.f}"]`); if (!e) return null; const r = e.getBoundingClientRect();
+          return { x: r.left - r0.left + r.width / 2, y: r.top - r0.top + r.height - 7 - carril * 6, top: r.top - r0.top, fila: Number(e.dataset.fila), color: x.color };
+        }).filter(Boolean);
         for (let i = 0; i < pts.length - 1; i++) {
-          const l = document.createElementNS(NS, 'line');
-          l.setAttribute('x1', pts[i].x); l.setAttribute('y1', pts[i].y); l.setAttribute('x2', pts[i + 1].x); l.setAttribute('y2', pts[i + 1].y);
-          l.setAttribute('class', 'calv__linea'); l.style.setProperty('--c', pts[i].color); svg.append(l);
+          const A = pts[i], B = pts[i + 1], css = { class: 'calv__linea' };
+          let l;
+          if (B.fila === A.fila) l = el('line', { ...css, x1: A.x, y1: A.y, x2: B.x, y2: B.y });
+          else {
+            const g = caja.querySelector(`.calv__hueco[data-fila="${B.fila - 1}"]`), gr = g ? g.getBoundingClientRect() : null;
+            const yg = gr ? gr.top - r0.top + 5 + carril * 4 : B.top - 10, punta = B.top + 1;
+            l = el('path', { ...css, d: `M${A.x} ${A.y} V${yg} H${B.x} V${punta - 5}` });
+            const f = el('path', { class: 'calv__flecha', d: `M${B.x - 5} ${punta - 6} L${B.x} ${punta} L${B.x + 5} ${punta - 6}` }); f.style.setProperty('--c', B.color); f.style.setProperty('--i', String(i)); svg.append(f);
+          }
+          l.style.setProperty('--c', A.color); l.style.setProperty('--i', String(i)); svg.append(l);
         }
-        pts.forEach((p) => { const c = document.createElementNS(NS, 'circle'); c.setAttribute('cx', p.x); c.setAttribute('cy', p.y); c.setAttribute('r', 3.5); c.setAttribute('class', 'calv__nodo'); c.style.setProperty('--c', p.color); svg.append(c); });
+        pts.forEach((p, i) => { const c = el('circle', { cx: p.x, cy: p.y, r: 3.5, class: 'calv__nodo' }); c.style.setProperty('--c', p.color); c.style.setProperty('--i', String(i)); svg.append(c); });
       });
     }
     /* Interruptor "Feriados" (se ve en el calendario y en la lista) */
@@ -181,6 +215,7 @@
 
     /* ---------- Lista "Fechas" ---------- */
     function pintarLista() {
+      let primera = animar; animar = false;                    // v3.1: las filas entran escalonadas solo al abrir la lista (no al escribir en el buscador)
       const hoy = M.hoy();
       const q = M.normalizar(busca);
       let lista = visibles().filter((d) => (!cat || d.categoria === cat) && (!q || M.normalizar(d.nombre + ' ' + d.descripcion).includes(q)));
@@ -197,28 +232,30 @@
         const qq = M.normalizar(busca);
         const l = lista.filter((d) => !qq || M.normalizar(d.nombre + ' ' + d.descripcion).includes(qq));
         cuentaTxt.textContent = `${l.length} ${l.length === 1 ? 'fecha' : 'fechas'}`;
-        filas.replaceChildren(...(l.length ? l.map((d) => fila(d, hoy)) : [h('div', { class: 'vacio' }, icono('event_busy'), h('p', { text: dias.length ? 'No hay fechas con ese filtro.' : 'Todavía no hay fechas. ¡Toca el botón + y agrega la primera!' }))]));
+        filas.classList.toggle('calv__lista--entra', primera); primera = false;
+        filas.replaceChildren(...(l.length ? l.map((d, i) => fila(d, hoy, i)) : [h('div', { class: 'vacio' }, icono('event_busy'), h('p', { text: dias.length ? 'No hay fechas con ese filtro.' : 'Todavía no hay fechas. ¡Toca el botón + y agrega la primera!' }))]));
       }
       cuerpo.replaceChildren(h('div', { class: 'tarjeta calv__tarjeta' },
         h('label', { class: 'buscador' }, icono('search'), campoBusca), h('div', { class: 'calv__filtros' }, h('nav', { class: 'ayuda-indice filtros__tipos' }, ...chips), feriadosSwitch()),
         h('div', { class: 'ayuda-acciones' }, cuentaTxt), filas));
       repintarFilas();
     }
-    function fila(d, hoy) {
+    function fila(d, hoy, i = 0) {
       const exp = expirada(d, hoy), cu = cuenta(d, hoy);
       const b = h('button', { class: 'calv__fila' + (exp ? ' calv__fila--exp' : ''), type: 'button', onclick: () => abrirFecha(d.id) },
         h('span', { class: 'calv__fila-icono' }, icono((CAT[d.categoria] || CAT.otro).icono, true)),
         h('span', { class: 'calv__fila-texto' }, h('span', { class: 'calv__fila-nombre', text: d.nombre }),
           h('span', { class: 'calv__fila-cuando' }, cuando(d, hoy), d.recurrente ? ' · cada año' : '', d.grupo ? ' · de un plan' : '')),
         h('span', { class: 'calv__fila-cuenta' + (cu.startsWith('¡') ? ' calv__fila-cuenta--ya' : ''), text: cu }));
-      b.style.setProperty('--c', colorDe(d));
+      b.style.setProperty('--c', colorDe(d)); b.style.setProperty('--i', String(Math.min(i, 14)));   // v3.1: posición para la entrada escalonada
       return b;
     }
 
     /* ---------- Detalle ---------- */
     let infoCtx = null;                                       // { f } (todo lo de un día) o { id } (una fecha)
-    function abrirDia(f) { infoCtx = { f }; repintarInfo(); abrirModal(info); }
-    function abrirFecha(id) { infoCtx = { id }; repintarInfo(); abrirModal(info); }
+    let animarInfo = false;                                   // v3.1: las tarjetas del detalle entran escalonadas solo al abrirlo (no en cada actualización)
+    function abrirDia(f) { infoCtx = { f }; animarInfo = true; repintarInfo(); abrirModal(info); }
+    function abrirFecha(id) { infoCtx = { id }; animarInfo = true; repintarInfo(); abrirModal(info); }
     function repintarInfo() {
       if (!infoCtx) return;
       const hoy = M.hoy();
@@ -226,7 +263,8 @@
       if (infoCtx.id && !lista.length) { cerrarModal(info); return; }
       $('infoTitulo').textContent = infoCtx.f ? etiquetaLarga(infoCtx.f) : (lista[0] ? lista[0].nombre : 'Fecha');
       const cuerpoInfo = $('infoCuerpo');
-      const tarjetas = lista.map((d) => tarjeta(d, hoy));
+      const ent = animarInfo; animarInfo = false;
+      const tarjetas = lista.map((d, i) => { const t = tarjeta(d, hoy); if (ent) { t.classList.add('calv__tarjeta-dia--entra'); t.style.setProperty('--i', String(Math.min(i, 8))); } return t; });   // v3.1
       const pie = infoCtx.f ? [h('button', { class: 'btn btn--fantasma btn--bloque', type: 'button', onclick: () => { cerrarModal(info); nuevo(infoCtx.f); } }, icono('add'), 'Agregar una fecha este día')] : [];
       cuerpoInfo.replaceChildren(...(tarjetas.length ? tarjetas : [h('div', { class: 'vacio' }, icono('event_available'), h('p', { text: 'No hay fechas importantes este día.' }))]), ...pie);
     }
@@ -265,6 +303,7 @@
     /* Colores (50) */
     $('diaColores').replaceChildren(...Array.from({ length: COLORES }, (_, i) => {
       const n = i + 1, b = h('button', { class: 'calv__color', type: 'button', 'aria-label': `Color ${n}`, 'aria-pressed': 'false', 'data-c': String(n), onclick: () => { colorElegido = n; marcarColor(); } });
+      b.style.setProperty('--i', String(i));   // v3.1: posición para la entrada escalonada de los círculos de color
       b.style.setProperty('--c', `var(--dia-color-${n})`); return b;
     }));
     const marcarColor = () => $('diaColores').querySelectorAll('.calv__color').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.c) === colorElegido)));
@@ -294,6 +333,7 @@
       }
       $('diaCajaFin').hidden = !f.rango.checked;
       marcarRepite(); marcarCat(); marcarColor();
+      const col = $('diaColores'); col.classList.add('calv__colores--entra'); setTimeout(() => col.classList.remove('calv__colores--entra'), 1200);   // v3.1: los círculos de color aparecen en cascada solo al abrir el formulario
       abrirModal(modal);
       setTimeout(() => f.nombre.focus(), 80);
     }
@@ -360,7 +400,7 @@
 
     /* ---------- Mostrar / ocultar la vista ---------- */
     return {
-      mostrar() { pintar(); cargar(); },
+      mostrar() { animar = true; pintar(); cargar(); },   // v3.1: al abrir el calendario entra con animación
       cargar, nuevo, flotante, cerrarFlota, diasEn,
       color: colorDe,
       /* Al cambiar de persona se descarta todo y se vuelve a pedir */

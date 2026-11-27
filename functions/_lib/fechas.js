@@ -49,13 +49,24 @@ export function validarDia(c) {
   return { campos: { dia, mes, anio, nombre, descripcion: limpiar(c.descripcion, LIM_DIA.descripcion), color, categoria, recordar, finDia, finMes } };
 }
 
-/* Carga las fechas iniciales UNA sola vez en la vida de la base (el INSERT de la marca solo cambia una fila la primera vez) */
+/* [v3.1] Carga las fechas iniciales UNA sola vez (marca "dias_semilla_2": el INSERT solo cambia una fila la primera vez).
+   Como la v3.0 ya había cargado una lista más corta, esto es una FUSIÓN: agrega solo las que faltan (se comparan por nombre + día + mes + año, sin importar
+   mayúsculas), así no se duplica nada ni se pisa lo que se editó. Además pasa las negritas viejas **así** al formato actual *así* en todas las descripciones. */
 export async function sembrarFechas(db) {
-  const r = await db.prepare(`INSERT INTO meta (clave, valor) VALUES ('dias_semilla', '1') ON CONFLICT(clave) DO NOTHING`).run();
+  const r = await db.prepare(`INSERT INTO meta (clave, valor) VALUES ('dias_semilla_2', '1') ON CONFLICT(clave) DO NOTHING`).run();
   if (!(r.meta && r.meta.changes === 1)) return;
   const ahora = Date.now();
-  await db.batch(FECHAS_SEMILLA.map((d) => db.prepare(`INSERT INTO dias_importantes (id, dia, mes, anio, nombre, descripcion, color, categoria, recordar, fin_dia, fin_mes, grupo, estado, autor, creado, actualizado)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)`).bind(crypto.randomUUID(), d.dia, d.mes, d.recurrente ? null : d.anio, d.nombre, d.descripcion, d.color, d.categoria, d.recordar, d.finDia, d.finDia ? (d.finMes || d.mes) : null, ahora, ahora)));   // v3.0: un rango sin mes final termina en el mismo mes
+  const { results } = await db.prepare('SELECT nombre, dia, mes, anio, descripcion, id FROM dias_importantes').all();
+  const clave = (n, d, m, a) => `${String(n).trim().toLowerCase()}|${d}|${m}|${a == null ? '' : a}`;
+  const tengo = new Set((results || []).map((x) => clave(x.nombre, x.dia, x.mes, x.anio)));
+  const nuevas = FECHAS_SEMILLA.filter((d) => !tengo.has(clave(d.nombre, d.dia, d.mes, d.recurrente ? null : d.anio)));
+  const ops = nuevas.map((d) => db.prepare(`INSERT INTO dias_importantes (id, dia, mes, anio, nombre, descripcion, color, categoria, recordar, fin_dia, fin_mes, grupo, estado, autor, creado, actualizado)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)`).bind(crypto.randomUUID(), d.dia, d.mes, d.recurrente ? null : d.anio, d.nombre, d.descripcion, d.color, d.categoria, d.recordar, d.finDia, d.finDia ? (d.finMes || d.mes) : null, ahora, ahora));   // un rango sin mes final termina en el mismo mes
+  // negrita vieja **x** → *x* en las descripciones que ya estaban guardadas
+  for (const x of results || []) {
+    if (x.descripcion && x.descripcion.includes('**')) ops.push(db.prepare('UPDATE dias_importantes SET descripcion = ? WHERE id = ?').bind(x.descripcion.replace(/\*\*(.+?)\*\*/gs, '*$1*'), x.id));
+  }
+  if (ops.length) await db.batch(ops);
 }
 
 /* Deja en el calendario un día por cada fecha del plan (ligados por "grupo" = id del plan). post = publicación de tipo plan tal como la devuelve aPost() */

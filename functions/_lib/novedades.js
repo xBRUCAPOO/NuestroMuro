@@ -8,6 +8,20 @@
    ============================================================ */
 export const NOVEDADES = [
   {
+    version: '3.1.0', fecha: '2026-11-27', titulo: 'Animaciones, sonidos y un calendario más completo',
+    resumen: 'Todas las fechas importantes cargadas, líneas con flecha entre los días unidos, animaciones con nivel ajustable, sonidos y cerrar sesión en Ajustes.',
+    items: [
+      { t: 'nuevo', texto: 'Ajustes: botón de Cerrar sesión, selector de animaciones (Completas / Reducidas / Ninguna) y un interruptor de sonidos.' },
+      { t: 'nuevo', texto: 'Suena el tono de inicio de sesión justo cuando se ilumina tu foto, y las notificaciones nuevas dentro de la app tienen su tono.' },
+      { t: 'nuevo', texto: 'Animaciones nuevas en el calendario (días en cascada, el mes se desliza al cambiar, líneas que se dibujan), en Ajustes, Novedades y notificaciones.' },
+      { t: 'nuevo', texto: 'Se agregaron todas las fechas importantes del calendario original: cumpleaños, aniversarios, fechas de pareja y más feriados.' },
+      { t: 'mejora', texto: 'Los días unidos (planes y fechas de varios días como la Semana de la Dulzura) se unen con una línea del color de esos días; si el siguiente cae en otra semana, el calendario deja un espacio y una flecha baja hasta él.' },
+      { t: 'mejora', texto: 'Las casillas sin marcar ahora tienen el fondo transparente.' },
+      { t: 'arreglo', texto: 'La barra de formato flotante se puede deslizar con el dedo y sus botones funcionan en el celular.' },
+      { t: 'arreglo', texto: 'Las negritas de las descripciones de las fechas ya no muestran los asteriscos dobles (**).' },
+    ],
+  },
+  {
     version: '3.0.0', fecha: '2026-11-27', titulo: 'El calendario de amor y un editor nuevo',
     resumen: 'Calendario de amor con avisos, editor con formato en vivo, editor de imágenes, listas con responsables y mucho más.',
     items: [

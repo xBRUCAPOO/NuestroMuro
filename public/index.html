@@ -50,12 +50,30 @@
           <span class="menu-ajustes__texto"><strong>Modo oscuro</strong><small id="temaEstado">Activado</small></span>
           <button class="interruptor" id="switchTema" type="button" role="switch" aria-checked="true" aria-label="Modo oscuro"><span class="interruptor__riel"><span class="interruptor__bola"></span></span></button>
         </div>
+        <!-- v3.1: nivel de animaciones (completas / reducidas / ninguna) y sonidos; se guardan en este dispositivo. script.js (Prefs) los maneja -->
+        <div class="menu-ajustes__fila">
+          <span class="material-symbols-rounded" aria-hidden="true">animation</span>
+          <span class="menu-ajustes__texto"><strong>Animaciones</strong><small id="animEstado">Todas las animaciones</small></span>
+        </div>
+        <div class="segmento segmento--ancho" id="animOpciones" role="radiogroup" aria-label="Nivel de animaciones">
+          <button class="segmento__btn" type="button" role="radio" aria-checked="true" data-nivel="completas">Completas</button>
+          <button class="segmento__btn" type="button" role="radio" aria-checked="false" data-nivel="reducidas">Reducidas</button>
+          <button class="segmento__btn" type="button" role="radio" aria-checked="false" data-nivel="ninguna">Ninguna</button>
+        </div>
+        <div class="menu-ajustes__fila">
+          <span class="material-symbols-rounded" id="sonidoIcono" aria-hidden="true">volume_up</span>
+          <span class="menu-ajustes__texto"><strong>Sonidos</strong><small id="sonidoEstado">Inicio de sesión y avisos</small></span>
+          <button class="interruptor" id="switchSonido" type="button" role="switch" aria-checked="true" aria-label="Sonidos"><span class="interruptor__riel"><span class="interruptor__bola"></span></span></button>
+        </div>
         <hr class="separador" aria-hidden="true">
         <div class="menu-ajustes__nov">
           <div class="menu-ajustes__nov-cab"><span class="material-symbols-rounded" aria-hidden="true">campaign</span><strong>Novedades</strong></div>
           <div id="novResumen" class="nov-resumen"><span class="campo__ayuda">Cargando…</span></div>
           <button class="btn btn--fantasma btn--bloque" id="btnVerNovedades" type="button"><span class="material-symbols-rounded">history</span>Ver todas las novedades</button>
         </div>
+        <hr class="separador" aria-hidden="true">
+        <!-- v3.1: cerrar sesión también está en Ajustes (confirma igual que el botón del perfil) -->
+        <button class="btn btn--peligro btn--bloque" id="btnSalirAjustes" type="button"><span class="material-symbols-rounded">logout</span>Cerrar sesión</button>
       </div>
       <!-- v2.8: tocar mi foto abre mi perfil (cerrar sesión ahora está dentro del perfil) -->
       <button class="yo-chip" id="btnYo" type="button" aria-label="Ver mi perfil" hidden></button>
@@ -124,8 +142,8 @@
 
   <!-- Pie: versión y fecha de la última modificación de index.html (actualizar cada vez que se edite este archivo) -->
   <footer class="pie">
-    <!-- v3.0.0: calendario de amor (fechas importantes, avisos, líneas entre los días de un plan), editor con formato en vivo y barra completa, editor de imágenes, listas con responsables, estado "Expirado", orden de entradas del perfil, ajustes con novedades y notificaciones con ícono por tipo; v2.10.1: corrección de la animación de Like (corazoncitos que vuelan, corazón que ya no se ve cortado) y aparición de las entradas de perfil más fluida y una por una; v2.10.0: perfil estilo Steam (solo se ve el perfil, la campanita pasa a "volver al muro"), selector de perfiles con las cartas, entradas que aparecen desde los costados al verse, animación de Like con corazoncitos, M siempre a la derecha de xB en las fotos y más iconos; v2.9.0: respuestas a comentarios (hilos), barras de formato debajo del campo de texto y círculo de carga en las entradas de perfil; v2.8.1: buscador en los perfiles, entradas siempre en una columna con otro diseño (ícono de color, título como en el muro, texto en caja oscura) y barra de formato completa (links, viñetas, lista numerada); v2.8.0: perfiles (pestaña "Perfiles" y foto de cada persona: frase, entradas con ícono, título, texto con formato e imágenes), cerrar sesión pasa al perfil propio y el tachado de las listas se ve bien en varias líneas; v2.7.0: todo se actualiza al instante (si el servidor falla se deshace y avisa), lista completada en verde, descripción en lista y encuesta, formato de texto en todos los campos, menos color de la persona, animaciones más fluidas y escena de inicio de sesión; v2.6.0: cambio instantáneo de los días del plan y tipos de día al crear el plan; v2.5.0: notificaciones (campanita + avisos del celular); v2.4.0: fotos de perfil (carta azul M / roja xB) en vez de las iniciales; v2.3.0: tipo "plan" en lugar de "video" -->
-    <span id="pieVersion">Versión 3.0.0</span>
+    <!-- v3.1.0: fechas importantes completas (CSV), líneas con flecha y rangos unidos en el calendario, barra de formato deslizable y funcional en celular, casillas transparentes, Ajustes con cerrar sesión / animaciones / sonidos, sonido de inicio de sesión y de avisos, animaciones nuevas; v3.0.0: calendario de amor (fechas importantes, avisos, líneas entre los días de un plan), editor con formato en vivo y barra completa, editor de imágenes, listas con responsables, estado "Expirado", orden de entradas del perfil, ajustes con novedades y notificaciones con ícono por tipo; v2.10.1: corrección de la animación de Like (corazoncitos que vuelan, corazón que ya no se ve cortado) y aparición de las entradas de perfil más fluida y una por una; v2.10.0: perfil estilo Steam (solo se ve el perfil, la campanita pasa a "volver al muro"), selector de perfiles con las cartas, entradas que aparecen desde los costados al verse, animación de Like con corazoncitos, M siempre a la derecha de xB en las fotos y más iconos; v2.9.0: respuestas a comentarios (hilos), barras de formato debajo del campo de texto y círculo de carga en las entradas de perfil; v2.8.1: buscador en los perfiles, entradas siempre en una columna con otro diseño (ícono de color, título como en el muro, texto en caja oscura) y barra de formato completa (links, viñetas, lista numerada); v2.8.0: perfiles (pestaña "Perfiles" y foto de cada persona: frase, entradas con ícono, título, texto con formato e imágenes), cerrar sesión pasa al perfil propio y el tachado de las listas se ve bien en varias líneas; v2.7.0: todo se actualiza al instante (si el servidor falla se deshace y avisa), lista completada en verde, descripción en lista y encuesta, formato de texto en todos los campos, menos color de la persona, animaciones más fluidas y escena de inicio de sesión; v2.6.0: cambio instantáneo de los días del plan y tipos de día al crear el plan; v2.5.0: notificaciones (campanita + avisos del celular); v2.4.0: fotos de perfil (carta azul M / roja xB) en vez de las iniciales; v2.3.0: tipo "plan" en lugar de "video" -->
+    <span id="pieVersion">Versión 3.1.0</span>
     <span aria-hidden="true">·</span>
     <span id="pieFecha">27/11/2026</span>
   </footer>

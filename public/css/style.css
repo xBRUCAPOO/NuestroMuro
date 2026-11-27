@@ -149,7 +149,7 @@
   --color-codigo-fondo: color-mix(in srgb, var(--color-texto-suave) 22%, transparent);      /* fondo del código dentro del editor */
   --color-seleccion: color-mix(in srgb, var(--yo) 38%, transparent);                        /* texto seleccionado dentro del editor */
   /* ---- v3.0: casillas de las listas y tarjetas vencidas ("Expirado") ---- */
-  --color-casilla-vacia: #ECECEF;                                                           /* casilla sin completar: gris casi blanco */
+  --color-casilla-vacia: transparent;                                                       /* [v3.1] casilla sin completar: fondo transparente (solo se ve el borde) */
   --color-exp: #4A4A51;                                                                     /* tarjeta vencida: escala de grises oscuros */
   --color-exp-oscuro: #2C2C31;
   --color-exp-texto: #8F8F99;
@@ -170,7 +170,7 @@
 /* ---- Tema claro: solo cambia valores de variables; se activa con <html data-tema="claro"> ---- */
 :root[data-tema="claro"] {
   color-scheme: light;
-  --color-casilla-vacia: #F4F4F6;               /* v3.0 */
+  --color-casilla-vacia: transparent;           /* [v3.1] casilla sin completar: fondo transparente */
   --color-exp: #9A9AA3;                         /* v3.0: tarjeta vencida en el tema claro (grises más oscuros que el fondo) */
   --color-exp-oscuro: #6E6E77;
   --color-exp-texto: #5B5B65;
@@ -1058,6 +1058,9 @@ textarea.campo__entrada.campo__linea { min-height: 0; max-height: min(40dvh, 320
 .formato[data-modo="flota"] .formato__sep { display: none; }
 .formato--flota { flex-wrap: nowrap; max-width: calc(100vw - 12px); overflow-x: auto; scrollbar-width: none; }
 .formato--flota::-webkit-scrollbar { display: none; }
+/* [v3.1] Deslizar la barra con el dedo: solo se permite el gesto horizontal y el desplazamiento no se le pasa a la página (antes un toque sobre un botón impedía deslizar) */
+.formato--flota { touch-action: pan-x; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.formato--flota .btn-icono { touch-action: pan-x; }
 .formato--flota .btn-icono { flex: 0 0 auto; }
 /* Celular: la barra se ACOPLA encima del teclado, a todo el ancho, con los botones deslizables. La posición vertical la calcula script.js (visualViewport) */
 .formato--acoplada { width: 100%; max-width: none; border-radius: 0; border-left: 0; border-right: 0; padding: 4px 6px; box-shadow: 0 -6px 18px color-mix(in srgb, var(--color-negro) 35%, transparent); animation: none; }
@@ -1199,8 +1202,11 @@ body[data-vista="calendario"] #btnCalendario { display: none !important; }
   .calv__vacio { aspect-ratio: auto; min-height: 92px; }
 }
 .calv__lineas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }   /* línea que une los días de un mismo plan */
-.calv__linea { stroke: var(--c); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 1 7; opacity: .95; }
+.calv__linea { fill: none; stroke: var(--c); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 1 7; opacity: .95; }
 .calv__nodo { fill: var(--c); stroke: var(--color-fondo); stroke-width: 1.5; }
+/* [v3.1] Hueco entre semanas para la línea que baja hasta el siguiente día unido, y la flecha que apunta al día de abajo */
+.calv__hueco { grid-column: 1 / -1; height: 18px; pointer-events: none; }
+.calv__flecha { fill: none; stroke: var(--c); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .calv__ayuda { display: flex; align-items: center; gap: 6px; }
 .calv__ayuda .material-symbols-rounded { font-size: 18px; }
 .calv__interruptor { display: inline-flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: var(--radio-sm); font-size: 13px; color: var(--color-texto-suave); }
@@ -1274,6 +1280,9 @@ body[data-vista="calendario"] #btnCalendario { display: none !important; }
 .menu-ajustes__nov { display: flex; flex-direction: column; gap: 10px; }
 .menu-ajustes__nov-cab { display: flex; align-items: center; gap: 8px; font-family: var(--fuente-titulo); }
 .menu-ajustes__nov-cab .material-symbols-rounded { color: var(--yo-texto); }
+/* [v3.1] selector de 3 opciones a lo ancho del menú (Animaciones) */
+.segmento--ancho { display: flex; }
+.segmento--ancho .segmento__btn { flex: 1; padding: 7px 4px; text-align: center; }
 .interruptor { display: inline-flex; align-items: center; padding: 2px; }
 .interruptor__riel { width: 46px; height: 26px; border-radius: 13px; background: var(--color-gris); display: inline-flex; align-items: center; padding: 3px; transition: background var(--mov-rapido) var(--ease-suave); }
 .interruptor__bola { width: 20px; height: 20px; border-radius: 50%; background: var(--color-texto-suave); transition: transform var(--mov-medio) var(--ease-rebote), background var(--mov-rapido) var(--ease-suave); }
@@ -1302,3 +1311,115 @@ body[data-vista="calendario"] #btnCalendario { display: none !important; }
 
 /* v3.0: con la barra de formato acoplada encima del teclado, las ventanas dejan lugar al pie (si no, la barra tapa el botón de guardar al llegar al final) */
 body.con-barra-acoplada .modal { padding-bottom: calc(18px + 64px + env(safe-area-inset-bottom)); }
+
+/* ============================================================
+   v3.1 — ANIMACIONES NUEVAS
+   Qué hace: entradas con movimiento para todo lo agregado en las versiones 3.x: calendario (días, cambio de mes con deslizamiento, líneas y flechas que se dibujan,
+   lista y detalle de fechas), formulario de fecha (campos y círculos de color), menú de Ajustes, Novedades, panel de notificaciones, globito de avisos y selector de animaciones.
+   Para qué sirve: que todo se sienta fluido. Todas respetan el nivel elegido en Ajustes (bloque "NIVEL DE ANIMACIONES" al final).
+   ============================================================ */
+@keyframes calv-dia-entra { from { opacity: 0; transform: translateY(8px) scale(.82); } }
+@keyframes calv-mes-sig { from { opacity: 0; transform: translateX(32px); } }
+@keyframes calv-mes-ant { from { opacity: 0; transform: translateX(-32px); } }
+@keyframes calv-titulo { from { opacity: 0; transform: translateY(-8px); } }
+@keyframes calv-marca { from { transform: scaleX(0); opacity: 0; } }
+@keyframes calv-linea { from { opacity: 0; } }
+@keyframes calv-nodo { from { opacity: 0; transform: scale(0); } }
+@keyframes calv-flecha { from { opacity: 0; transform: translateY(-7px); } }
+@keyframes menu-entra { from { opacity: 0; transform: translateY(-10px) scale(.94); } }
+@keyframes color-elegido { 0% { transform: scale(1); } 45% { transform: scale(1.35); } 100% { transform: scale(1.1); } }
+@keyframes pestana-activa { 0% { transform: scale(.88); } 60% { transform: scale(1.06); } 100% { transform: scale(1); } }
+@keyframes latido-punto { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.35); } }
+/* Calendario: los días aparecen en cascada, el mes entra deslizándose desde el lado al que se avanza y el título cae suave */
+.calv__cab { animation: entrar var(--mov-medio) var(--ease-salida) backwards; }
+.calv__mes--entra { animation: calv-titulo var(--mov-medio) var(--ease-salida) backwards; }
+.calv__dias--entra.calv__dias--sig { animation: calv-mes-sig var(--mov-medio) var(--ease-salida) backwards; }
+.calv__dias--entra.calv__dias--ant { animation: calv-mes-ant var(--mov-medio) var(--ease-salida) backwards; }
+.calv__dias--entra .calv__dia { animation: calv-dia-entra var(--mov-medio) var(--ease-salida) backwards; animation-delay: calc(var(--i, 0) * 14ms); }
+.calv__dias--entra .calv__marca { transform-origin: left center; animation: calv-marca var(--mov-medio) var(--ease-salida) backwards; animation-delay: calc(var(--i, 0) * 14ms + 140ms); }
+/* Líneas, puntos y flechas de los días unidos: aparecen uno tras otro después de los días */
+.calv__lineas--anim .calv__linea { animation: calv-linea var(--mov-medio) var(--ease-suave) backwards; animation-delay: calc(var(--mov-medio) + var(--i, 0) * 90ms); }
+.calv__lineas--anim .calv__nodo { transform-box: fill-box; transform-origin: center; animation: calv-nodo var(--mov-medio) var(--ease-rebote) backwards; animation-delay: calc(var(--mov-medio) + var(--i, 0) * 90ms); }
+.calv__lineas--anim .calv__flecha { animation: calv-flecha var(--mov-medio) var(--ease-rebote) backwards; animation-delay: calc(var(--mov-medio) + var(--i, 0) * 90ms + 120ms); }
+/* Pestañas, filtros e interruptor */
+.calv__pestanas .segmento__btn--activo, #animOpciones .segmento__btn--activo, .calv__filtros .chip--activo { animation: pestana-activa var(--mov-medio) var(--ease-rebote); }
+.calv__interruptor-bola { transition: transform var(--mov-medio) var(--ease-rebote), background var(--mov-rapido) var(--ease-suave); }
+/* Lista de fechas y detalle de un día */
+.calv__lista--entra .calv__fila { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: calc(var(--i, 0) * 35ms); }
+.calv__tarjeta-dia--entra { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: calc(80ms + var(--i, 0) * 70ms); }
+.dia-flota { transform-origin: top left; animation: pop var(--mov-medio) var(--ease-rebote) backwards; }
+.dia-flota__fila { animation: entrar var(--mov-medio) var(--ease-salida) backwards; }
+/* Formulario de fecha: los campos suben uno tras otro y los círculos de color aparecen en cascada */
+#modalDia .modal > :nth-child(2) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 40ms; }
+#modalDia .modal > :nth-child(3) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 80ms; }
+#modalDia .modal > :nth-child(4) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 120ms; }
+#modalDia .modal > :nth-child(5) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 160ms; }
+#modalDia .modal > :nth-child(6) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 200ms; }
+#modalDia .modal > :nth-child(7) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 240ms; }
+#modalDia .modal > :nth-child(8) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 280ms; }
+#modalDia .modal > :nth-child(9) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 320ms; }
+#modalDia .calv__colores--entra .calv__color { animation: pop var(--mov-medio) var(--ease-rebote) backwards; animation-delay: calc(120ms + var(--i, 0) * 12ms); }
+.calv__color[aria-pressed="true"] { animation: color-elegido var(--mov-medio) var(--ease-rebote); }
+/* Ajustes: el menú se despliega desde el engranaje y sus filas entran una a una; el puntito de novedades late */
+.menu-ajustes:not([hidden]) { transform-origin: top right; animation: menu-entra var(--mov-medio) var(--ease-rebote) backwards; }
+#menuAjustes > :nth-child(1) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 60ms; }
+#menuAjustes > :nth-child(2) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 95ms; }
+#menuAjustes > :nth-child(3) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 130ms; }
+#menuAjustes > :nth-child(4) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 165ms; }
+#menuAjustes > :nth-child(5) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 200ms; }
+#menuAjustes > :nth-child(6) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 235ms; }
+#menuAjustes > :nth-child(7) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 270ms; }
+#menuAjustes > :nth-child(8) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 305ms; }
+.ajustes-btn__punto { animation: latido-punto 1.6s var(--ease-suave) infinite; }
+.interruptor__riel { transition: background var(--mov-medio) var(--ease-suave); }
+/* Novedades: cada tarjeta entra con su turno */
+.nov:nth-child(1) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 60ms; }
+.nov:nth-child(2) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 120ms; }
+.nov:nth-child(3) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 180ms; }
+.nov:nth-child(4) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 240ms; }
+.nov:nth-child(5) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 300ms; }
+.nov:nth-child(6) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 360ms; }
+.nov:nth-child(7) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 420ms; }
+.nov:nth-child(8) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 480ms; }
+/* Panel de notificaciones: filas escalonadas al abrir; el globito de avisos sin leer salta al aparecer */
+.notif-lista--entra .notif:nth-child(1) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 60ms; }
+.notif-lista--entra .notif:nth-child(2) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 105ms; }
+.notif-lista--entra .notif:nth-child(3) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 150ms; }
+.notif-lista--entra .notif:nth-child(4) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 195ms; }
+.notif-lista--entra .notif:nth-child(5) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 240ms; }
+.notif-lista--entra .notif:nth-child(6) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 285ms; }
+.notif-lista--entra .notif:nth-child(7) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 330ms; }
+.notif-lista--entra .notif:nth-child(8) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 375ms; }
+.notif-lista--entra .notif:nth-child(9) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 420ms; }
+.notif-lista--entra .notif:nth-child(10) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 465ms; }
+.notif-btn__badge:not([hidden]) { animation: pop var(--mov-medio) var(--ease-rebote); }
+.avatar--sistema { animation: pop var(--mov-medio) var(--ease-rebote) backwards; }
+
+/* ============================================================
+   NIVEL DE ANIMACIONES (Ajustes → Animaciones)  [v3.1]
+   Qué hace: script.js (Prefs) pone data-anim="completas|reducidas|ninguna" en <html>.
+   - completas: todo como está.
+   - reducidas: duraciones más cortas, sin escalonado, las entradas pasan a ser un simple fundido (sin desplazamientos ni rebotes) y no hay efectos decorativos que se repiten.
+     (la escena de inicio de sesión se deja igual)
+   - ninguna: todo cambia al instante (animaciones y transiciones de 1 ms, así los eventos de "terminó" siguen funcionando); solo se deja girar el indicador de carga.
+   Para qué sirve: bajar o apagar el movimiento si molesta, marea o hace lenta la página.
+   ============================================================ */
+html[data-anim="ninguna"] *, html[data-anim="ninguna"] *::before, html[data-anim="ninguna"] *::after {
+  animation-duration: 1ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important;
+  transition-duration: 1ms !important; transition-delay: 0s !important; scroll-behavior: auto !important;
+}
+html[data-anim="ninguna"] .giro, html[data-anim="ninguna"] .cargando__icono { animation-duration: 1s !important; animation-iteration-count: infinite !important; }
+html[data-anim="reducidas"] { --mov-rapido: 90ms; --mov-medio: 140ms; --mov-lento: 220ms; }
+html[data-anim="reducidas"] :not(.escena):not(.escena *), html[data-anim="reducidas"] :not(.escena):not(.escena *)::before, html[data-anim="reducidas"] :not(.escena):not(.escena *)::after { animation-delay: 0s !important; }
+html[data-anim="reducidas"] .contenedor > *, html[data-anim="reducidas"] .post.entra, html[data-anim="reducidas"] .entrada.entra, html[data-anim="reducidas"] .entrada.entra-izq, html[data-anim="reducidas"] .entrada.entra-der,
+html[data-anim="reducidas"] .comentario, html[data-anim="reducidas"] .comentarios, html[data-anim="reducidas"] .acceso__ventana, html[data-anim="reducidas"] .fab:not([hidden]),
+html[data-anim="reducidas"] .modal-fondo:not(.saliendo) .modal, html[data-anim="reducidas"] .calv__cab, html[data-anim="reducidas"] .calv__dias--entra,
+html[data-anim="reducidas"] .calv__dias--entra .calv__dia, html[data-anim="reducidas"] .calv__lista--entra .calv__fila, html[data-anim="reducidas"] .calv__tarjeta-dia--entra,
+html[data-anim="reducidas"] .dia-flota, html[data-anim="reducidas"] .dia-flota__fila, html[data-anim="reducidas"] .menu-ajustes:not([hidden]), html[data-anim="reducidas"] #menuAjustes > *,
+html[data-anim="reducidas"] .nov, html[data-anim="reducidas"] .notif-lista--entra .notif, html[data-anim="reducidas"] #modalDia .modal > *, html[data-anim="reducidas"] #modalDia .calv__colores--entra .calv__color,
+html[data-anim="reducidas"] .avatar--sistema, html[data-anim="reducidas"] .notif-btn__badge:not([hidden]) { animation-name: aparecer; animation-duration: var(--mov-medio); animation-timing-function: var(--ease-suave); }
+html[data-anim="reducidas"] .calv__dias--entra .calv__marca, html[data-anim="reducidas"] .calv__mes--entra { animation: none; }
+html[data-anim="reducidas"] .calv__lineas--anim .calv__linea, html[data-anim="reducidas"] .calv__lineas--anim .calv__nodo, html[data-anim="reducidas"] .calv__lineas--anim .calv__flecha { animation-name: calv-linea; animation-duration: var(--mov-medio); }
+html[data-anim="reducidas"] .ajustes-btn__punto, html[data-anim="reducidas"] .calv__pestanas .segmento__btn--activo, html[data-anim="reducidas"] #animOpciones .segmento__btn--activo,
+html[data-anim="reducidas"] .calv__filtros .chip--activo, html[data-anim="reducidas"] .calv__color[aria-pressed="true"] { animation: none; }
+html[data-anim="reducidas"] .corazon-fx__chispa { visibility: hidden; }

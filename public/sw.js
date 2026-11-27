@@ -11,7 +11,7 @@
    Para qué sirve: que sea una app instalable, rápida y que siempre muestre la última versión publicada.
    Cambiar VERSION fuerza a renovar las copias guardadas (no hace falta tocarlo en cada push: la red tiene prioridad).
    ============================================================ */
-const VERSION = 'v3.0.0';   // v3.0: scripts nuevos (editor, editor de imágenes, calendario) en el cascarón e íconos de las notificaciones por tipo;   // v2.8: imágenes de los perfiles (/api/perfiles/imagen/…) también primero desde la copia guardada; v2.4: fotos de perfil en el cascarón guardado; v2.5: avisos del celular (push); v2.7: fotos en gris de la escena de inicio de sesión
+const VERSION = 'v3.1.0';   // v3.1: sonidos (/sounds) fuera de la copia guardada y aviso 'sonar' a la app abierta; v3.0: scripts nuevos (editor, editor de imágenes, calendario) en el cascarón e íconos de las notificaciones por tipo;   // v2.8: imágenes de los perfiles (/api/perfiles/imagen/…) también primero desde la copia guardada; v2.4: fotos de perfil en el cascarón guardado; v2.5: avisos del celular (push); v2.7: fotos en gris de la escena de inicio de sesión
 const CACHE_ESTATICO = `muro-estatico-${VERSION}`;   // cascarón de la app
 const CACHE_DATOS = 'muro-datos';                     // listado del muro y fotos
 const CACHE_FUENTES = 'muro-fuentes';                 // Google Fonts
@@ -71,6 +71,7 @@ self.addEventListener('fetch', (e) => {
   if (url.pathname === '/api/posts') return void e.respondWith(redPrimero(request, CACHE_DATOS));
   if (url.pathname.startsWith('/api/imagen/') || url.pathname.startsWith('/api/perfiles/imagen/')) return void e.respondWith(cachePrimero(request, CACHE_DATOS));
   if (url.pathname.startsWith('/api/')) return;               // login, yo, votos…: siempre a la red
+  if (url.pathname.startsWith('/sounds/')) return;            // v3.1: los sonidos (mp3) los maneja el navegador (piden rangos de bytes; no se pasan por la copia guardada)
   if (url.pathname === '/sw.js') return;                      // el propio service worker lo gestiona el navegador
   e.respondWith(redPrimero(request, CACHE_ESTATICO));         // página, CSS, JS, iconos
 });
@@ -102,6 +103,7 @@ self.addEventListener('push', (e) => {
     if (!avisos.length) avisos = [{ id: 'novedades', texto: 'Hay novedades en el muro.', post: '' }];
     const ventanas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     if (ventanas.some((v) => v.visibilityState === 'visible')) return; // la app está a la vista: ya se ve dentro de ella
+    ventanas.forEach((v) => v.postMessage({ tipo: 'sonar' }));        // v3.1: si la app está abierta pero oculta, que suene el tono de aviso de la app (el sonido del sistema no se puede cambiar desde una web)
     await Promise.all(avisos.map((a) => self.registration.showNotification(TITULOS[a.tipo] || 'Nuestro Muro', {
       body: a.texto, tag: a.id, ...iconosDe(a), data: { post: a.post || '', tipo: a.tipo || '' },
     })));

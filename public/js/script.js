@@ -51,6 +51,37 @@ const Tema = (() => {
   return { alternar, alCambiar: (fn) => { oyentes.push(fn); fn(actual); }, repintarBarra: aplicar };
 })();
 
+/* ---------- 1b) Preferencias: animaciones y sonidos  [NUEVO v3.1] ---------- */
+/* Qué hace: guarda (localStorage, con respaldo en memoria) dos preferencias de ESTE dispositivo:
+   - animaciones: 'completas' | 'reducidas' | 'ninguna'. Se aplica como data-anim en <html> y el CSS (bloque "NIVEL DE ANIMACIONES") reacciona.
+   - sonido: true/false. Controla el sonido de inicio de sesión y el tono de las notificaciones que aparecen dentro de la app.
+   También reproduce los sonidos (/sounds/*.mp3): precarga los archivos y, si el navegador no deja sonar todavía (sin interacción previa), lo ignora sin errores.
+   Para qué sirve: poder bajar o apagar el movimiento y el audio desde Ajustes. */
+const Prefs = (() => {
+  'use strict';
+  const NIVELES = ['completas', 'reducidas', 'ninguna'];
+  const ARCHIVOS = { inicio: '/sounds/inicio-sesion.mp3', aviso: '/sounds/notificacion.mp3' };
+  const leer = (k, v) => { try { const x = localStorage.getItem(k); return x == null ? v : x; } catch (e) { return v; } };
+  const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* sin almacenamiento: queda solo en memoria */ } };
+  let anim = NIVELES.includes(leer('muro_anim', 'completas')) ? leer('muro_anim', 'completas') : 'completas';
+  let sonido = leer('muro_sonido', '1') !== '0';
+  const audios = {};
+  const oyentes = [];
+  const aplicar = () => { document.documentElement.dataset.anim = anim; oyentes.forEach((fn) => fn({ anim, sonido })); };
+  function audio(n) { if (!audios[n]) { try { const a = new Audio(ARCHIVOS[n]); a.preload = 'auto'; audios[n] = a; } catch (e) { return null; } } return audios[n]; }
+  aplicar();
+  return {
+    get anim() { return anim; }, get sonido() { return sonido; },
+    ponerAnim(n) { if (!NIVELES.includes(n)) return; anim = n; guardar('muro_anim', n); aplicar(); },
+    ponerSonido(v) { sonido = !!v; guardar('muro_sonido', sonido ? '1' : '0'); aplicar(); if (sonido) this.sonar('aviso'); },
+    alCambiar(fn) { oyentes.push(fn); fn({ anim, sonido }); },
+    precargar() { Object.keys(ARCHIVOS).forEach(audio); },
+    /* Reproduce un sonido desde el principio (nada si el sonido está apagado o el navegador no lo permite) */
+    sonar(n) { if (!sonido) return; const a = audio(n); if (!a) return; try { a.currentTime = 0; const r = a.play(); if (r && r.catch) r.catch(() => { /* sin permiso para sonar todavía */ }); } catch (e) { /* sin audio */ } },
+    parar(n) { const a = audios[n]; if (a) { try { a.pause(); a.currentTime = 0; } catch (e) { /* nada */ } } },
+  };
+})();
+
 /* ---------- 2) Iconos cargando ---------- */
 /* Qué hace: mientras la fuente de iconos (Material Symbols, fonts.google.com/icons) no terminó de descargarse, el navegador
    escribiría el NOMBRE de cada icono como texto ("search", "favorite"…). Aquí se pone la clase "iconos-cargando" en <html> y el CSS
@@ -254,6 +285,19 @@ document.addEventListener('DOMContentLoaded', () => {
     $('temaEstado').textContent = oscuro ? 'Activado' : 'Desactivado (tema claro)';
   });
   $('switchTema').addEventListener('click', Tema.alternar);
+  /* [v3.1] Animaciones (3 niveles) y sonidos: se guardan en este dispositivo (Prefs) y el CSS/JS los respetan */
+  const TXT_ANIM = { completas: 'Todas las animaciones', reducidas: 'Más cortas y sin efectos grandes', ninguna: 'Sin animaciones' };
+  const swSonido = $('switchSonido');
+  Prefs.alCambiar(({ anim, sonido }) => {
+    $('animOpciones').querySelectorAll('[data-nivel]').forEach((b) => { const on = b.dataset.nivel === anim; b.classList.toggle('segmento__btn--activo', on); b.setAttribute('aria-checked', String(on)); });
+    $('animEstado').textContent = TXT_ANIM[anim];
+    swSonido.setAttribute('aria-checked', String(sonido)); $('sonidoIcono').textContent = sonido ? 'volume_up' : 'volume_off';
+    $('sonidoEstado').textContent = sonido ? 'Inicio de sesión y avisos' : 'Silenciado';
+  });
+  $('animOpciones').addEventListener('click', (e) => { const b = e.target.closest('[data-nivel]'); if (b) Prefs.ponerAnim(b.dataset.nivel); });
+  swSonido.addEventListener('click', () => Prefs.ponerSonido(!Prefs.sonido));
+  Prefs.precargar();
+  $('btnSalirAjustes').addEventListener('click', () => { cerrarAjustes(); cerrarSesion(); });   // [v3.1] cerrar sesión también desde Ajustes (el mismo flujo con confirmación que el del perfil)
   const menuAj = $('menuAjustes'), btnAj = $('btnAjustes');
   function cerrarAjustes() { if (menuAj.hidden) return; menuAj.hidden = true; btnAj.setAttribute('aria-expanded', 'false'); }
   function abrirAjustes() {
@@ -371,7 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const NOMBRE_ESCENA = { M: 'Mely', xB: 'Bruu' };
   ['M', 'xB'].forEach((q) => { new Image().src = `/img/avatar-${q}-gris.png`; });   // se precargan para que la escena no arranque con las fotos a medio cargar
   function mostrarEscena(quien) {
-    const ESPERA = 2000;                                                    // ms hasta que la foto de quien entró recupera su color
+    const ESPERA = Prefs.anim === 'ninguna' ? 0 : 2000;                      // ms hasta que la foto de quien entró recupera su color (v3.1: sin animaciones se ilumina de inmediato)
     const nombre = 'Eres ' + (NOMBRE_ESCENA[quien] || quien);
     const foto = (q) => h('div', { class: 'escena__foto ' + (q === quien ? 'escena__foto--activa' : 'escena__foto--otra') },
       h('img', { class: 'escena__gris', src: `/img/avatar-${q}-gris.png`, alt: '', draggable: 'false' }),
@@ -382,6 +426,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.body.append(el);
     const cerrar = () => { clearTimeout(t); el.classList.add('escena--sale'); setTimeout(() => el.remove(), 560); };
     const t = setTimeout(cerrar, ESPERA + 700 + nombre.length * 55 + 520 + 1400);   // color + letras + un momento para leerlo
+    const tSonido = setTimeout(() => Prefs.sonar('inicio'), ESPERA);                 // [v3.1] suena el tono de inicio justo cuando la foto recupera su color
+    el.addEventListener('click', () => { clearTimeout(tSonido); Prefs.parar('inicio'); }, { once: true });   // saltar la escena también corta el sonido
     el.addEventListener('click', cerrar, { once: true });                           // un toque salta la escena
   }
 
@@ -1118,15 +1164,16 @@ document.addEventListener('DOMContentLoaded', () => {
   function animarCorazon(boton, daLike) {
     /* v3.0: se quitó el chequeo de prefers-reduced-motion (apagaba la animación del corazón en muchos PC) */
     const ic = boton.querySelector('.material-symbols-rounded'); if (!ic || !ic.animate) return;
+    if (Prefs.anim === 'ninguna') return;                                // v3.1: con "Animaciones: Ninguna" el corazón no rebota
     ic.getAnimations().forEach((a) => a.cancel());                       // si se toca rápido, se empieza de cero sin dejar el corazón torcido
     if (daLike) {
       ic.animate([
         { transform: 'scale(1) rotate(0deg)', offset: 0 }, { transform: 'scale(.7) rotate(-10deg)', offset: .14 }, { transform: 'scale(1.4) rotate(9deg)', offset: .38 },
         { transform: 'scale(.88) rotate(-5deg)', offset: .58 }, { transform: 'scale(1.12) rotate(2deg)', offset: .78 }, { transform: 'scale(1) rotate(0deg)', offset: 1 },
-      ], { duration: 780, easing: 'ease-in-out' });
-      explosionCorazones(boton);
+      ], { duration: Prefs.anim === 'reducidas' ? 300 : 780, easing: 'ease-in-out' });   // v3.1: más corto con "Reducidas"
+      if (Prefs.anim === 'completas') explosionCorazones(boton);                         // v3.1: los corazoncitos que vuelan solo con animaciones completas
     } else {
-      ic.animate([{ transform: 'scale(1)' }, { transform: 'scale(.72)', offset: .4 }, { transform: 'scale(1)' }], { duration: 320, easing: 'ease-out' });
+      ic.animate([{ transform: 'scale(1)' }, { transform: 'scale(.72)', offset: .4 }, { transform: 'scale(1)' }], { duration: Prefs.anim === 'reducidas' ? 160 : 320, easing: 'ease-out' });
     }
   }
   function explosionCorazones(boton) {
@@ -1275,6 +1322,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const nuevos = r.notificaciones.filter((a) => !a.leida && !avisosVistos.has(a.id));
       r.notificaciones.forEach((a) => avisosVistos.add(a.id));
       if (!primeraCargaAvisos && document.visibilityState === 'visible' && $('modalNotif').hidden) nuevos.slice(0, 3).reverse().forEach((a) => avisar(a.texto));
+      if (!primeraCargaAvisos && nuevos.length && document.visibilityState === 'visible') Prefs.sonar('aviso');   // [v3.1] tono de notificación (uno solo aunque lleguen varias juntas)
       primeraCargaAvisos = false;
       avisos = r.notificaciones; noLeidas = r.noLeidas;
       pintarContador();
@@ -1315,6 +1363,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   async function abrirPanelAvisos() {
     resaltarAvisos = new Set(avisos.filter((a) => !a.leida).map((a) => a.id));
+    const lst = $('notifLista'); lst.classList.add('notif-lista--entra'); setTimeout(() => lst.classList.remove('notif-lista--entra'), 1000);   // v3.1: las notificaciones entran escalonadas solo al abrir el panel
     pintarPanelAvisos(); pintarEstadoPush(); abrirModal($('modalNotif'));
     marcarLeidas();
     cargarAvisos();                                                       // por si llegó algo recién
@@ -1375,7 +1424,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Tocar un aviso del celular: sw.js enfoca la app y manda el id de la publicación; si la app estaba cerrada llega como ?post=ID */
   let postPendiente = new URLSearchParams(location.search).get('post');
   if (postPendiente) { try { history.replaceState(null, '', location.pathname); } catch (e) { /* nada */ } }
-  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.tipo === 'ir-post') { cargar().then(() => irAPost(e.data.id)); cargarAvisos(); }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.tipo === 'sonar') Prefs.sonar('aviso'); /* v3.1: aviso llegó con la app oculta */ if (e.data && e.data.tipo === 'ir-post') { cargar().then(() => irAPost(e.data.id)); cargarAvisos(); }
     if (e.data && e.data.tipo === 'ir-vista') { cargarAvisos(); if (e.data.vista === 'calendario') mostrarVista('calendario'); else if (e.data.vista === 'novedades') abrirNovedades(); }   // v3.0: avisos del calendario / novedades
   });
   /* v3.0: si la app estaba cerrada, el aviso la abre con ?vista=calendario o ?vista=novedades */
@@ -1736,7 +1785,8 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('scroll', () => colocarBarraFlota(), true); window.addEventListener('resize', () => colocarBarraFlota());
   if (window.visualViewport) { window.visualViewport.addEventListener('resize', () => colocarBarraFlota(true)); window.visualViewport.addEventListener('scroll', () => colocarBarraFlota()); }   // v2.9: al abrirse / cerrarse el teclado del celular
   barraFlota.addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });   // los botones no le quitan el foco (ni la selección) al campo
-  barraFlota.addEventListener('touchstart', (e) => { if (e.target.closest('button')) e.preventDefault(); }, { passive: false });   // v3.0: ídem en el celular (el teclado no se cierra al tocar un botón)
+  /* [v3.1] Se quitó el preventDefault de 'touchstart': cancelaba el desplazamiento y el toque, así la barra no se podía deslizar ni los botones funcionaban en el celular.
+     El teclado/foco ya se conserva con el 'mousedown' de arriba (el celular también lo dispara después del toque). */
   barraFlota.addEventListener('click', (e) => {
     const b = e.target.closest('[data-fmt]');
     if (b && campoFlota) { aplicarFormato(b.dataset.fmt, campoFlota); colocarBarraFlota(); }
