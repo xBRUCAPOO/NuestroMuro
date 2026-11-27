@@ -8,6 +8,21 @@
    ============================================================ */
 export const NOVEDADES = [
   {
+    version: '3.2.0', fecha: '2026-11-27', titulo: 'Editor visual y notificaciones como en WhatsApp',
+    resumen: 'Las tablas y el texto con formato se ven dibujados mientras escribes, los avisos aparecen flotando y las casillas ya no mandan notificaciones por accidente.',
+    items: [
+      { t: 'nuevo', texto: 'Editor visual: el texto se ve ya con su formato (sin símbolos) y solo el párrafo que tocas muestra las marcas. Las tablas se dibujan y se editan celda por celda, con botones para agregar o quitar filas y columnas.' },
+      { t: 'nuevo', texto: 'Avisos flotantes dentro de la app: una tarjeta arriba con la foto, el tipo de aviso y el mensaje en máximo 2 renglones; se descarta deslizándola hacia un lado y al tocarla te lleva a lo nuevo.' },
+      { t: 'nuevo', texto: 'Las notificaciones del celular se juntan en una sola, como en WhatsApp, en vez de ocupar un lugar cada una.' },
+      { t: 'mejora', texto: 'Las casillas de las listas esperan 10 segundos sin cambios y solo envían lo que de verdad cambió: marcar y desmarcar por accidente ya no llena de notificaciones a la otra persona.' },
+      { t: 'mejora', texto: 'El resaltador usa el color de quien escribió el texto (azul para Mely, rojo para Bruu) en lugar de amarillo.' },
+      { t: 'mejora', texto: 'Al abrir una publicación nueva el cursor queda en el título, en vez de seleccionar el texto.' },
+      { t: 'mejora', texto: 'La ventanita que aparece al mantener apretado un día en un plan ahora se puede tocar y abre el detalle completo del día, con su descripción.' },
+      { t: 'mejora', texto: 'El tono de las notificaciones suena a la mitad del volumen.' },
+      { t: 'arreglo', texto: 'Las líneas y los puntos del calendario ya quedan bien alineados con sus días.' },
+    ],
+  },
+  {
     version: '3.1.0', fecha: '2026-11-27', titulo: 'Animaciones, sonidos y un calendario más completo',
     resumen: 'Todas las fechas importantes cargadas, líneas con flecha entre los días unidos, animaciones con nivel ajustable, sonidos y cerrar sesión en Ajustes.',
     items: [

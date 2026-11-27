@@ -145,7 +145,7 @@
 
   /* ---- v3.0: formato en vivo del editor y texto con formato ---- */
   --color-marca-escrita: color-mix(in srgb, var(--color-texto-suave) 70%, transparent);   /* las marcas (* _ ~ # >…) se ven en gris mientras se escribe */
-  --color-resaltado: color-mix(in srgb, var(--color-warning) 38%, transparent);             /* ==resaltado== */
+  --resaltado-pct: 38%;                                                                      /* [v3.2] ==resaltado==: cuánto del color de quien escribió se mezcla (el fondo usa --resalta, ver abajo) */
   --color-codigo-fondo: color-mix(in srgb, var(--color-texto-suave) 22%, transparent);      /* fondo del código dentro del editor */
   --color-seleccion: color-mix(in srgb, var(--yo) 38%, transparent);                        /* texto seleccionado dentro del editor */
   /* ---- v3.0: casillas de las listas y tarjetas vencidas ("Expirado") ---- */
@@ -946,7 +946,7 @@ body[data-vista="perfiles"] [data-solo-muro] { display: none !important; }   /* 
 /* Barra de formato debajo del cuadro de texto: se pega a su borde inferior (el cuadro pierde las esquinas de abajo y la barra las de arriba) */
 .formato--abajo { margin-top: -6px; border: 1px solid var(--color-gris); border-top: none; border-radius: 0 0 var(--radio-md) var(--radio-md); }
 /* v3.0: el cuadro ahora va dentro de .vivo (editor.js): es el envoltorio quien pierde las esquinas de abajo cuando la barra se le pega */
-.vivo:has(+ .formato--abajo), .vivo:has(+ .formato--abajo) > textarea.campo__entrada, .vivo:has(+ .formato--abajo) > .vivo__espejo { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.vivo:has(+ .formato--abajo), .vivo:has(+ .formato--abajo) > textarea.campo__entrada, .vivo:has(+ .formato--abajo) > .vivo__espejo, .vbloques:has(+ .formato--abajo) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }   /* [v3.2] + el editor por bloques */
 
 /* Círculo girando de "cargando" (con el color del perfil si está dentro de uno). .giro--chico es la versión pequeña del pie de las entradas */
 .giro { display: inline-block; flex-shrink: 0; width: 22px; height: 22px; border: 3px solid color-mix(in srgb, var(--c-texto, var(--yo-texto)) 25%, transparent); border-top-color: var(--c-texto, var(--yo-texto)); border-radius: 50%; animation: giro .8s linear infinite; }
@@ -1046,7 +1046,10 @@ textarea.campo__entrada.campo__linea { min-height: 0; max-height: min(40dvh, 320
 .v-cur { font-style: italic; }
 .v-tac { text-decoration: line-through; }
 .v-sub { text-decoration: underline; text-underline-offset: 2px; }
-.v-res { background: var(--color-resaltado); border-radius: 2px; }
+/* [v3.2] El resaltado ya no es amarillo: lleva el color de quien escribió el texto (--resalta lo pone [data-autor] de la publicación, comentario, entrada o fecha; sin autor usa el color de quien está usando la app) */
+[data-autor="M"] { --resalta: var(--color-m-vivo); }
+[data-autor="xB"] { --resalta: var(--color-xb); }
+.v-res { background: color-mix(in srgb, var(--resalta, var(--yo)) var(--resaltado-pct), transparent); border-radius: 2px; }
 .v-cod { background: var(--color-codigo-fondo); border-radius: 3px; }
 .v-enl { color: var(--yo-texto); text-decoration: underline; text-underline-offset: 2px; }
 .v-tit { color: var(--yo-texto); -webkit-text-stroke: 0.7px currentColor; }
@@ -1067,13 +1070,13 @@ textarea.campo__entrada.campo__linea { min-height: 0; max-height: min(40dvh, 320
 .formato--acoplada .btn-icono { width: 42px; height: 42px; }
 @media (max-width: 699px), (pointer: coarse) {
   .formato--abajo { display: none; }                                  /* en el celular las barras fijas de abajo no van: se usa la acoplada al teclado */
-  .vivo:has(+ .formato--abajo), .vivo:has(+ .formato--abajo) > textarea.campo__entrada, .vivo:has(+ .formato--abajo) > .vivo__espejo { border-bottom-left-radius: var(--radio-md); border-bottom-right-radius: var(--radio-md); }
+  .vivo:has(+ .formato--abajo), .vivo:has(+ .formato--abajo) > textarea.campo__entrada, .vivo:has(+ .formato--abajo) > .vivo__espejo, .vbloques:has(+ .formato--abajo) { border-bottom-left-radius: var(--radio-md); border-bottom-right-radius: var(--radio-md); }
   body.con-barra-flota .modal { padding-bottom: calc(18px + 56px + env(safe-area-inset-bottom)); }   /* deja lugar para que el campo suba por encima de la barra */
 }
 
 /* Texto con formato ampliado (md): línea separadora, tablas, resaltado, subrayado y notas al pie */
 .md-hr { border: 0; border-top: 1px solid var(--color-gris-claro); margin: 6px 0; width: 100%; }
-.md mark.md-res { background: var(--color-resaltado); color: inherit; border-radius: 2px; padding: 0 2px; }
+.md mark.md-res { background: color-mix(in srgb, var(--resalta, var(--yo)) var(--resaltado-pct), transparent); color: inherit; border-radius: 2px; padding: 0 2px; }
 .md u { text-underline-offset: 2px; }
 .md-tabla { overflow-x: auto; max-width: 100%; }
 .md-tabla table { border-collapse: collapse; font-size: 13.5px; }
@@ -1175,6 +1178,7 @@ body[data-vista="calendario"] #btnCalendario { display: none !important; }
 .calv__mes { font-family: var(--fuente-titulo); font-size: 18px; flex: 1; text-align: center; min-width: 130px; }
 .calv__hoy { padding: 6px 10px; font-size: 13px; }
 .calv__hoy .material-symbols-rounded { font-size: 18px; }
+.calv__dias { position: relative; }   /* v3.2: las celdas miden su posición respecto de la rejilla (las líneas del calendario) */
 .calv__semana, .calv__dias { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .calv__semana span { text-align: center; font-family: var(--fuente-hud); font-size: 12px; color: var(--color-texto-suave); }
 .calv__rejilla { position: relative; }
@@ -1348,6 +1352,11 @@ body.con-barra-acoplada .modal { padding-bottom: calc(18px + 64px + env(safe-are
 .calv__lista--entra .calv__fila { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: calc(var(--i, 0) * 35ms); }
 .calv__tarjeta-dia--entra { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: calc(80ms + var(--i, 0) * 70ms); }
 .dia-flota { transform-origin: top left; animation: pop var(--mov-medio) var(--ease-rebote) backwards; }
+/* [v3.2] la ventanita del día se puede tocar (abre el detalle completo) */
+.dia-flota--toca { cursor: pointer; }
+.dia-flota--toca:hover { border-color: var(--yo, var(--color-acento)); }
+.dia-flota__mas { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-texto-suave); padding-top: 2px; }
+.dia-flota__mas .material-symbols-rounded { font-size: 16px; }
 .dia-flota__fila { animation: entrar var(--mov-medio) var(--ease-salida) backwards; }
 /* Formulario de fecha: los campos suben uno tras otro y los círculos de color aparecen en cascada */
 #modalDia .modal > :nth-child(2) { animation: entrar var(--mov-medio) var(--ease-salida) backwards; animation-delay: 40ms; }
@@ -1417,9 +1426,84 @@ html[data-anim="reducidas"] .modal-fondo:not(.saliendo) .modal, html[data-anim="
 html[data-anim="reducidas"] .calv__dias--entra .calv__dia, html[data-anim="reducidas"] .calv__lista--entra .calv__fila, html[data-anim="reducidas"] .calv__tarjeta-dia--entra,
 html[data-anim="reducidas"] .dia-flota, html[data-anim="reducidas"] .dia-flota__fila, html[data-anim="reducidas"] .menu-ajustes:not([hidden]), html[data-anim="reducidas"] #menuAjustes > *,
 html[data-anim="reducidas"] .nov, html[data-anim="reducidas"] .notif-lista--entra .notif, html[data-anim="reducidas"] #modalDia .modal > *, html[data-anim="reducidas"] #modalDia .calv__colores--entra .calv__color,
-html[data-anim="reducidas"] .avatar--sistema, html[data-anim="reducidas"] .notif-btn__badge:not([hidden]) { animation-name: aparecer; animation-duration: var(--mov-medio); animation-timing-function: var(--ease-suave); }
+html[data-anim="reducidas"] .aviso-card:not(.aviso-card--sale):not(.aviso-card--sale-lado), html[data-anim="reducidas"] .avatar--sistema, html[data-anim="reducidas"] .notif-btn__badge:not([hidden]) { animation-name: aparecer; animation-duration: var(--mov-medio); animation-timing-function: var(--ease-suave); }
 html[data-anim="reducidas"] .calv__dias--entra .calv__marca, html[data-anim="reducidas"] .calv__mes--entra { animation: none; }
 html[data-anim="reducidas"] .calv__lineas--anim .calv__linea, html[data-anim="reducidas"] .calv__lineas--anim .calv__nodo, html[data-anim="reducidas"] .calv__lineas--anim .calv__flecha { animation-name: calv-linea; animation-duration: var(--mov-medio); }
 html[data-anim="reducidas"] .ajustes-btn__punto, html[data-anim="reducidas"] .calv__pestanas .segmento__btn--activo, html[data-anim="reducidas"] #animOpciones .segmento__btn--activo,
 html[data-anim="reducidas"] .calv__filtros .chip--activo, html[data-anim="reducidas"] .calv__color[aria-pressed="true"] { animation: none; }
 html[data-anim="reducidas"] .corazon-fx__chispa { visibility: hidden; }
+
+/* ============================================================
+   v3.2 — AVISOS FLOTANTES (notificaciones dentro de la app, estilo WhatsApp)
+   Qué hace: tarjeta que cae desde arriba con la foto de quien hizo el aviso, el tipo y el mensaje en máximo 2 renglones ("…" si es más largo).
+   Se desliza hacia los costados (o arriba) para descartarla. script.js (mostrarAvisoFlotante) la crea.
+   ============================================================ */
+@keyframes aviso-entra { from { opacity: 0; transform: translateY(-120%) scale(.96); } }
+@keyframes aviso-sale { to { opacity: 0; transform: translateY(-60%) scale(.96); } }
+@keyframes aviso-sale-lado { to { opacity: 0; transform: translateX(var(--dx, 100vw)); } }
+.avisos-flota { position: fixed; z-index: 500; top: calc(8px + env(safe-area-inset-top)); left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 8px; pointer-events: none; }
+.aviso-card { --c: var(--color-acento-borde); width: min(440px, 100%); display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 10px; background: var(--color-tarjeta-2); border: 1px solid var(--color-gris); border-left: 4px solid var(--c); border-radius: var(--radio-lg); box-shadow: var(--sombra-tarjeta); color: var(--color-texto); pointer-events: auto; cursor: pointer; touch-action: pan-y; user-select: none; -webkit-user-select: none; animation: aviso-entra var(--mov-medio) var(--ease-rebote) backwards; }
+.aviso-card[data-de="M"] { --c: var(--color-m-vivo); }
+.aviso-card[data-de="xB"] { --c: var(--color-xb); }
+.aviso-card--arrastra { transition: none; cursor: grabbing; }
+.aviso-card:not(.aviso-card--arrastra) { transition: transform var(--mov-medio) var(--ease-salida), opacity var(--mov-medio) var(--ease-suave); }
+.aviso-card--sale { animation: aviso-sale var(--mov-medio) var(--ease-entrada) forwards; pointer-events: none; }
+.aviso-card--sale-lado { animation: aviso-sale-lado 300ms var(--ease-entrada) forwards; pointer-events: none; }
+.aviso-card__foto { position: relative; flex-shrink: 0; width: 46px; height: 46px; }
+.aviso-card__foto .avatar { width: 46px; height: 46px; }
+.aviso-card__tipo-icono { position: absolute; right: -6px; bottom: -6px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--c); color: var(--color-blanco); box-shadow: 0 0 0 2px var(--color-tarjeta-2); }
+.aviso-card__tipo-icono .material-symbols-rounded { font-size: 14px; }
+.aviso-card__txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.aviso-card__tipo { font-family: var(--fuente-titulo); font-size: 14px; color: var(--c); }
+.aviso-card[data-de="sistema"] .aviso-card__tipo { color: var(--color-acento-texto); }
+.aviso-card__msg { font-size: 14px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; overflow-wrap: anywhere; }
+
+/* ============================================================================================================
+   [v3.2] EDITOR POR BLOQUES y TABLAS VISUALES (editor.js · envolverBloques)
+   Qué hace: el texto grande se ve ya formateado (sin símbolos) salvo el bloque que se está editando; las tablas se dibujan y se editan celda por celda.
+   Para qué sirve: escribir y armar tablas viendo el resultado, como en Notion / Canva. Todos los colores salen de las variables de :root.
+   ============================================================================================================ */
+.vbloques { padding: 8px 10px; min-height: 96px; cursor: text; display: block; }
+.vbloques:focus-within { border-color: var(--yo); }
+.vbloques__cont { display: flex; flex-direction: column; gap: 2px; }
+.vb { min-width: 0; }
+.vb__prev { padding: 6px 4px; border-radius: var(--radio-sm); cursor: text; font-size: 15px; overflow-wrap: anywhere; transition: background var(--mov-rapido); }
+.vb__prev:hover { background: color-mix(in srgb, var(--yo) 7%, transparent); }
+.vb__prev--vacio { min-height: 1.6em; }
+.vb__prev--vacio::before { content: attr(data-ph); color: var(--color-texto-suave); }
+.vb__prev a { pointer-events: none; }                                   /* tocar un enlace en la vista = editar, no abrirlo */
+/* El bloque que se edita: la caja del editor en vivo sin borde propio (la caja de afuera ya lo tiene) */
+.vb--activo { background: color-mix(in srgb, var(--yo) 6%, transparent); border-radius: var(--radio-sm); }
+.vb .vivo { background: transparent; }
+.vb .vivo > textarea.campo__entrada, .vb .vivo__espejo { border: 0; padding: 6px 4px; border-radius: 0; box-shadow: none; max-height: none; }
+.vb .vivo > textarea.campo__entrada:focus { box-shadow: none; }
+
+/* Tabla dibujada */
+.vb--tabla { margin: 6px 0; }
+.vtabla { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.vtabla__barra { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; opacity: .55; transition: opacity var(--mov-rapido); }
+.vtabla:focus-within .vtabla__barra, .vtabla:hover .vtabla__barra { opacity: 1; }
+.vtabla__btn { display: inline-flex; align-items: center; gap: 2px; padding: 4px 9px 4px 6px; border: 1px solid var(--color-gris); border-radius: var(--radio-md); background: var(--color-tarjeta-2); color: var(--color-texto); font: 600 12.5px var(--fuente-texto); cursor: pointer; transition: background var(--mov-rapido), border-color var(--mov-rapido), transform var(--mov-rapido); }
+.vtabla__btn .material-symbols-rounded { font-size: 18px; }
+.vtabla__btn:hover { border-color: var(--yo); background: color-mix(in srgb, var(--yo) 14%, var(--color-tarjeta-2)); }
+.vtabla__btn:active { transform: scale(.95); }
+.vtabla__btn:disabled { opacity: .4; pointer-events: none; }
+.vtabla__btn--quita:hover { border-color: var(--color-error); background: var(--color-error-suave); color: var(--color-error-texto); }
+.vtabla__sep { width: 1px; height: 18px; background: var(--color-gris); margin: 0 2px; }
+.vtabla__cuerpo { display: flex; align-items: stretch; gap: 6px; min-width: 0; }
+.vtabla__scroll { flex: 1; min-width: 0; overflow-x: auto; border: 1px solid var(--color-gris-claro); border-radius: var(--radio-md); background: var(--color-fondo); scrollbar-width: thin; }
+.vtabla__t { border-collapse: collapse; width: 100%; table-layout: fixed; min-width: calc(var(--cols, 2) * 110px); }
+.vtabla__t th, .vtabla__t td { border: 1px solid var(--color-gris); padding: 0; position: relative; transition: background var(--mov-rapido); }
+.vtabla__t th { background: var(--color-tarjeta-2); }
+.vtabla__t tr:first-child > * { border-top: 0; } .vtabla__t tr > *:first-child { border-left: 0; } .vtabla__t tr > *:last-child { border-right: 0; } .vtabla__t tr:last-child > * { border-bottom: 0; }
+.vtabla__fila-act > * { background: color-mix(in srgb, var(--yo) 8%, transparent); }
+.vtabla__t .vtabla__col-act { background: color-mix(in srgb, var(--yo) 8%, transparent); }
+.vtabla__t th.vtabla__col-act, .vtabla__t th.vtabla__col-act { background: color-mix(in srgb, var(--yo) 16%, var(--color-tarjeta-2)); }
+.vtabla__celda { display: block; width: 100%; padding: 9px 10px; border: 0; background: transparent; color: var(--color-texto); font: 400 14px var(--fuente-texto); outline: none; border-radius: 0; }
+.vtabla__t th .vtabla__celda { font-family: var(--fuente-titulo); font-weight: 700; }
+.vtabla__celda:focus { box-shadow: inset 0 0 0 2px var(--yo); }
+/* Botones punteados "+" al final de la tabla (abajo = fila, derecha = columna) */
+.vtabla__mas { justify-content: center; border-style: dashed; background: transparent; color: var(--color-texto-suave); padding: 4px; }
+.vtabla__mas--col { flex: 0 0 30px; }
+.vtabla__mas--fila { width: 100%; min-height: 28px; }
+@media (max-width: 699px), (pointer: coarse) { .vtabla__btn { padding: 7px 10px 7px 7px; } .vtabla__celda { font-size: 16px; } }   /* 16 px: evita el zoom de iPhone */

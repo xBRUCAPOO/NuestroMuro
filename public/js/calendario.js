@@ -178,24 +178,26 @@
        - Siguiente día en otro renglón: la línea baja al hueco que se dejó, corre hasta la columna del día y baja con una flecha que apunta a él (codo con flecha).
        Cada grupo usa un "carril" (alto distinto) para que dos grupos en los mismos días no se tapen. */
     function dibujarLineas(svg, caja, grupos) {
-      const r0 = caja.getBoundingClientRect();
-      svg.setAttribute('viewBox', `0 0 ${r0.width} ${r0.height}`); svg.replaceChildren();
+      /* [v3.2] Las posiciones se miden con offsetLeft/offsetTop (el diseño real) y NO con getBoundingClientRect: éste incluye las transformaciones de la animación de entrada
+         (los días se deslizan/escalan al aparecer) y las líneas se dibujaban corridas. Las celdas y los huecos son hijos de la rejilla (.calv__dias, position: relative). */
+      const rejilla = caja.querySelector('.calv__dias'), ox = rejilla.offsetLeft, oy = rejilla.offsetTop;
+      svg.setAttribute('viewBox', `0 0 ${caja.offsetWidth} ${caja.offsetHeight}`); svg.replaceChildren();
       const NS = 'http://www.w3.org/2000/svg', carriles = new Map();
       const el = (tag, at) => { const e = document.createElementNS(NS, tag); Object.keys(at).forEach((k) => e.setAttribute(k, at[k])); return e; };
       grupos.forEach((lista) => {
         if (lista.length < 2) return;
         const carril = Math.min(2, Math.max(...lista.map((x) => carriles.get(x.f) || 0))); lista.forEach((x) => carriles.set(x.f, carril + 1));
         const pts = lista.slice().sort((x, y) => (x.f < y.f ? -1 : 1)).map((x) => {
-          const e = caja.querySelector(`[data-f="${x.f}"]`); if (!e) return null; const r = e.getBoundingClientRect();
-          return { x: r.left - r0.left + r.width / 2, y: r.top - r0.top + r.height - 7 - carril * 6, top: r.top - r0.top, fila: Number(e.dataset.fila), color: x.color };
+          const e = caja.querySelector(`[data-f="${x.f}"]`); if (!e) return null;
+          return { x: ox + e.offsetLeft + e.offsetWidth / 2, y: oy + e.offsetTop + e.offsetHeight - 7 - carril * 6, top: oy + e.offsetTop, fila: Number(e.dataset.fila), color: x.color };
         }).filter(Boolean);
         for (let i = 0; i < pts.length - 1; i++) {
           const A = pts[i], B = pts[i + 1], css = { class: 'calv__linea' };
           let l;
           if (B.fila === A.fila) l = el('line', { ...css, x1: A.x, y1: A.y, x2: B.x, y2: B.y });
           else {
-            const g = caja.querySelector(`.calv__hueco[data-fila="${B.fila - 1}"]`), gr = g ? g.getBoundingClientRect() : null;
-            const yg = gr ? gr.top - r0.top + 5 + carril * 4 : B.top - 10, punta = B.top + 1;
+            const g = caja.querySelector(`.calv__hueco[data-fila="${B.fila - 1}"]`);
+            const yg = g ? oy + g.offsetTop + 5 + carril * 4 : B.top - 10, punta = B.top + 1;
             l = el('path', { ...css, d: `M${A.x} ${A.y} V${yg} H${B.x} V${punta - 5}` });
             const f = el('path', { class: 'calv__flecha', d: `M${B.x - 5} ${punta - 6} L${B.x} ${punta} L${B.x + 5} ${punta - 6}` }); f.style.setProperty('--c', B.color); f.style.setProperty('--i', String(i)); svg.append(f);
           }
@@ -275,7 +277,8 @@
         ? [h('button', { class: 'btn btn--fantasma', type: 'button', onclick: () => { cerrarModal(info); M.irAlPlan(d.grupo); } }, icono('open_in_new'), 'Ir al plan')]
         : [h('button', { class: 'btn btn--fantasma', type: 'button', onclick: () => editar(d) }, icono('edit'), 'Editar')];
       acciones.unshift(h('button', { class: 'btn btn--fantasma', type: 'button', onclick: () => compartir(d, hoy) }, icono('share'), 'Compartir'));
-      const t = h('article', { class: 'calv__tarjeta-dia' + (exp ? ' calv__tarjeta-dia--exp' : '') },
+      const t = h('article', { class: 'calv__tarjeta-dia' + (exp ? ' calv__tarjeta-dia--exp' : ''), 'data-autor': d.autor || null },   // v3.2: data-autor = el resaltado de la descripción lleva el color de quien creó la fecha
+
         h('div', { class: 'calv__tarjeta-cab' }, h('span', { class: 'calv__tarjeta-icono' }, icono(cat1.icono, true)),
           h('div', { class: 'calv__tarjeta-tit' }, h('h3', { text: d.nombre }), h('span', { class: 'calv__tarjeta-cuando', text: `${cuando(d, hoy)} · ${d.recurrente ? 'se repite cada año' : 'una sola vez'}` })),
           h('span', { class: 'calv__cuenta' + (cu.startsWith('¡') ? ' calv__cuenta--ya' : ''), text: cu })),
@@ -389,7 +392,10 @@
         h('strong', { class: 'dia-flota__fecha', text: etiquetaLarga(fecha) }),
         ...(lista.length ? lista.map((d) => { const x = h('div', { class: 'dia-flota__fila' + (expirada(d, hoy) ? ' dia-flota__fila--exp' : '') }, icono((CAT[d.categoria] || CAT.otro).icono, true),
           h('span', { class: 'dia-flota__txt' }, h('span', { class: 'dia-flota__nombre', text: d.nombre }), h('span', { class: 'dia-flota__cuenta', text: `${cuenta(d, hoy)} · ${(CAT[d.categoria] || CAT.otro).nombre}${d.recurrente ? ' · cada año' : ''}` }))); x.style.setProperty('--c', colorDe(d)); return x; })
-          : [h('span', { class: 'dia-flota__vacio', text: 'No hay fechas importantes este día.' })]));
+          : [h('span', { class: 'dia-flota__vacio', text: 'No hay fechas importantes este día.' })]),
+        lista.length ? h('span', { class: 'dia-flota__mas' }, icono('touch_app'), 'Toca para ver todo el detalle') : null);
+      /* [v3.2] La ventanita ahora se puede tocar: abre el detalle completo del día (descripción, aviso, categoría…) igual que en el calendario normal, encima del plan que se está armando */
+      if (lista.length) { flota.classList.add('dia-flota--toca'); flota.tabIndex = 0; flota.addEventListener('click', () => { cerrarFlota(); abrirDia(fecha); }); flota.addEventListener('keydown', (e) => { if (e.key === 'Enter') { cerrarFlota(); abrirDia(fecha); } }); }
       document.body.append(flota);
       const r = ancla.getBoundingClientRect(), w = flota.offsetWidth, alto = flota.offsetHeight;
       let x = Math.min(Math.max(8, r.left + r.width / 2 - w / 2), window.innerWidth - w - 8);

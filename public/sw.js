@@ -11,7 +11,7 @@
    Para qué sirve: que sea una app instalable, rápida y que siempre muestre la última versión publicada.
    Cambiar VERSION fuerza a renovar las copias guardadas (no hace falta tocarlo en cada push: la red tiene prioridad).
    ============================================================ */
-const VERSION = 'v3.1.0';   // v3.1: sonidos (/sounds) fuera de la copia guardada y aviso 'sonar' a la app abierta; v3.0: scripts nuevos (editor, editor de imágenes, calendario) en el cascarón e íconos de las notificaciones por tipo;   // v2.8: imágenes de los perfiles (/api/perfiles/imagen/…) también primero desde la copia guardada; v2.4: fotos de perfil en el cascarón guardado; v2.5: avisos del celular (push); v2.7: fotos en gris de la escena de inicio de sesión
+const VERSION = 'v3.2.0';   // v3.2: notificaciones apiladas en una sola (etiqueta muro-pila); v3.1: sonidos (/sounds) fuera de la copia guardada y aviso 'sonar' a la app abierta; v3.0: scripts nuevos (editor, editor de imágenes, calendario) en el cascarón e íconos de las notificaciones por tipo;   // v2.8: imágenes de los perfiles (/api/perfiles/imagen/…) también primero desde la copia guardada; v2.4: fotos de perfil en el cascarón guardado; v2.5: avisos del celular (push); v2.7: fotos en gris de la escena de inicio de sesión
 const CACHE_ESTATICO = `muro-estatico-${VERSION}`;   // cascarón de la app
 const CACHE_DATOS = 'muro-datos';                     // listado del muro y fotos
 const CACHE_FUENTES = 'muro-fuentes';                 // Google Fonts
@@ -86,6 +86,7 @@ self.addEventListener('fetch', (e) => {
 /* v3.0: cada aviso lleva un ícono según su tipo (/icons/notif/): un corazón del color de quien lo dio (azul M / rojo xB), un globo de diálogo para un comentario, etc.
    Los avisos automáticos (calendario, novedades) usan la versión gris ("sistema"). "badge" es la silueta blanca chica de la barra de estado de Android. */
 const TIPOS_ICONO = ['post', 'corazon', 'comentario', 'voto', 'tarea', 'dia', 'editar', 'borrar', 'categoria', 'fecha', 'novedad'];
+const TAG_PILA = 'muro-pila';   // v3.2: etiqueta única: todos los avisos del celular se juntan en una sola notificación
 const TITULOS = { fecha: 'Calendario de amor', novedad: 'Novedades de Nuestro Muro' };
 function iconosDe(a) {
   if (!TIPOS_ICONO.includes(a.tipo)) return { icon: '/icons/icon-192.png', badge: '/icons/favicon-32.png' };
@@ -104,9 +105,24 @@ self.addEventListener('push', (e) => {
     const ventanas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     if (ventanas.some((v) => v.visibilityState === 'visible')) return; // la app está a la vista: ya se ve dentro de ella
     ventanas.forEach((v) => v.postMessage({ tipo: 'sonar' }));        // v3.1: si la app está abierta pero oculta, que suene el tono de aviso de la app (el sonido del sistema no se puede cambiar desde una web)
-    await Promise.all(avisos.map((a) => self.registration.showNotification(TITULOS[a.tipo] || 'Nuestro Muro', {
-      body: a.texto, tag: a.id, ...iconosDe(a), data: { post: a.post || '', tipo: a.tipo || '' },
-    })));
+    /* [v3.2] APILADO (como WhatsApp): todos los avisos del celular van en UNA sola notificación. Si ya hay una en la bandeja se le suman los nuevos:
+       con 1 aviso se ve como siempre (ícono del tipo, texto del aviso); con varios dice "N notificaciones nuevas" y lista los últimos mensajes.
+       "tag" igual = el sistema reemplaza la anterior en vez de agregar otra, y "renotify" hace que igual avise. Tocarla abre la app (si es un solo aviso, lleva a él). */
+    const previas = await self.registration.getNotifications({ tag: TAG_PILA });
+    const acumulados = [];
+    previas.forEach((n) => { ((n.data && n.data.avisos) || []).forEach((x) => acumulados.push(x)); });
+    avisos.forEach((a) => { if (!acumulados.some((x) => x.id === a.id)) acumulados.push({ id: a.id, texto: a.texto, tipo: a.tipo || '', de: a.de || '', post: a.post || '' }); });
+    const lista = acumulados.slice(-8);                                  // la pila guarda como mucho los últimos 8
+    previas.forEach((n) => n.close());
+    const ult = lista[lista.length - 1];
+    if (lista.length === 1) {
+      await self.registration.showNotification(TITULOS[ult.tipo] || 'Nuestro Muro', { body: ult.texto, tag: TAG_PILA, renotify: true, ...iconosDe(ult), data: { post: ult.post, tipo: ult.tipo, avisos: lista } });
+    } else {
+      await self.registration.showNotification('Nuestro Muro', {
+        body: `${lista.length} notificaciones nuevas\n` + lista.slice(-4).map((x) => '• ' + x.texto).join('\n'),   // varias líneas: al expandirla en Android se leen
+        tag: TAG_PILA, renotify: true, icon: '/icons/icon-192.png', badge: '/icons/favicon-32.png', data: { post: '', tipo: '', avisos: lista },
+      });
+    }
   })());
 });
 /* Tocar el aviso: enfoca la app abierta (y le pasa la publicación) o la abre con ?post=ID */

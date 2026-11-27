@@ -65,10 +65,11 @@ const Prefs = (() => {
   const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* sin almacenamiento: queda solo en memoria */ } };
   let anim = NIVELES.includes(leer('muro_anim', 'completas')) ? leer('muro_anim', 'completas') : 'completas';
   let sonido = leer('muro_sonido', '1') !== '0';
+  const VOLUMEN = { inicio: 1, aviso: 0.5 };                     // [v3.2] el tono de notificación suena a la mitad del volumen original
   const audios = {};
   const oyentes = [];
   const aplicar = () => { document.documentElement.dataset.anim = anim; oyentes.forEach((fn) => fn({ anim, sonido })); };
-  function audio(n) { if (!audios[n]) { try { const a = new Audio(ARCHIVOS[n]); a.preload = 'auto'; audios[n] = a; } catch (e) { return null; } } return audios[n]; }
+  function audio(n) { if (!audios[n]) { try { const a = new Audio(ARCHIVOS[n]); a.preload = 'auto'; a.volume = VOLUMEN[n] == null ? 1 : VOLUMEN[n]; audios[n] = a; } catch (e) { return null; } } return audios[n]; }
   aplicar();
   return {
     get anim() { return anim; }, get sonido() { return sonido; },
@@ -436,7 +437,7 @@ document.addEventListener('DOMContentLoaded', () => {
     yo = quien;
     /* v2.7: otra identidad = se descarta todo lo que había en pantalla y las respuestas pendientes de la sesión anterior */
     sesion++; servidor.clear(); catsServidor = []; pendientes.length = 0; cola.clear(); fotosLocales.clear(); posts = [];
-    planesPend.forEach((e) => clearTimeout(e.timer)); planesPend.clear(); ultimaFirma = '';
+    planesPend.forEach((e) => clearTimeout(e.timer)); planesPend.clear(); itemsPend.forEach((e) => clearTimeout(e.timer)); itemsPend.clear(); ultimaFirma = '';
     document.documentElement.dataset.yo = quien;
     try { localStorage.setItem('muro_quien', quien); } catch (e) { /* sin almacenamiento */ }
     Tema.repintarBarra();
@@ -461,6 +462,8 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Cerrar sesión: confirmar y salir (vuelve a aparecer la ventana de acceso). v2.8: lo llama el botón del perfil propio */
   async function cerrarSesion() {
     if (!(await confirmar({ titulo: `Sesión de ${yo}`, texto: '¿Quieres cerrar la sesión para entrar como otra identidad?', boton: 'Cerrar sesión' }))) return;
+    if (cajaAvisos) cajaAvisos.replaceChildren();                          // v3.2: los avisos flotantes de esta sesión no quedan en pantalla
+    guardarItemsYa(); guardarDiasYa();                                     // v3.2: lo que esperaba (casillas, días) se guarda antes de salir
     /* v2.7: la ventana de acceso aparece al instante; el cierre de sesión en el servidor sigue en segundo plano (el nuevo inicio de sesión lo espera) */
     salidaEnCurso = bajaPushDeEstaSesion().catch(() => {}).then(() => api('/salir', { metodo: 'POST' })).catch(() => { /* aunque falle, ya se muestra el acceso */ });   // v2.5: este dispositivo deja de recibir los avisos de esta persona
     yo = null; sesion++; pendientes.length = 0; perfPend.length = 0; mostrarAcceso();   // v2.8: tampoco quedan cambios de perfil pendientes de esta sesión
@@ -643,7 +646,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ----- Motor ----- */
-  const ocupado = (id) => planesPend.has(id) || pendientes.some((o) => o.id === id);   // ¿la publicación tiene cambios sin confirmar?
+  const ocupado = (id) => planesPend.has(id) || itemsPend.has(id) || pendientes.some((o) => o.id === id);   // ¿la publicación tiene cambios sin confirmar?
   /* Arma lo que se ve (servidor + acciones sin confirmar) y repinta */
   function recomponer() {
     const mapa = new Map(servidor);
@@ -657,6 +660,12 @@ document.addEventListener('DOMContentLoaded', () => {
       else if (o.k === 'borrar') mapa.delete(o.id);
     });
     planesPend.forEach((e, id) => { const p = mapa.get(id); if (p) mapa.set(id, { ...p, datos: { ...p.datos, ...clonarDias(e.local) } }); });   // toques de días sin guardar
+    /* [v3.2] casillas tocadas que todavía esperan los 10 s de calma: se ven al instante pero aún no son una acción */
+    itemsPend.forEach((e, id) => {
+      const p = mapa.get(id); if (!p || !Array.isArray(p.datos.items)) return;
+      const q = clon(p); e.cambios.forEach((hecho, i) => { const it = q.datos.items[i]; if (!it) return; it.hecho = hecho; if (hecho) it.por = e.quien; else delete it.por; });
+      mapa.set(id, q);
+    });
     categorias = cats;
     posts = [...mapa.values()].sort((a, b) => b.creado - a.creado);
     pintar();
@@ -681,7 +690,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let recargar = false;
     try {
       if (op.k === 'crear' || op.k === 'editar') { const c = cola.get('cats'); if (c) await c; }   // las categorías nuevas se crean antes de usarlas
-      if (op.k === 'accion') { const r = await api(`/posts/${op.id}/accion`, { metodo: 'POST', cuerpo: op.cuerpo }); if (op.sesion === sesion) servidor.set(op.id, r.post); }
+      if (op.k === 'accion') { const r = await api(`/posts/${op.id}/accion`, { metodo: 'POST', cuerpo: op.cuerpo, keepalive: !!op.keep }); if (op.sesion === sesion) servidor.set(op.id, r.post); }
       else if (op.k === 'crear') { const r = await api('/posts', { metodo: 'POST', cuerpo: { ...op.cuerpo, id: op.id } }); if (op.sesion === sesion) servidor.set(r.post.id, r.post); }
       else if (op.k === 'editar') { const r = await api(`/posts/${op.id}`, { metodo: 'PATCH', cuerpo: op.cuerpo }); if (op.sesion === sesion) servidor.set(op.id, r.post); }
       else if (op.k === 'borrar') { await api(`/posts/${op.id}`, { metodo: 'DELETE' }); servidor.delete(op.id); }
@@ -710,6 +719,32 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   /* Acción rápida sobre una publicación: corazón, voto, tildar, comentar, borrar comentario */
   function accion(p, cuerpo) { encolar({ k: 'accion', id: p.id, cuerpo }); }
+
+  /* ----- [v3.2] Casillas de las listas: se guardan tras 10 s sin tocar nada -----
+     Qué hace: marcar o desmarcar una casilla se ve al instante, pero NO se manda al servidor hasta que pasan ESPERA_CASILLA ms sin más toques en esa lista.
+     Ahí se compara cada casilla tocada con lo que tiene guardado el servidor: solo se envían las que terminaron distintas (marcar y desmarcar por error
+     = no se manda nada). Si se sale de la app antes, se envía en ese momento.
+     Para qué sirve: que un toque accidental (marcar y desmarcar enseguida) no le llene de notificaciones a la otra persona. */
+  const ESPERA_CASILLA = 10000;
+  const itemsPend = new Map();   // id de publicación → { cambios: Map(índice → hecho que se ve en pantalla), timer, quien, sesion }
+  function tocarItem(p, indice, hecho) {
+    let e = itemsPend.get(p.id);
+    if (!e) { e = { cambios: new Map(), timer: 0, quien: yo, sesion }; itemsPend.set(p.id, e); }
+    e.cambios.set(indice, hecho);
+    recomponer();                                                        // se ve al instante
+    clearTimeout(e.timer); e.timer = setTimeout(() => enviarItems(p.id), ESPERA_CASILLA);
+  }
+  function enviarItems(id, alSalir) {
+    const e = itemsPend.get(id); if (!e) return;
+    clearTimeout(e.timer); itemsPend.delete(id);
+    const sp = servidor.get(id), items = sp && sp.datos && Array.isArray(sp.datos.items) ? sp.datos.items : [];
+    const ops = [];
+    e.cambios.forEach((hecho, indice) => { if (items[indice] && !!items[indice].hecho !== hecho) ops.push({ accion: 'item', indice, hecho }); });   // solo lo que cambió de verdad
+    if (e.sesion !== sesion) return;
+    ops.forEach((cuerpo) => encolar({ k: 'accion', id, cuerpo, keep: !!alSalir }));
+    if (!ops.length) recomponer();                                       // volvió a como estaba: se repinta con lo del servidor
+  }
+  const guardarItemsYa = () => [...itemsPend.keys()].forEach((id) => enviarItems(id, true));
 
   /* ----- Toques sobre los días de un plan (v2.6, ahora dentro del motor) -----
      Cada toque cambia el día en pantalla al instante; el guardado se hace cuando se dejó de tocar (ESPERA_DIA ms): se manda en una sola petición la
@@ -746,10 +781,17 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     return ya ? trabajo() : enCola(id, trabajo);
   }
+  /* [v3.2] Al volver a la app se cierra la notificación apilada del celular (ya se vio): así la próxima pila empieza de cero y no mezcla avisos viejos */
+  function limpiarPilaDeAvisos() {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.ready.then((r) => r.getNotifications({ tag: 'muro-pila' })).then((l) => l.forEach((n) => n.close())).catch(() => { /* sin notificaciones */ });
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') limpiarPilaDeAvisos(); });
+  limpiarPilaDeAvisos();
   /* Si se sale de la app con toques sin guardar, se guardan ya (sin esperar) */
   const guardarDiasYa = () => planesPend.forEach((e, id) => { clearTimeout(e.timer); enviarDias(id, true); });
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') guardarDiasYa(); });
-  window.addEventListener('pagehide', guardarDiasYa);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { guardarDiasYa(); guardarItemsYa(); } });
+  window.addEventListener('pagehide', () => { guardarDiasYa(); guardarItemsYa(); });   // v3.2: las casillas esperando también se guardan al salir
 
 
   /* Chips de filtro por tipo (Todo + uno por tipo) */
@@ -980,7 +1022,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const por = it.hecho ? (it.por || p.autor) : null;                // las listas viejas no guardaban quién: se asume el autor
           const nombreResp = it.para ? ` (para ${NOMBRE_ESCENA[it.para]})` : '';
           return h('button', { class: 'lista__item' + (it.hecho ? ' hecho' : ''), type: 'button', 'aria-pressed': String(!!it.hecho), title: it.para ? `Responsable: ${NOMBRE_ESCENA[it.para]}` : null,
-            'aria-label': `${it.t}${nombreResp}${it.hecho ? ', completado por ' + NOMBRE_ESCENA[por] : ''}`, onclick: () => accion(p, { accion: 'item', indice: i, hecho: !it.hecho }) },
+            'aria-label': `${it.t}${nombreResp}${it.hecho ? ', completado por ' + NOMBRE_ESCENA[por] : ''}`, onclick: () => tocarItem(p, i, !it.hecho) },   // [v3.2] las casillas esperan 10 s de calma antes de enviarse
             h('span', { class: 'casilla' + (it.para ? ` casilla--para-${it.para}` : '') + (por ? ` casilla--por-${por}` : ''), 'aria-hidden': 'true' }, icono('check', true)),
             h('span', { class: 'lista__texto' }, inline(it.t, true)));
         })),
@@ -1321,7 +1363,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const r = await api('/notificaciones');
       const nuevos = r.notificaciones.filter((a) => !a.leida && !avisosVistos.has(a.id));
       r.notificaciones.forEach((a) => avisosVistos.add(a.id));
-      if (!primeraCargaAvisos && document.visibilityState === 'visible' && $('modalNotif').hidden) nuevos.slice(0, 3).reverse().forEach((a) => avisar(a.texto));
+      if (!primeraCargaAvisos && document.visibilityState === 'visible' && $('modalNotif').hidden) nuevos.slice(0, 3).reverse().forEach((a) => mostrarAvisoFlotante(a));   // v3.2: tarjeta flotante tipo WhatsApp (antes un cartelito abajo)
       if (!primeraCargaAvisos && nuevos.length && document.visibilityState === 'visible') Prefs.sonar('aviso');   // [v3.1] tono de notificación (uno solo aunque lleguen varias juntas)
       primeraCargaAvisos = false;
       avisos = r.notificaciones; noLeidas = r.noLeidas;
@@ -1351,6 +1393,51 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!el) return;
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     el.classList.add('post--resalta'); setTimeout(() => el.classList.remove('post--resalta'), 2400);
+  }
+  /* ============================================================
+     [v3.2] AVISOS FLOTANTES (como las notificaciones de WhatsApp)
+     Qué hace: cuando llega una notificación con la app abierta aparece una tarjeta flotante arriba: foto de quien la hizo a la izquierda (con el
+     ícono del tipo), el tipo en negrita y el mensaje en máximo 2 renglones (si es más largo termina en "…"). Se puede deslizar hacia los costados (o hacia
+     arriba) para descartarla; si no, se va sola a los 6 s (se pausa mientras se toca). Tocarla lleva a la publicación / calendario / novedades.
+     Para qué sirve: enterarse de lo nuevo sin que un cartelito tape la pantalla ni haya que abrir la campanita. Máximo 3 a la vez.
+     ============================================================ */
+  const TIPO_AVISO_TXT = { post: 'Nueva publicación', corazon: 'Corazón', comentario: 'Comentario', voto: 'Voto', tarea: 'Lista', dia: 'Día del plan', editar: 'Publicación editada', borrar: 'Publicación eliminada', categoria: 'Categoría', fecha: 'Calendario de amor', novedad: 'Novedades' };
+  const MAX_AVISOS_FLOTANTES = 3, DURACION_AVISO = 6000;
+  let cajaAvisos = null;
+  function mostrarAvisoFlotante(a) {
+    if (!cajaAvisos) { cajaAvisos = h('div', { class: 'avisos-flota', 'aria-live': 'polite' }); document.body.append(cajaAvisos); }
+    const de = a.de === 'M' || a.de === 'xB' ? a.de : 'sistema';
+    const foto = de === 'sistema' ? h('span', { class: 'avatar avatar--sistema', title: 'Nuestro Muro' }, h('img', { src: '/icons/icon-192.png', alt: 'Nuestro Muro', decoding: 'async', draggable: 'false' })) : avatar(de);
+    const card = h('div', { class: 'aviso-card', 'data-de': de, role: 'status' },
+      h('span', { class: 'aviso-card__foto' }, foto, h('span', { class: 'aviso-card__tipo-icono' }, icono(ICONO_AVISO[a.tipo] || 'notifications', true))),
+      h('span', { class: 'aviso-card__txt' }, h('strong', { class: 'aviso-card__tipo', text: TIPO_AVISO_TXT[a.tipo] || 'Notificación' }), h('span', { class: 'aviso-card__msg', text: a.texto })));
+    let timer = 0, x0 = 0, y0 = 0, dx = 0, dy = 0, arrastra = false, cerrada = false;
+    const quitar = (dir) => {                                           // dir: -1 izquierda, 1 derecha, 0 arriba/sin dirección (se va sola)
+      if (cerrada) return; cerrada = true; clearTimeout(timer);
+      card.style.setProperty('--dx', (dir * window.innerWidth) + 'px'); card.classList.add(dir ? 'aviso-card--sale-lado' : 'aviso-card--sale');
+      setTimeout(() => card.remove(), 320);
+    };
+    const programar = (ms) => { clearTimeout(timer); timer = setTimeout(() => quitar(0), ms); };
+    programar(DURACION_AVISO);
+    card.addEventListener('pointerdown', (e) => { arrastra = true; x0 = e.clientX; y0 = e.clientY; dx = dy = 0; clearTimeout(timer); card.setPointerCapture(e.pointerId); card.classList.add('aviso-card--arrastra'); });
+    card.addEventListener('pointermove', (e) => {
+      if (!arrastra) return; dx = e.clientX - x0; dy = Math.min(0, e.clientY - y0);                 // solo se puede arrastrar hacia los lados o hacia arriba
+      card.style.transform = `translate(${dx}px, ${dy}px)`; card.style.opacity = String(Math.max(0.2, 1 - Math.max(Math.abs(dx) / 260, Math.abs(dy) / 90)));
+    });
+    const soltar = () => {
+      if (!arrastra) return; arrastra = false; card.classList.remove('aviso-card--arrastra');
+      if (Math.abs(dx) > 90) return quitar(dx < 0 ? -1 : 1);
+      if (dy < -40) return quitar(0);
+      card.style.transform = ''; card.style.opacity = ''; programar(3000);                          // no se descartó: vuelve a su lugar y se va sola en 3 s más
+    };
+    card.addEventListener('pointerup', (e) => { const mov = Math.abs(dx) + Math.abs(dy); soltar(); if (mov < 8 && !cerrada) { quitar(0); abrirDesdeAviso(a); } });   // un toque (sin arrastrar) abre el aviso
+    card.addEventListener('pointercancel', soltar);
+    cajaAvisos.prepend(card);
+    while (cajaAvisos.children.length > MAX_AVISOS_FLOTANTES) cajaAvisos.lastElementChild.remove();   // las más viejas se van si hay demasiadas
+  }
+  /* Lleva a donde apunta un aviso (la misma lógica que tocarlo en el panel de la campanita) */
+  function abrirDesdeAviso(a) {
+    if (a.tipo === 'fecha') mostrarVista('calendario'); else if (a.tipo === 'novedad') abrirNovedades(); else if (a.post) irAPost(a.post);
   }
   /* Dibuja la lista del panel */
   function pintarPanelAvisos() {
@@ -1587,7 +1674,7 @@ document.addEventListener('DOMContentLoaded', () => {
     formDias = { dias: [], antes: {} }; formDiasTocados = false; mesCalendario = primerDiaDelMes(new Date());   // v2.3: plan nuevo sin días elegidos, calendario en el mes actual
     elegirTipo('nota');
     catsElegidas = new Set(); pintarCatsComposer(); reiniciarVistaTexto();   // v2.1: sin categoría y sin vista previa al empezar
-    abrirModal($('modalNuevo')); setTimeout(() => $('nuevoTexto').focus(), 80);
+    abrirModal($('modalNuevo')); setTimeout(() => $('nuevoTituloCampo').focus(), 80);   // [v3.2] al abrir una publicación nueva el cursor va al TÍTULO (antes iba al texto)
   }
   /* Abre el formulario con los datos de una publicación propia para editarla */
   function abrirEditor(p) {
@@ -1660,10 +1747,14 @@ document.addEventListener('DOMContentLoaded', () => {
     caja.replaceChildren(...hijos);
   }
   construirBarra($('barraFormato'), 'btnVistaTexto'); construirBarra($('entBarraFormato'), 'entBtnVista'); construirBarra($('barraFlota'), null);
+  window.Editor.config({ md });                                        // [v3.2] el editor por bloques usa md() para mostrar ya formateados los bloques que no se están editando
   document.querySelectorAll('textarea[data-rico]').forEach((t) => window.Editor.envolver(t));   // v3.0: los campos que ya están en la página (título, texto…) pasan a ser editores en vivo que crecen
   /* v2.7: sirve para cualquier campo con formato (t = el cuadro de texto grande por defecto, o un campo de una línea).
      v3.0: en los campos de una línea (data-rico="flota") solo van las marcas que no necesitan salto de línea; las demás son para el texto grande (data-rico="completo"). */
   function aplicarFormato(nombre, t = $('nuevoTexto')) {
+    /* [v3.2] El texto grande es un editor por bloques: el formato se aplica al bloque que se está editando; la tabla se inserta como tabla dibujada */
+    if (nombre === 'tabla' && window.Editor.insertarTabla(t)) return;
+    t = window.Editor.activo(t);
     const f = FORMATOS[nombre], v = t.value, ini = t.selectionStart, fin = t.selectionEnd;
     if (!f) return;
     if ((f.pre || f.ins || f.multi) && t.dataset.rico !== 'completo') return;
