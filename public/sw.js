@@ -11,11 +11,11 @@
    Para qué sirve: que sea una app instalable, rápida y que siempre muestre la última versión publicada.
    Cambiar VERSION fuerza a renovar las copias guardadas (no hace falta tocarlo en cada push: la red tiene prioridad).
    ============================================================ */
-const VERSION = 'v2.10.1';   // v2.8: imágenes de los perfiles (/api/perfiles/imagen/…) también primero desde la copia guardada; v2.4: fotos de perfil en el cascarón guardado; v2.5: avisos del celular (push); v2.7: fotos en gris de la escena de inicio de sesión
+const VERSION = 'v3.0.0';   // v3.0: scripts nuevos (editor, editor de imágenes, calendario) en el cascarón e íconos de las notificaciones por tipo;   // v2.8: imágenes de los perfiles (/api/perfiles/imagen/…) también primero desde la copia guardada; v2.4: fotos de perfil en el cascarón guardado; v2.5: avisos del celular (push); v2.7: fotos en gris de la escena de inicio de sesión
 const CACHE_ESTATICO = `muro-estatico-${VERSION}`;   // cascarón de la app
 const CACHE_DATOS = 'muro-datos';                     // listado del muro y fotos
 const CACHE_FUENTES = 'muro-fuentes';                 // Google Fonts
-const ESTATICOS = ['/', '/index.html', '/css/style.css', '/js/script.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/favicon-32.png', '/icons/apple-touch-icon.png', '/img/avatar-M.png', '/img/avatar-xB.png', '/img/avatar-M-gris.png', '/img/avatar-xB-gris.png'];
+const ESTATICOS = ['/', '/index.html', '/css/style.css', '/js/script.js', '/js/editor.js', '/js/editor-imagen.js', '/js/calendario.js', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/favicon-32.png', '/icons/apple-touch-icon.png', '/img/avatar-M.png', '/img/avatar-xB.png', '/img/avatar-M-gris.png', '/img/avatar-xB-gris.png'];
 
 /* Instalación: guarda el cascarón y se activa de inmediato */
 self.addEventListener('install', (e) => {
@@ -82,6 +82,15 @@ self.addEventListener('fetch', (e) => {
    abierta y a la vista no se muestra nada (ya sale el aviso dentro de la app). Tocar el aviso abre/enfoca la app en esa publicación.
    Para qué sirve: enterarse de lo que pasa aunque la app esté cerrada.
    ============================================================ */
+/* v3.0: cada aviso lleva un ícono según su tipo (/icons/notif/): un corazón del color de quien lo dio (azul M / rojo xB), un globo de diálogo para un comentario, etc.
+   Los avisos automáticos (calendario, novedades) usan la versión gris ("sistema"). "badge" es la silueta blanca chica de la barra de estado de Android. */
+const TIPOS_ICONO = ['post', 'corazon', 'comentario', 'voto', 'tarea', 'dia', 'editar', 'borrar', 'categoria', 'fecha', 'novedad'];
+const TITULOS = { fecha: 'Calendario de amor', novedad: 'Novedades de Nuestro Muro' };
+function iconosDe(a) {
+  if (!TIPOS_ICONO.includes(a.tipo)) return { icon: '/icons/icon-192.png', badge: '/icons/favicon-32.png' };
+  const quien = a.de === 'M' || a.de === 'xB' ? a.de : 'sistema';
+  return { icon: `/icons/notif/${a.tipo}-${quien}.png`, badge: `/icons/notif/badge-${a.tipo}.png` };
+}
 self.addEventListener('push', (e) => {
   e.waitUntil((async () => {
     let avisos = [];
@@ -93,8 +102,8 @@ self.addEventListener('push', (e) => {
     if (!avisos.length) avisos = [{ id: 'novedades', texto: 'Hay novedades en el muro.', post: '' }];
     const ventanas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     if (ventanas.some((v) => v.visibilityState === 'visible')) return; // la app está a la vista: ya se ve dentro de ella
-    await Promise.all(avisos.map((a) => self.registration.showNotification('Nuestro Muro', {
-      body: a.texto, tag: a.id, icon: '/icons/icon-192.png', badge: '/icons/favicon-32.png', data: { post: a.post || '' },
+    await Promise.all(avisos.map((a) => self.registration.showNotification(TITULOS[a.tipo] || 'Nuestro Muro', {
+      body: a.texto, tag: a.id, ...iconosDe(a), data: { post: a.post || '', tipo: a.tipo || '' },
     })));
   })());
 });
@@ -102,14 +111,16 @@ self.addEventListener('push', (e) => {
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const post = (e.notification.data && e.notification.data.post) || '';
+  const tipo = (e.notification.data && e.notification.data.tipo) || '';   // v3.0: un aviso del calendario o de novedades abre esa pantalla
   e.waitUntil((async () => {
     const ventanas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     if (ventanas.length) {
       const v = ventanas[0];
       await v.focus();
       if (post) v.postMessage({ tipo: 'ir-post', id: post });
+      else if (tipo === 'fecha' || tipo === 'novedad') v.postMessage({ tipo: 'ir-vista', vista: tipo === 'fecha' ? 'calendario' : 'novedades' });
       return;
     }
-    await self.clients.openWindow(post ? `/?post=${encodeURIComponent(post)}` : '/');
+    await self.clients.openWindow(post ? `/?post=${encodeURIComponent(post)}` : tipo === 'fecha' ? '/?vista=calendario' : tipo === 'novedad' ? '/?vista=novedades' : '/');
   })());
 });

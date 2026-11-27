@@ -23,6 +23,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
   <!-- Se carga en el <head> para aplicar el tema claro/oscuro antes de pintar (sin parpadeo). Toda la lógica está en js/script.js -->
+  <script src="/js/editor.js"></script>
+  <script src="/js/editor-imagen.js"></script>   <!-- v3.0: editor de imágenes (recortar, dibujar, texto) -->   <!-- v3.0: formato en vivo + campos que crecen (lo usa script.js) -->
+  <script src="/js/calendario.js"></script>   <!-- v3.0: calendario de fechas importantes (lo usa script.js) -->
   <script src="/js/script.js"></script>
 </head>
 <body>
@@ -32,12 +35,28 @@
       <button class="btn-icono" id="btnInstalar" type="button" aria-label="Instalar la app" hidden><span class="material-symbols-rounded">install_mobile</span></button>
       <!-- NUEVO v2.5: campanita de notificaciones (con contador de no leídas); script.js la muestra al iniciar sesión -->
       <button class="btn-icono notif-btn" id="btnNotif" type="button" aria-label="Notificaciones" hidden><span class="material-symbols-rounded">notifications</span><span class="notif-btn__badge" id="notifBadge" hidden>0</span></button>
+      <!-- NUEVO v3.0: botón del calendario de amor (junto a la campanita; script.js lo muestra al iniciar sesión). Dentro del calendario se cambia por "volver al muro" -->
+      <button class="btn-icono" id="btnCalendario" type="button" aria-label="Calendario" title="Calendario" hidden><span class="material-symbols-rounded">calendar_month</span></button>
       <!-- NUEVO v2.10: dentro de un perfil la campanita se cambia por este botón para volver al muro (el CSS los intercambia según body[data-vista]; script.js le da la acción) -->
       <button class="btn-icono" id="btnVolver" type="button" aria-label="Volver al muro" title="Volver al muro"><span class="material-symbols-rounded">arrow_back</span></button>
     </span>
     <h1 class="appbar__titulo">♥️♠️ Nuestro Muro ♠️♥️</h1>
     <span class="appbar__espacio">
-      <button class="btn-icono" id="btnTema" type="button" data-tema-boton aria-label="Cambiar a tema claro"><span class="material-symbols-rounded">light_mode</span></button>
+      <!-- v3.0: el botón del tema se reemplazó por AJUSTES (engranaje): abre un menú con el tema como interruptor y, abajo, la información de la última actualización (Novedades). script.js lo maneja -->
+      <button class="btn-icono ajustes-btn" id="btnAjustes" type="button" data-tema-boton aria-label="Ajustes" aria-haspopup="true" aria-expanded="false" aria-controls="menuAjustes"><span class="material-symbols-rounded">settings</span><span class="ajustes-btn__punto" id="ajustesPunto" hidden aria-label="Hay novedades sin ver"></span></button>
+      <div class="menu-ajustes" id="menuAjustes" role="dialog" aria-label="Ajustes" hidden>
+        <div class="menu-ajustes__fila">
+          <span class="material-symbols-rounded" id="temaIcono" aria-hidden="true">dark_mode</span>
+          <span class="menu-ajustes__texto"><strong>Modo oscuro</strong><small id="temaEstado">Activado</small></span>
+          <button class="interruptor" id="switchTema" type="button" role="switch" aria-checked="true" aria-label="Modo oscuro"><span class="interruptor__riel"><span class="interruptor__bola"></span></span></button>
+        </div>
+        <hr class="separador" aria-hidden="true">
+        <div class="menu-ajustes__nov">
+          <div class="menu-ajustes__nov-cab"><span class="material-symbols-rounded" aria-hidden="true">campaign</span><strong>Novedades</strong></div>
+          <div id="novResumen" class="nov-resumen"><span class="campo__ayuda">Cargando…</span></div>
+          <button class="btn btn--fantasma btn--bloque" id="btnVerNovedades" type="button"><span class="material-symbols-rounded">history</span>Ver todas las novedades</button>
+        </div>
+      </div>
       <!-- v2.8: tocar mi foto abre mi perfil (cerrar sesión ahora está dentro del perfil) -->
       <button class="yo-chip" id="btnYo" type="button" aria-label="Ver mi perfil" hidden></button>
     </span>
@@ -89,6 +108,9 @@
       <div class="perfil" id="perfilCuerpo" aria-live="polite"></div>
     </section>
 
+    <!-- NUEVO v3.0: CALENDARIO DE AMOR. Se ve al tocar el botón del calendario de la barra superior; lo dibuja js/calendario.js -->
+    <section class="calv" id="vistaCalendario" aria-label="Calendario" hidden></section>
+
     <!-- Estado vacío / cargando -->
     <div class="vacio" id="vacio" hidden data-solo-muro>
       <span class="material-symbols-rounded">dashboard_customize</span>
@@ -102,10 +124,10 @@
 
   <!-- Pie: versión y fecha de la última modificación de index.html (actualizar cada vez que se edite este archivo) -->
   <footer class="pie">
-    <!-- v2.10.1: corrección de la animación de Like (corazoncitos que vuelan, corazón que ya no se ve cortado) y aparición de las entradas de perfil más fluida y una por una; v2.10.0: perfil estilo Steam (solo se ve el perfil, la campanita pasa a "volver al muro"), selector de perfiles con las cartas, entradas que aparecen desde los costados al verse, animación de Like con corazoncitos, M siempre a la derecha de xB en las fotos y más iconos; v2.9.0: respuestas a comentarios (hilos), barras de formato debajo del campo de texto y círculo de carga en las entradas de perfil; v2.8.1: buscador en los perfiles, entradas siempre en una columna con otro diseño (ícono de color, título como en el muro, texto en caja oscura) y barra de formato completa (links, viñetas, lista numerada); v2.8.0: perfiles (pestaña "Perfiles" y foto de cada persona: frase, entradas con ícono, título, texto con formato e imágenes), cerrar sesión pasa al perfil propio y el tachado de las listas se ve bien en varias líneas; v2.7.0: todo se actualiza al instante (si el servidor falla se deshace y avisa), lista completada en verde, descripción en lista y encuesta, formato de texto en todos los campos, menos color de la persona, animaciones más fluidas y escena de inicio de sesión; v2.6.0: cambio instantáneo de los días del plan y tipos de día al crear el plan; v2.5.0: notificaciones (campanita + avisos del celular); v2.4.0: fotos de perfil (carta azul M / roja xB) en vez de las iniciales; v2.3.0: tipo "plan" en lugar de "video" -->
-    <span id="pieVersion">Versión 2.10.1</span>
+    <!-- v3.0.0: calendario de amor (fechas importantes, avisos, líneas entre los días de un plan), editor con formato en vivo y barra completa, editor de imágenes, listas con responsables, estado "Expirado", orden de entradas del perfil, ajustes con novedades y notificaciones con ícono por tipo; v2.10.1: corrección de la animación de Like (corazoncitos que vuelan, corazón que ya no se ve cortado) y aparición de las entradas de perfil más fluida y una por una; v2.10.0: perfil estilo Steam (solo se ve el perfil, la campanita pasa a "volver al muro"), selector de perfiles con las cartas, entradas que aparecen desde los costados al verse, animación de Like con corazoncitos, M siempre a la derecha de xB en las fotos y más iconos; v2.9.0: respuestas a comentarios (hilos), barras de formato debajo del campo de texto y círculo de carga en las entradas de perfil; v2.8.1: buscador en los perfiles, entradas siempre en una columna con otro diseño (ícono de color, título como en el muro, texto en caja oscura) y barra de formato completa (links, viñetas, lista numerada); v2.8.0: perfiles (pestaña "Perfiles" y foto de cada persona: frase, entradas con ícono, título, texto con formato e imágenes), cerrar sesión pasa al perfil propio y el tachado de las listas se ve bien en varias líneas; v2.7.0: todo se actualiza al instante (si el servidor falla se deshace y avisa), lista completada en verde, descripción en lista y encuesta, formato de texto en todos los campos, menos color de la persona, animaciones más fluidas y escena de inicio de sesión; v2.6.0: cambio instantáneo de los días del plan y tipos de día al crear el plan; v2.5.0: notificaciones (campanita + avisos del celular); v2.4.0: fotos de perfil (carta azul M / roja xB) en vez de las iniciales; v2.3.0: tipo "plan" en lugar de "video" -->
+    <span id="pieVersion">Versión 3.0.0</span>
     <span aria-hidden="true">·</span>
-    <span id="pieFecha">23/11/2026</span>
+    <span id="pieFecha">27/11/2026</span>
   </footer>
 
   <!-- ===================== VENTANA DE ACCESO (solo la primera vez) =====================
@@ -145,25 +167,14 @@
         <!-- v2.7: data-rico marca los campos de texto que aceptan formato (negrita, cursiva…): al escribir en ellos aparece la barra flotante #barraFlota
              y funcionan Ctrl/Cmd + B, I y K. El texto se ve con su formato en la publicación -->
         <label class="campo" id="campoTitulo"><span class="campo__etiqueta" id="etiquetaTitulo">Título (opcional)</span>
-          <input class="campo__entrada" id="nuevoTituloCampo" type="text" maxlength="120" autocomplete="off" data-rico="flota"></label>
+          <textarea class="campo__entrada campo__linea" id="nuevoTituloCampo" rows="1" maxlength="120" autocomplete="off" data-rico="flota" data-linea></textarea></label>   <!-- v3.0: cuadro de una línea que crece al escribir -->
         <!-- NUEVO v2.1: texto con formato. La barra de botones inserta marcas Markdown (negrita, cursiva, listas…) alrededor de lo seleccionado;
              en la publicación se muestran ya con su formato. Los botones los maneja script.js por su atributo data-fmt -->
         <div class="campo" id="campoTexto"><label class="campo__etiqueta" id="etiquetaTexto" for="nuevoTexto">Texto</label>
           <textarea class="campo__entrada" id="nuevoTexto" rows="4" maxlength="5000" data-rico="completo"></textarea>
           <!-- v2.9: la barra de formato va DEBAJO del cuadro de texto (antes arriba) para que el menú del celular al seleccionar texto no la tape -->
           <div class="formato formato--abajo" id="barraFormato" role="toolbar" aria-label="Formato de texto">
-            <button class="btn-icono" type="button" data-fmt="negrita" title="Negrita (Ctrl+B)" aria-label="Negrita"><span class="material-symbols-rounded">format_bold</span></button>
-            <button class="btn-icono" type="button" data-fmt="cursiva" title="Cursiva (Ctrl+I)" aria-label="Cursiva"><span class="material-symbols-rounded">format_italic</span></button>
-            <button class="btn-icono" type="button" data-fmt="tachado" title="Tachado" aria-label="Tachado"><span class="material-symbols-rounded">strikethrough_s</span></button>
-            <button class="btn-icono" type="button" data-fmt="codigo" title="Código" aria-label="Código"><span class="material-symbols-rounded">code</span></button>
-            <span class="formato__sep" aria-hidden="true"></span>
-            <button class="btn-icono" type="button" data-fmt="titulo" title="Título" aria-label="Título"><span class="material-symbols-rounded">title</span></button>
-            <button class="btn-icono" type="button" data-fmt="cita" title="Cita" aria-label="Cita"><span class="material-symbols-rounded">format_quote</span></button>
-            <button class="btn-icono" type="button" data-fmt="lista" title="Lista con viñetas" aria-label="Lista con viñetas"><span class="material-symbols-rounded">format_list_bulleted</span></button>
-            <button class="btn-icono" type="button" data-fmt="numerada" title="Lista numerada" aria-label="Lista numerada"><span class="material-symbols-rounded">format_list_numbered</span></button>
-            <button class="btn-icono" type="button" data-fmt="enlace" title="Enlace (Ctrl+K)" aria-label="Enlace"><span class="material-symbols-rounded">link</span></button>
-            <span class="formato__sep formato__sep--der" aria-hidden="true"></span>
-            <button class="btn-icono" type="button" data-fmt="vista" id="btnVistaTexto" aria-pressed="false" title="Ver cómo queda" aria-label="Ver cómo queda"><span class="material-symbols-rounded">visibility</span></button>
+            <!-- v3.0: los botones los arma script.js (construirBarra) con la lista BOTONES_FORMATO -->
           </div>
           <div class="md-previa" id="textoPrevia" hidden aria-live="polite"></div>
           <p class="campo__ayuda">Selecciona texto y toca un botón. Como en WhatsApp: *negrita*, _cursiva_, ~tachado~, ```mono```, - listas, &gt; citas, [texto](https://…). El formato también funciona en el título, los elementos de la lista, las opciones de la encuesta y los comentarios.</p></div>
@@ -193,6 +204,10 @@
         <div class="campo" id="campoItems"><span class="campo__etiqueta" id="etiquetaItems">Elementos</span>
           <div class="filas" id="filasItems"></div>
           <button class="btn btn--fantasma" id="btnMasItems" type="button"><span class="material-symbols-rounded">add</span><span id="textoMasItems">Agregar elemento</span></button></div>
+        <!-- v3.0: fecha límite opcional de listas y encuestas. Pasada esa fecha la tarjeta se ve en gris oscuro con el cartel "Expirado" y la encuesta ya no se puede votar -->
+        <label class="campo" id="campoLimite" hidden><span class="campo__etiqueta">Fecha límite (opcional)</span>
+          <input class="campo__entrada" id="listaLimite" type="date">
+          <span class="campo__ayuda">Pasada esa fecha la tarjeta se ve "Expirado" (y la encuesta ya no se puede votar).</span></label>
         <!-- Foto -->
         <div class="campo" id="campoFoto"><span class="campo__etiqueta">Foto</span>
           <input id="inputFoto" type="file" accept="image/*" hidden>
@@ -241,6 +256,70 @@
     </form>
   </div>
 
+  <!-- ===================== NOVEDADES (NUEVO v3.0) =====================
+       Notas de todas las actualizaciones, estilo "patch notes" de ÉLIX: una tarjeta por versión (cada una con su color) y cada cambio con su etiqueta de color
+       (Nuevo / Mejora / Arreglo). Los datos vienen de /api/novedades (functions/_lib/novedades.js); las tarjetas las dibuja script.js -->
+  <div class="modal-fondo" id="modalNovedades" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="novTitulo">
+      <div class="modal__cabecera">
+        <h2 class="modal__titulo" id="novTitulo">Novedades</h2>
+        <button class="btn-icono" type="button" data-cerrar aria-label="Cerrar"><span class="material-symbols-rounded">close</span></button>
+      </div>
+      <div class="modal__cuerpo nov-lista" id="novLista"></div>
+    </div>
+  </div>
+
+  <!-- ===================== NUEVA FECHA / EDITAR FECHA DEL CALENDARIO (NUEVO v3.0) =====================
+       Nombre, fecha (se repite cada año o una sola vez; opcional rango de días), categoría, color (50), aviso "N días antes" y descripción con formato.
+       Los botones y las opciones de color y categoría los arma js/calendario.js -->
+  <div class="modal-fondo" id="modalDia" hidden>
+    <form class="modal" id="formDia" role="dialog" aria-modal="true" aria-labelledby="diaTitulo" novalidate>
+      <div class="modal__cabecera">
+        <h2 class="modal__titulo" id="diaTitulo">Nueva fecha</h2>
+        <button class="btn-icono" type="button" data-cerrar aria-label="Cerrar"><span class="material-symbols-rounded">close</span></button>
+      </div>
+      <div class="modal__cuerpo">
+        <label class="campo"><span class="campo__etiqueta">Nombre</span>
+          <input class="campo__entrada" id="diaNombre" type="text" maxlength="80" placeholder="Ej.: Nuestro aniversario" autocomplete="off"></label>
+        <div class="campo"><span class="campo__etiqueta">¿Cuándo se celebra?</span>
+          <div class="segmento" id="diaRepite" role="group" aria-label="Frecuencia">
+            <button class="segmento__btn segmento__btn--activo" type="button" data-rep="si">Todos los años</button>
+            <button class="segmento__btn" type="button" data-rep="no">Una sola vez</button>
+          </div>
+          <input class="campo__entrada" id="diaFecha" type="date" aria-label="Fecha">
+          <p class="campo__ayuda" id="diaAyudaFecha"></p>
+          <label class="calv__rango"><input type="checkbox" id="diaRango"> Dura varios días (rango)</label>
+          <div id="diaCajaFin" hidden><span class="campo__etiqueta">Hasta</span><input class="campo__entrada" id="diaFin" type="date" aria-label="Último día"></div></div>
+        <div class="campo"><span class="campo__etiqueta">Categoría</span>
+          <div class="ayuda-indice filtros__tipos" id="diaCategorias" role="group" aria-label="Categoría"></div></div>
+        <div class="campo" id="diaColoresCaja"><span class="campo__etiqueta">Color</span>
+          <div class="calv__colores" id="diaColores" role="group" aria-label="Color"></div></div>
+        <label class="campo"><span class="campo__etiqueta">Avisarme</span>
+          <select class="campo__entrada" id="diaAviso"></select>
+          <span class="campo__ayuda">Llega una notificación a los dos todos los días desde el aviso elegido hasta el gran día.</span></label>
+        <div class="campo"><label class="campo__etiqueta" for="diaDescripcion">Descripción (opcional)</label>
+          <textarea class="campo__entrada" id="diaDescripcion" rows="3" maxlength="1500" placeholder="Algún detalle, idea de regalo, recuerdo…" data-rico="flota"></textarea></div>
+      </div>
+      <p class="mensaje-form" id="errorDia" role="alert"></p>
+      <div class="modal__acciones">
+        <button class="btn btn--fantasma" id="btnBorrarDia" type="button" hidden><span class="material-symbols-rounded">delete</span>Borrar</button>
+        <button class="btn btn--fantasma" type="button" data-cerrar>Cancelar</button>
+        <button class="btn btn--yo" id="btnGuardarDia" type="submit"><span class="material-symbols-rounded">check</span><span id="textoGuardarDia">Agregar</span></button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ===================== DETALLE DE UNA FECHA / DE UN DÍA (NUEVO v3.0) ===================== -->
+  <div class="modal-fondo" id="modalDiaInfo" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="infoTitulo">
+      <div class="modal__cabecera">
+        <h2 class="modal__titulo" id="infoTitulo">Fecha</h2>
+        <button class="btn-icono" type="button" data-cerrar aria-label="Cerrar"><span class="material-symbols-rounded">close</span></button>
+      </div>
+      <div class="modal__cuerpo" id="infoCuerpo"></div>
+    </div>
+  </div>
+
   <!-- ===================== NUEVA ENTRADA / EDITAR ENTRADA DE UN PERFIL (NUEVO v2.8) =====================
        Como una categoría + un texto: se elige un ícono (de fonts.google.com/icons), se escribe un título y debajo el texto (con formato), y se pueden
        adjuntar imágenes (hasta 4, se achican solas). La grilla de íconos y las miniaturas las dibuja script.js -->
@@ -251,6 +330,9 @@
         <button class="btn-icono" type="button" data-cerrar aria-label="Cerrar"><span class="material-symbols-rounded">close</span></button>
       </div>
       <div class="modal__cuerpo">
+        <!-- v3.0: primero el título y después el ícono -->
+        <label class="campo"><span class="campo__etiqueta">Título</span>
+          <textarea class="campo__entrada campo__linea" id="entTituloCampo" rows="1" maxlength="80" placeholder="Ej.: Comida favorita, Lo que me da miedo…" autocomplete="off" data-rico="flota" data-linea></textarea></label>
         <div class="campo"><span class="campo__etiqueta">Ícono</span>
           <label class="buscador">
             <span class="material-symbols-rounded">search</span>
@@ -258,8 +340,6 @@
           </label>
           <div class="iconos-grilla" id="entIconos" role="group" aria-label="Íconos disponibles"></div>
           <p class="campo__ayuda" id="entSinIconos" hidden>No hay íconos con ese nombre.</p></div>
-        <label class="campo"><span class="campo__etiqueta">Título</span>
-          <input class="campo__entrada" id="entTituloCampo" type="text" maxlength="80" placeholder="Ej.: Comida favorita, Lo que me da miedo…" autocomplete="off" data-rico="flota"></label>
         <div class="cat-previa" aria-live="polite"><span class="campo__etiqueta">Así se verá:</span><span class="chip chip--cat chip--activo" id="entPrevia"></span></div>
         <!-- v2.8.1: el texto de la entrada tiene la barra de formato completa (negrita, cursiva, tachado, código, título, cita, viñetas, lista numerada, enlace
              y vista previa); los botones los maneja script.js por su atributo data-fmt -->
@@ -267,18 +347,7 @@
           <textarea class="campo__entrada" id="entTexto" rows="5" maxlength="3000" placeholder="Escribe lo que quieras contar…" data-rico="completo"></textarea>
           <!-- v2.9: la barra de formato va DEBAJO del cuadro de texto (antes arriba) para que el menú del celular al seleccionar texto no la tape -->
           <div class="formato formato--abajo" id="entBarraFormato" role="toolbar" aria-label="Formato de texto">
-            <button class="btn-icono" type="button" data-fmt="negrita" title="Negrita (Ctrl+B)" aria-label="Negrita"><span class="material-symbols-rounded">format_bold</span></button>
-            <button class="btn-icono" type="button" data-fmt="cursiva" title="Cursiva (Ctrl+I)" aria-label="Cursiva"><span class="material-symbols-rounded">format_italic</span></button>
-            <button class="btn-icono" type="button" data-fmt="tachado" title="Tachado" aria-label="Tachado"><span class="material-symbols-rounded">strikethrough_s</span></button>
-            <button class="btn-icono" type="button" data-fmt="codigo" title="Código" aria-label="Código"><span class="material-symbols-rounded">code</span></button>
-            <span class="formato__sep" aria-hidden="true"></span>
-            <button class="btn-icono" type="button" data-fmt="titulo" title="Título" aria-label="Título"><span class="material-symbols-rounded">title</span></button>
-            <button class="btn-icono" type="button" data-fmt="cita" title="Cita" aria-label="Cita"><span class="material-symbols-rounded">format_quote</span></button>
-            <button class="btn-icono" type="button" data-fmt="lista" title="Lista con viñetas" aria-label="Lista con viñetas"><span class="material-symbols-rounded">format_list_bulleted</span></button>
-            <button class="btn-icono" type="button" data-fmt="numerada" title="Lista numerada" aria-label="Lista numerada"><span class="material-symbols-rounded">format_list_numbered</span></button>
-            <button class="btn-icono" type="button" data-fmt="enlace" title="Enlace (Ctrl+K)" aria-label="Enlace"><span class="material-symbols-rounded">link</span></button>
-            <span class="formato__sep formato__sep--der" aria-hidden="true"></span>
-            <button class="btn-icono" type="button" data-fmt="vista" id="entBtnVista" aria-pressed="false" title="Ver cómo queda" aria-label="Ver cómo queda"><span class="material-symbols-rounded">visibility</span></button>
+            <!-- v3.0: los botones los arma script.js (construirBarra) con la lista BOTONES_FORMATO -->
           </div>
           <div class="md-previa" id="entTextoPrevia" hidden aria-live="polite"></div>
           <p class="campo__ayuda">Selecciona texto y toca un botón. Como en WhatsApp: *negrita*, _cursiva_, ~tachado~, - viñetas, 1. lista numerada, [texto](https://…) para un link.</p></div>
@@ -334,12 +403,8 @@
   <!-- NUEVO v2.7: barra de formato flotante. Aparece sobre el campo de una línea que se está escribiendo (título, elementos de lista, opciones,
        comentarios); script.js la mueve y aplica el formato con los mismos botones data-fmt de la barra grande -->
   <div class="formato formato--flota" id="barraFlota" role="toolbar" aria-label="Formato de texto" hidden>
-    <button class="btn-icono" type="button" data-fmt="negrita" title="Negrita (Ctrl+B)" aria-label="Negrita"><span class="material-symbols-rounded">format_bold</span></button>
-    <button class="btn-icono" type="button" data-fmt="cursiva" title="Cursiva (Ctrl+I)" aria-label="Cursiva"><span class="material-symbols-rounded">format_italic</span></button>
-    <button class="btn-icono" type="button" data-fmt="tachado" title="Tachado" aria-label="Tachado"><span class="material-symbols-rounded">strikethrough_s</span></button>
-    <button class="btn-icono" type="button" data-fmt="codigo" title="Código" aria-label="Código"><span class="material-symbols-rounded">code</span></button>
-    <button class="btn-icono" type="button" data-fmt="enlace" title="Enlace (Ctrl+K)" aria-label="Enlace"><span class="material-symbols-rounded">link</span></button>
-  </div>
+            <!-- v3.0: los botones los arma script.js (construirBarra) con la lista BOTONES_FORMATO -->
+          </div>
   <!-- NUEVO v2.7: filtro que vuelve irregulares los bordes de la caja del nombre en la escena de inicio de sesión (la escena la arma script.js) -->
   <svg class="svg-filtros" width="0" height="0" aria-hidden="true" focusable="false"><filter id="escena-rugoso" x="-4%" y="-12%" width="108%" height="124%"><feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="2" seed="7" result="r"/><feDisplacementMap in="SourceGraphic" in2="r" scale="6"/></filter></svg>
 

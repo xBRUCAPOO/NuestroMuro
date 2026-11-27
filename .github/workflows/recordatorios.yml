@@ -1,0 +1,26 @@
+# ============================================================
+# recordatorios.yml — Aviso diario del calendario (NUEVO v3.0)
+# Qué hace: todos los días a las 9:00 de Argentina (12:00 UTC) llama a /api/cron/recordatorios, que manda las notificaciones
+#           "Faltan N días para…", "¡MAÑANA es el gran día de…!" y "¡HOY es…!" a las dos personas.
+# Para qué sirve: Cloudflare Pages no tiene tareas programadas; GitHub Actions hace de reloj.
+# Configuración (una sola vez): GitHub → Settings → Secrets and variables → Actions:
+#   SITIO_URL   = https://TU-SITIO.pages.dev   (sin barra al final)
+#   CRON_CLAVE  = (opcional) la misma clave que pongas en Cloudflare Pages como variable CRON_CLAVE
+# También se puede lanzar a mano desde la pestaña Actions ("Run workflow").
+# ============================================================
+name: Recordatorios del calendario
+on:
+  schedule:
+    - cron: '0 12 * * *'
+  workflow_dispatch:
+jobs:
+  avisar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Llamar al sitio
+        env:
+          SITIO_URL: ${{ secrets.SITIO_URL }}
+          CRON_CLAVE: ${{ secrets.CRON_CLAVE }}
+        run: |
+          if [ -z "$SITIO_URL" ]; then echo "Falta el secreto SITIO_URL"; exit 1; fi
+          curl --fail --silent --show-error -X POST -H "Authorization: Bearer $CRON_CLAVE" "$SITIO_URL/api/cron/recordatorios"

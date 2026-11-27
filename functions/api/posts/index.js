@@ -7,6 +7,7 @@
    ============================================================ */
 import { json, bd, COLUMNAS, aPost, TIPOS, limpiar, urlValida, construirDatos, vistaPrevia, idsCategoriasValidos } from '../../_lib/comun.js';
 import { notificar, articuloTipo, tituloDe } from '../../_lib/notificar.js';   // v2.5: avisos
+import { sincronizarPlan } from '../../_lib/fechas.js';   // v3.0: días del calendario ligados al plan
 import { LIMITES } from '../../_lib/config.js';
 
 const ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;   // v2.7: formato de los ids (UUID) que puede proponer el navegador
@@ -67,6 +68,7 @@ export async function onRequestPost({ request, env, data, waitUntil }) {
   const fila = await db.prepare(`SELECT ${COLUMNAS} FROM posts WHERE id = ?`).bind(id).first();
   /* NUEVO v2.5: aviso para la otra persona ("M publicó un link: «título»") */
   const nuevo = aPost(fila);
+  if (tipo === 'plan') { try { await sincronizarPlan(db, nuevo); } catch (e) { /* el calendario no debe frenar la publicación */ } }   // v3.0: un día importante por cada fecha del plan
   await notificar({ env, request, waitUntil }, db, { de: data.quien, tipo: 'post', post_id: id, texto: `${data.quien} publicó ${articuloTipo(tipo)}${tituloDe(nuevo) ? ': ' + tituloDe(nuevo) : ''}` });
   return json({ post: nuevo }, 201);
 }

@@ -6,6 +6,7 @@
    ============================================================ */
 import { json, bd, COLUMNAS, aPost, limpiar, urlValida, construirDatos, vistaPrevia, idsCategoriasValidos } from '../../_lib/comun.js';
 import { notificar, refPost, otraPersona } from '../../_lib/notificar.js';   // v2.5: avisos
+import { sincronizarPlan, borrarDiasDePlan } from '../../_lib/fechas.js';   // v3.0: días del calendario ligados al plan
 import { LIMITES } from '../../_lib/config.js';
 
 /* Busca la publicación y comprueba que sea del usuario con sesión. Devuelve { fila } o { respuesta } (error ya armado) */
@@ -38,7 +39,7 @@ export async function onRequestPatch({ request, env, data, params, waitUntil }) 
   }
   /* Lista: se envía completa con el estado "hecho" de cada elemento; el resto de tipos conserva sus datos */
   /* v2.3: el plan también se reconstruye al editar (días, hora y lugar); los estados de los días que se mantienen se conservan */
-  const reconstruir = previo.tipo === 'lista' || (previo.tipo === 'plan' && c.datos !== undefined);
+  const reconstruir = previo.tipo === 'lista' || ((previo.tipo === 'plan' || previo.tipo === 'encuesta') && c.datos !== undefined);   // v3.0: la encuesta también (fecha límite)
   const r = reconstruir ? construirDatos(previo.tipo, c.datos, datosPrevios) : { datos: datosPrevios };
   if (r.error) return json({ error: r.error }, 400);
   if (previo.tipo === 'link' && !r.datos.vista) r.datos.vista = await vistaPrevia(url);
@@ -64,6 +65,7 @@ export async function onRequestPatch({ request, env, data, params, waitUntil }) 
   await db.prepare('UPDATE posts SET titulo = ?, texto = ?, url = ?, datos = ?, actualizado = ? WHERE id = ?')
     .bind(titulo || null, texto || null, url, JSON.stringify(r.datos), ahora, params.id).run();
   const nueva = await db.prepare(`SELECT ${COLUMNAS} FROM posts WHERE id = ?`).bind(params.id).first();
+  if (previo.tipo === 'plan') { try { await sincronizarPlan(db, aPost(nueva)); } catch (e) { /* el calendario no debe frenar la edición */ } }   // v3.0: fechas/título/estado cambiados → se actualizan sus días
   /* NUEVO v2.5: aviso "M editó su link «título»" (solo si de verdad cambió el contenido, igual que la marca "editado") */
   if (cambio) await notificar({ env, request, waitUntil }, db, { de: data.quien, tipo: 'editar', post_id: params.id, texto: `${data.quien} editó ${refPost(aPost(nueva), otraPersona(data.quien))}` });
   return json({ post: aPost(nueva) });
@@ -73,6 +75,7 @@ export async function onRequestDelete({ request, env, data, params, waitUntil })
   const { fila, db, respuesta } = await propia(env, params.id, data.quien);
   if (respuesta) return respuesta;
   await db.prepare('DELETE FROM posts WHERE id = ?').bind(params.id).run();
+  try { await borrarDiasDePlan(db, params.id); } catch (e) { /* ya no importa */ }   // v3.0: los días ligados al plan desaparecen con él
   /* NUEVO v2.5: aviso "M eliminó su nota «título»" (sin enlace: la publicación ya no existe) */
   await notificar({ env, request, waitUntil }, db, { de: data.quien, tipo: 'borrar', texto: `${data.quien} eliminó ${refPost(aPost(fila), otraPersona(data.quien))}` });
   return json({ ok: true });

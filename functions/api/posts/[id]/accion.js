@@ -12,7 +12,8 @@
    Para qué sirve: interactuar con el muro sin cambiar quién es el autor de la publicación.
    Los comentarios se guardan dentro de "datos.comentarios" de la publicación: [{ id, autor, texto, creado }].
    ============================================================ */
-import { json, bd, COLUMNAS, aPost, limpiar, ponerEstadoDia } from '../../../_lib/comun.js';
+import { json, bd, COLUMNAS, aPost, limpiar, ponerEstadoDia, hoyAR } from '../../../_lib/comun.js';
+import { sincronizarPlan } from '../../../_lib/fechas.js';   // v3.0: el estado de un día del plan se refleja en el calendario
 import { notificar, otraPersona, refPost, recortar, etiquetaDia } from '../../../_lib/notificar.js';   // v2.5: avisos a la otra persona
 
 /* Límites de los comentarios (aquí y no en config.js para no pisar las contraseñas que ya pusiste allí) */
@@ -53,6 +54,7 @@ export async function onRequestPost({ request, env, data, params, waitUntil }) {
   } else if (c.accion === 'voto' && p.tipo === 'encuesta' && Array.isArray(d.opciones)) {
     const i = Number(c.opcion);
     if (!Number.isInteger(i) || !d.opciones[i]) return json({ error: 'Opción no válida.' }, 400);
+    if (d.limite && d.limite < hoyAR()) return json({ error: 'Esta encuesta ya venció: no se puede votar.' }, 400);   // v3.0: encuesta con fecha límite pasada
     const yaVotaba = d.opciones[i].votos.includes(yo);
     const antes = d.opciones.findIndex((o) => o.votos.includes(yo));   // opción que tenía votada (para decir "cambió su voto")
     d.opciones.forEach((o) => { o.votos = o.votos.filter((q) => q !== yo); });   // un solo voto por persona
@@ -64,6 +66,7 @@ export async function onRequestPost({ request, env, data, params, waitUntil }) {
     if (!Number.isInteger(i) || !d.items[i]) return json({ error: 'Elemento no válido.' }, 400);
     const antesHecho = !!d.items[i].hecho;
     d.items[i].hecho = !!c.hecho;
+    if (d.items[i].hecho) d.items[i].por = yo; else delete d.items[i].por;   // v3.0: se guarda QUIÉN la completó (su color rellena la casilla)
     if (antesHecho !== d.items[i].hecho) aviso = { tipo: 'tarea', texto: `${yo} ${d.items[i].hecho ? 'marcó' : 'volvió a dejar pendiente'} «${recortar(d.items[i].t, 50)}»${d.items[i].hecho ? ' como completada' : ''} en ${ref}` };
   } else if (c.accion === 'dia' && p.tipo === 'plan' && Array.isArray(d.dias)) {
     /* NUEVO v2.3: cualquiera de los dos cambia el estado de un día del plan (posible/ideal/descartado/seguro).
@@ -116,5 +119,6 @@ export async function onRequestPost({ request, env, data, params, waitUntil }) {
   await db.prepare('UPDATE posts SET datos = ?, actualizado = ? WHERE id = ?').bind(JSON.stringify(d), Date.now(), params.id).run();
   if (aviso) await notificar({ env, request, waitUntil }, db, { de: yo, post_id: p.id, ...aviso });   // v2.5: avisa a la otra persona
   const nueva = await db.prepare(`SELECT ${COLUMNAS} FROM posts WHERE id = ?`).bind(params.id).first();
+  if (c.accion === 'dia' && p.tipo === 'plan') { try { await sincronizarPlan(db, aPost(nueva)); } catch (e) { /* el calendario no debe frenar el cambio */ } }   // v3.0
   return json({ post: aPost(nueva) });
 }

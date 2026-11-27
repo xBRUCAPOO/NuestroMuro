@@ -37,12 +37,12 @@ export function refPost(p, para) {
 export const articuloTipo = (tipo) => CON_ARTICULO[tipo] || 'una publicación';
 
 /* ---------- Guardar el aviso ---------- */
-/* ctx = { env, request, waitUntil }; ev = { de, tipo, post_id, texto, clave?, ventana? }
+/* ctx = { env, request, waitUntil }; ev = { de, tipo, post_id, texto, clave?, ventana?, para? }  (v3.0: de = 'sistema' y para = M | xB en los avisos automáticos)
    Si se pasa "clave" y "ventana" (ms), no se repite el mismo aviso dentro de ese lapso (evita el spam al dar y quitar corazón).
    Nunca debe romper la acción principal: cualquier error se ignora. */
 export async function notificar(ctx, db, ev) {
   try {
-    const para = otraPersona(ev.de), ahora = Date.now();
+    const para = ev.para || otraPersona(ev.de), ahora = Date.now();   // v3.0: ev.para = avisos del sistema (recordatorios, novedades), que llegan a cada persona por separado
     if (ev.clave && ev.ventana) {
       const rep = await db.prepare('SELECT id FROM notificaciones WHERE para = ? AND clave = ? AND creado > ?').bind(para, ev.clave, ahora - ev.ventana).first();
       if (rep) return;
@@ -93,4 +93,9 @@ async function empujar(ctx, db, para) {
       if (r.status === 404 || r.status === 410) await db.prepare('DELETE FROM suscripciones WHERE endpoint = ?').bind(endpoint).run();
     } catch (e) { /* el servicio de push no respondió: se reintenta con el próximo aviso */ }
   }));
+}
+
+/* v3.0: aviso automático para LAS DOS personas (recordatorios del calendario, novedades de la app). de = 'sistema'. La clave evita repetirlo dentro de la ventana (ms) */
+export async function notificarATodos(ctx, db, ev) {
+  for (const para of IDENTIDADES) await notificar(ctx, db, { ...ev, de: 'sistema', para });
 }

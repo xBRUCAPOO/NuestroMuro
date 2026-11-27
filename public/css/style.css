@@ -75,6 +75,23 @@
   --color-dia-descartado: var(--color-error-texto);       /* descartado: rojo apagado y tachado */
   --color-dia-seguro: var(--color-success-texto);         /* seguro: verde */
 
+  /* ---- v3.0: paleta de 50 colores para las fechas del calendario (--dia-color-N; el N se elige en la ventana de la fecha). Los feriados son siempre grises ---- */
+  --dia-color-1: #ef4444; --dia-color-2: #f97316; --dia-color-3: #f59e0b; --dia-color-4: #eab308; --dia-color-5: #84cc16;
+  --dia-color-6: #22c55e; --dia-color-7: #10b981; --dia-color-8: #14b8a6; --dia-color-9: #06b6d4; --dia-color-10: #0ea5e9;
+  --dia-color-11: #3b82f6; --dia-color-12: #6366f1; --dia-color-13: #8b5cf6; --dia-color-14: #a855f7; --dia-color-15: #d946ef;
+  --dia-color-16: #ec4899; --dia-color-17: #f43f5e; --dia-color-18: #b91c1c; --dia-color-19: #c2410c; --dia-color-20: #b45309;
+  --dia-color-21: #a16207; --dia-color-22: #4d7c0f; --dia-color-23: #15803d; --dia-color-24: #047857; --dia-color-25: #0f766e;
+  --dia-color-26: #0e7490; --dia-color-27: #0369a1; --dia-color-28: #1d4ed8; --dia-color-29: #4338ca; --dia-color-30: #6d28d9;
+  --dia-color-31: #7e22ce; --dia-color-32: #a21caf; --dia-color-33: #be185d; --dia-color-34: #be123c; --dia-color-35: #fca5a5;
+  --dia-color-36: #fdba74; --dia-color-37: #fcd34d; --dia-color-38: #fde047; --dia-color-39: #bef264; --dia-color-40: #86efac;
+  --dia-color-41: #6ee7b7; --dia-color-42: #5eead4; --dia-color-43: #67e8f9; --dia-color-44: #7dd3fc; --dia-color-45: #93c5fd;
+  --dia-color-46: #a5b4fc; --dia-color-47: #c4b5fd; --dia-color-48: #d8b4fe; --dia-color-49: #64748b; --dia-color-50: #451a03;
+  --dia-color-feriado: var(--color-texto-suave);          /* feriados: gris */
+  /* ---- v3.0: etiquetas de las Novedades (patch notes): nuevo · mejora · arreglo ---- */
+  --color-nov-nuevo: var(--color-success);
+  --color-nov-mejora: var(--dia-color-10);
+  --color-nov-arreglo: var(--color-warning);
+
   /* v2.7: lista completada al 100 % (todo se pone verde) */
   --color-completo: var(--color-success);
   --color-completo-texto: var(--color-success-texto);
@@ -125,11 +142,38 @@
   --yo-texto: var(--color-acento-texto);
   --yo-gradiente: var(--gradiente-principal);
   --color-halo-yo: transparent;                          /* v2.1: resplandor de fondo con el color de la persona (se activa con data-yo) */
+
+  /* ---- v3.0: formato en vivo del editor y texto con formato ---- */
+  --color-marca-escrita: color-mix(in srgb, var(--color-texto-suave) 70%, transparent);   /* las marcas (* _ ~ # >…) se ven en gris mientras se escribe */
+  --color-resaltado: color-mix(in srgb, var(--color-warning) 38%, transparent);             /* ==resaltado== */
+  --color-codigo-fondo: color-mix(in srgb, var(--color-texto-suave) 22%, transparent);      /* fondo del código dentro del editor */
+  --color-seleccion: color-mix(in srgb, var(--yo) 38%, transparent);                        /* texto seleccionado dentro del editor */
+  /* ---- v3.0: casillas de las listas y tarjetas vencidas ("Expirado") ---- */
+  --color-casilla-vacia: #ECECEF;                                                           /* casilla sin completar: gris casi blanco */
+  --color-exp: #4A4A51;                                                                     /* tarjeta vencida: escala de grises oscuros */
+  --color-exp-oscuro: #2C2C31;
+  --color-exp-texto: #8F8F99;
+  --color-exp-fondo: color-mix(in srgb, var(--color-exp) 20%, var(--color-tarjeta));
+  /* ---- v3.0: colores del pincel y del texto del editor de imágenes (editor-imagen.js los lee de aquí) ---- */
+  --ei-contorno-texto: color-mix(in srgb, var(--color-negro) 55%, transparent);   /* contorno oscuro del texto que se pone sobre una foto (editor de imágenes) */
+  --ei-color-1: var(--color-blanco);
+  --ei-color-2: var(--color-negro);
+  --ei-color-3: var(--color-xb);
+  --ei-color-4: var(--color-m-vivo);
+  --ei-color-5: #FACC15;
+  --ei-color-6: #22C55E;
+  --ei-color-7: #FB923C;
+  --ei-color-8: #F472B6;
+  --color-editor-img: #0B0B0D;                           /* fondo del editor de imágenes (siempre oscuro, como el de WhatsApp) */
 }
 
 /* ---- Tema claro: solo cambia valores de variables; se activa con <html data-tema="claro"> ---- */
 :root[data-tema="claro"] {
   color-scheme: light;
+  --color-casilla-vacia: #F4F4F6;               /* v3.0 */
+  --color-exp: #9A9AA3;                         /* v3.0: tarjeta vencida en el tema claro (grises más oscuros que el fondo) */
+  --color-exp-oscuro: #6E6E77;
+  --color-exp-texto: #5B5B65;
   --color-fondo: #F3F3F5;
   --color-fondo-2: #E2E2E7;
   --color-tarjeta: var(--color-blanco);
@@ -366,9 +410,18 @@ textarea.campo__entrada { resize: vertical; min-height: 96px; }
 .modal__cuerpo { display: flex; flex-direction: column; gap: 12px; }
 .modal__acciones { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
 @media (min-width: 600px) { .modal-fondo { align-items: center; padding: 16px; } .modal { border-radius: var(--radio-md); } }
+/* v3.0: ventanas adaptadas a PC. En pantallas anchas los formularios (publicar, entrada, categoría, calendario) se ensanchan y nunca superan el alto de la pantalla (el contenido hace scroll dentro de la ventana) */
+@media (min-width: 900px) {
+  .modal { max-width: min(680px, 90vw); max-height: calc(100dvh - 48px); padding: 22px 24px 24px; }
+  .modal--chico { max-width: 420px; }
+  .modal--ancha { max-width: min(960px, 92vw); }
+}
+@media (min-width: 1280px) { .modal { max-width: min(760px, 70vw); } .modal--ancha { max-width: min(1100px, 80vw); } }
+@media (min-height: 0) { .modal { overscroll-behavior: contain; } }   /* el scroll de la ventana no arrastra al muro de atrás */
 
 /* Selector de tipo en "Nueva publicación" */
 .tipos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+@media (min-width: 900px) { .tipos { grid-template-columns: repeat(6, 1fr); } }   /* v3.0: en PC caben todos los tipos en una fila (va después de la regla base para que se aplique) */
 .tipo-btn { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px; border: 1px solid var(--color-gris); border-radius: var(--radio-md); background: var(--color-fondo); font-family: var(--fuente-titulo); font-size: 13px; font-weight: 700; color: var(--color-texto-suave); }
 .tipo-btn .material-symbols-rounded { font-size: 24px; }
 .tipo-btn:hover { border-color: var(--yo); color: var(--color-texto); }
@@ -578,7 +631,6 @@ input[type="search"]::-webkit-search-decoration, input[type="search"]::-webkit-s
 .formato .btn-icono[aria-pressed="true"] { background: color-mix(in srgb, var(--yo) 22%, transparent); color: var(--yo-texto); }
 .formato__sep { width: 1px; height: 20px; background: var(--color-gris); margin: 0 4px; }
 .formato__sep--der { margin-left: auto; background: none; }            /* empuja el ojo (vista previa) al extremo derecho */
-.formato + textarea.campo__entrada { border-top-left-radius: 0; border-top-right-radius: 0; }
 .md-previa { --c: var(--yo); --c-texto: var(--yo-texto); border: 1.5px dashed color-mix(in srgb, var(--yo) 55%, var(--color-gris)); border-radius: var(--radio-md); padding: 10px 12px; font-size: 14px; background: color-mix(in srgb, var(--yo) 6%, var(--color-fondo)); }
 
 /* ---------- Categorías ---------- */
@@ -820,10 +872,7 @@ html { scroll-behavior: smooth; }
 .dia, .cal-dia, .chip, .segmento__btn { transition: background-color var(--mov-rapido) var(--ease-suave), border-color var(--mov-rapido) var(--ease-suave), color var(--mov-rapido) var(--ease-suave), opacity var(--mov-medio) var(--ease-suave), transform var(--mov-rapido) var(--ease-suave); }
 .post.sale { animation: post-sale var(--mov-medio) var(--ease-entrada) forwards; pointer-events: none; }
 .pie { border-top: 1px solid var(--color-gris); }
-/* Quien prefiere menos movimiento (ajuste del sistema): todo pasa casi sin animar */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 1ms !important; animation-delay: 0ms !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
-}
+/* v3.0: se eliminó la regla prefers-reduced-motion que apagaba TODAS las animaciones. En muchos PC (Windows con "efectos de animación" desactivados) el navegador la activaba sola y por eso no se veía ninguna animación. Ahora las animaciones se ven siempre. */
 .svg-filtros { position: absolute; width: 0; height: 0; overflow: hidden; }   /* v2.7: contenedor del filtro SVG de la escena (no ocupa lugar) */
 
 /* ============================================================
@@ -896,7 +945,8 @@ body[data-vista="perfiles"] [data-solo-muro] { display: none !important; }   /* 
    ============================================================ */
 /* Barra de formato debajo del cuadro de texto: se pega a su borde inferior (el cuadro pierde las esquinas de abajo y la barra las de arriba) */
 .formato--abajo { margin-top: -6px; border: 1px solid var(--color-gris); border-top: none; border-radius: 0 0 var(--radio-md) var(--radio-md); }
-textarea.campo__entrada:has(+ .formato--abajo) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+/* v3.0: el cuadro ahora va dentro de .vivo (editor.js): es el envoltorio quien pierde las esquinas de abajo cuando la barra se le pega */
+.vivo:has(+ .formato--abajo), .vivo:has(+ .formato--abajo) > textarea.campo__entrada, .vivo:has(+ .formato--abajo) > .vivo__espejo { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 
 /* Círculo girando de "cargando" (con el color del perfil si está dentro de uno). .giro--chico es la versión pequeña del pie de las entradas */
 .giro { display: inline-block; flex-shrink: 0; width: 22px; height: 22px; border: 3px solid color-mix(in srgb, var(--c-texto, var(--yo-texto)) 25%, transparent); border-top-color: var(--c-texto, var(--yo-texto)); border-radius: 50%; animation: giro .8s linear infinite; }
@@ -908,7 +958,6 @@ textarea.campo__entrada:has(+ .formato--abajo) { border-bottom-left-radius: 0; b
 .entrada__img[data-listo]::after { display: none; }
 .entrada__img img { transition: transform var(--mov-medio) var(--ease-suave), opacity var(--mov-medio) var(--ease-suave); }
 .entrada__img:not([data-listo]) img { opacity: 0; }
-@media (prefers-reduced-motion: reduce) { .giro, .entrada__img::after, .cargando__icono { animation-duration: 1.2s !important; } }   /* el círculo sigue girando aunque se pidan pocas animaciones (si no, no se entiende que está cargando) */
 
 /* Respuestas a comentarios (hilos anidados). Cada comentario va dentro de un .hilo; sus respuestas, en .respuestas con una línea a la izquierda */
 .hilo { display: flex; flex-direction: column; gap: 6px; }
@@ -977,3 +1026,279 @@ body[data-vista="perfiles"] { overflow-x: clip; }
 .corazon-fx__chispa .material-symbols-rounded { font-size: 24px; }
 @keyframes corazon-onda { from { transform: scale(.3); opacity: .9; } to { transform: scale(3.6); opacity: 0; } }
 @keyframes corazon-chispa { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.2) rotate(0); } 15% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 26px)) scale(var(--esc)) rotate(var(--rot)); } }
+
+
+/* ============================================================================================================
+   v3.0 — Editor en vivo, campos que crecen, barra de formato completa y texto con formato ampliado
+   ============================================================================================================ */
+/* .vivo (editor.js): envoltorio del campo. Detrás del <textarea> (texto transparente, solo se ve el cursor) va el espejo con el mismo texto, ya con su formato */
+.vivo { position: relative; background: var(--color-fondo); border-radius: var(--radio-md); }
+.vivo > textarea.campo__entrada { position: relative; display: block; background: transparent; color: transparent; caret-color: var(--color-texto); resize: none; overflow-y: hidden; white-space: pre-wrap; overflow-wrap: break-word; }
+.vivo > textarea.campo__entrada::placeholder { color: var(--color-texto-suave); }
+.vivo > textarea.campo__entrada::selection { background: var(--color-seleccion); color: transparent; }
+textarea.campo__entrada[data-rico] { max-height: min(60dvh, 560px); }
+textarea.campo__entrada.campo__linea { min-height: 0; max-height: min(40dvh, 320px); }          /* campo de una línea: arranca de una línea y crece */
+.vivo__espejo { position: absolute; inset: 0; margin: 0; pointer-events: none; overflow: hidden; white-space: pre-wrap; overflow-wrap: break-word; color: var(--color-texto); border: 0 solid transparent; border-radius: var(--radio-md); }
+.fila .vivo, .comentar .vivo, .perfil__frase-caja--edita .vivo { flex: 1; min-width: 0; }
+/* Estilos del espejo: NINGUNO cambia el ancho de las letras (por eso la negrita es un trazo grueso y no font-weight), así el cursor nunca se desalinea */
+.v-m { color: var(--color-marca-escrita); -webkit-text-stroke: 0; font-style: normal; text-decoration: none; background: none; }   /* las marcas escritas: grises */
+.v-neg { -webkit-text-stroke: 0.55px currentColor; }
+.v-cur { font-style: italic; }
+.v-tac { text-decoration: line-through; }
+.v-sub { text-decoration: underline; text-underline-offset: 2px; }
+.v-res { background: var(--color-resaltado); border-radius: 2px; }
+.v-cod { background: var(--color-codigo-fondo); border-radius: 3px; }
+.v-enl { color: var(--yo-texto); text-decoration: underline; text-underline-offset: 2px; }
+.v-tit { color: var(--yo-texto); -webkit-text-stroke: 0.7px currentColor; }
+.v-cita { color: var(--color-texto-suave); font-style: italic; }
+.v-nota { color: var(--yo-texto); }
+
+/* Barra de formato: la misma lista de botones en las 3 barras. Los botones que necesitan varias líneas se esconden en los campos de una línea */
+.formato[data-modo="flota"] [data-multi] { display: none; }
+.formato[data-modo="flota"] .formato__sep { display: none; }
+.formato--flota { flex-wrap: nowrap; max-width: calc(100vw - 12px); overflow-x: auto; scrollbar-width: none; }
+.formato--flota::-webkit-scrollbar { display: none; }
+.formato--flota .btn-icono { flex: 0 0 auto; }
+/* Celular: la barra se ACOPLA encima del teclado, a todo el ancho, con los botones deslizables. La posición vertical la calcula script.js (visualViewport) */
+.formato--acoplada { width: 100%; max-width: none; border-radius: 0; border-left: 0; border-right: 0; padding: 4px 6px; box-shadow: 0 -6px 18px color-mix(in srgb, var(--color-negro) 35%, transparent); animation: none; }
+.formato--acoplada .btn-icono { width: 42px; height: 42px; }
+@media (max-width: 699px), (pointer: coarse) {
+  .formato--abajo { display: none; }                                  /* en el celular las barras fijas de abajo no van: se usa la acoplada al teclado */
+  .vivo:has(+ .formato--abajo), .vivo:has(+ .formato--abajo) > textarea.campo__entrada, .vivo:has(+ .formato--abajo) > .vivo__espejo { border-bottom-left-radius: var(--radio-md); border-bottom-right-radius: var(--radio-md); }
+  body.con-barra-flota .modal { padding-bottom: calc(18px + 56px + env(safe-area-inset-bottom)); }   /* deja lugar para que el campo suba por encima de la barra */
+}
+
+/* Texto con formato ampliado (md): línea separadora, tablas, resaltado, subrayado y notas al pie */
+.md-hr { border: 0; border-top: 1px solid var(--color-gris-claro); margin: 6px 0; width: 100%; }
+.md mark.md-res { background: var(--color-resaltado); color: inherit; border-radius: 2px; padding: 0 2px; }
+.md u { text-underline-offset: 2px; }
+.md-tabla { overflow-x: auto; max-width: 100%; }
+.md-tabla table { border-collapse: collapse; font-size: 13.5px; }
+.md-tabla th, .md-tabla td { border: 1px solid var(--color-gris); padding: 5px 9px; }
+.md-tabla th { background: var(--color-tarjeta-2); font-family: var(--fuente-titulo); font-weight: 700; }
+.md-nota { font-size: 0.72em; font-family: var(--fuente-hud); color: var(--c-texto, var(--yo-texto)); margin-left: 1px; }
+.md-notas { border-top: 1px dashed var(--color-gris); padding-top: 6px; font-size: 12.5px; color: var(--color-texto-suave); }
+.md-notas ol { padding-left: 20px; }
+
+/* ---------- v3.0: casillas de las listas (responsable + quién completó) ---------- */
+/* Sin completar: relleno gris casi blanco. Con responsable: el BORDE es de su color y no cambia nunca. Completada: el RELLENO es del color de quien la completó */
+.casilla { width: 20px; height: 20px; flex-shrink: 0; margin-top: 1px; border-radius: 5px; border: 2px solid var(--color-gris-claro); background: var(--color-casilla-vacia); display: inline-flex; align-items: center; justify-content: center; transition: background-color var(--mov-medio) var(--ease-suave), border-color var(--mov-medio) var(--ease-suave), transform var(--mov-medio) var(--ease-rebote); }
+.lista__item .casilla .material-symbols-rounded { font-size: 16px; color: var(--color-blanco); opacity: 0; transform: scale(0.3); transition: opacity var(--mov-rapido) var(--ease-suave), transform var(--mov-medio) var(--ease-rebote); }
+.casilla--para-M { border-color: var(--color-m-vivo); }
+.casilla--para-xB { border-color: var(--color-xb); }
+.casilla--por-M { background: var(--color-m-vivo); }
+.casilla--por-xB { background: var(--color-xb); }
+.casilla--por-M:not([class*="casilla--para-"]) { border-color: var(--color-m-vivo); }               /* sin responsable: el borde acompaña al relleno */
+.casilla--por-xB:not([class*="casilla--para-"]) { border-color: var(--color-xb); }
+.lista__item .casilla[class*="casilla--por-"] .material-symbols-rounded { opacity: 1; transform: scale(1); }
+.lista__item.hecho .casilla { transform: scale(1.08); }
+.fila__resp { flex-shrink: 0; }
+.fila__resp--asignado { padding: 0; }
+.filas--sinresp .fila__resp { display: none; }                                                      /* las opciones de una encuesta no tienen responsable */
+
+/* ---------- v3.0: tarjetas vencidas ("Expirado") ---------- */
+/* Plan cuyo último día ya pasó, lista / encuesta con fecha límite vencida: la tarjeta pasa a escala de grises oscuros y muestra el cartel */
+.post[data-expirado] { --c: var(--color-exp); --c-texto: var(--color-exp-texto); --c-gradiente: linear-gradient(135deg, var(--color-exp), var(--color-exp-oscuro)); background: var(--color-exp-fondo); }
+.post[data-expirado] .avatar, .post[data-expirado] .post__foto, .post[data-expirado] .casilla, .post[data-expirado] .dia { filter: grayscale(1); }
+.post[data-expirado] .post__titulo, .post[data-expirado] .post__texto { color: var(--color-exp-texto); }
+.post__expirado { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 6px; border: 1px solid var(--color-exp-texto); border-radius: var(--radio-sm); background: var(--color-exp-fondo); color: var(--color-exp-texto); font-family: var(--fuente-hud); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+.post__expirado .material-symbols-rounded { font-size: 16px; }
+.opcion:disabled { cursor: not-allowed; opacity: 0.75; }                                          /* v3.0: encuesta vencida: no se puede votar */
+.post[data-expirado] { --color-completo: var(--color-exp-texto); --color-completo-texto: var(--color-exp-texto); --color-completo-suave: color-mix(in srgb, var(--color-exp) 30%, transparent); }   /* v3.0: lo "completado" también se apaga en una tarjeta vencida */
+
+/* ---------- v3.0: editor de imágenes (recortar / dibujar / texto) ---------- */
+.ei { position: fixed; inset: 0; z-index: 400; display: flex; flex-direction: column; background: var(--color-editor-img); color: var(--color-blanco); animation: aparecer var(--mov-rapido) var(--ease-suave) both; }
+.ei__cab { display: flex; align-items: center; gap: 8px; padding: 10px 12px; padding-top: max(10px, env(safe-area-inset-top)); }
+.ei__titulo { flex: 1; font-family: var(--fuente-titulo); font-size: 15px; }
+.ei__listo { min-width: 96px; }
+.ei .btn-icono { color: var(--color-blanco); }
+.ei .btn-icono:disabled { opacity: 0.35; }
+.ei__escenario { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; touch-action: none; user-select: none; }
+.ei__lienzo { display: block; touch-action: none; box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-blanco) 18%, transparent); }
+.ei__escenario[data-modo="dibujar"] .ei__lienzo { cursor: crosshair; }
+.ei__escenario[data-modo="texto"] .ei__lienzo { cursor: move; }
+.ei__recorte { position: absolute; touch-action: none; }
+.ei__rec-caja { position: absolute; border: 2px solid var(--color-blanco); box-shadow: 0 0 0 9999px color-mix(in srgb, var(--color-negro) 62%, transparent); cursor: move;
+  background-image: linear-gradient(color-mix(in srgb, var(--color-blanco) 35%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--color-blanco) 35%, transparent) 1px, transparent 1px); background-size: 33.33% 33.33%; }   /* regla de tercios */
+.ei__asa { position: absolute; width: 26px; height: 26px; background: var(--color-blanco); border-radius: 50%; border: 3px solid var(--color-editor-img); }
+.ei__asa--nw { left: -13px; top: -13px; cursor: nwse-resize; } .ei__asa--ne { right: -13px; top: -13px; cursor: nesw-resize; }
+.ei__asa--sw { left: -13px; bottom: -13px; cursor: nesw-resize; } .ei__asa--se { right: -13px; bottom: -13px; cursor: nwse-resize; }
+.ei__pie { padding: 8px 12px calc(10px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; background: color-mix(in srgb, var(--color-blanco) 6%, var(--color-editor-img)); }
+.ei__sub { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+.ei__fila { display: flex; align-items: center; gap: 8px; width: 100%; max-width: 520px; justify-content: center; }
+.ei__fila input[type="range"] { flex: 1; accent-color: var(--color-blanco); }
+.ei__texto { flex: 1; min-width: 0; color: var(--color-texto); }
+.ei__chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.ei__chips .chip { color: var(--color-blanco); }
+.ei__chips .chip[aria-pressed="true"] { background: var(--color-blanco); color: var(--color-editor-img); }
+.ei__colores { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.ei__color { width: 28px; height: 28px; border-radius: 50%; background: var(--c); border: 2px solid color-mix(in srgb, var(--color-blanco) 55%, transparent); transition: transform var(--mov-rapido) var(--ease-rebote); }
+.ei__color[aria-pressed="true"] { transform: scale(1.25); border-color: var(--color-blanco); box-shadow: 0 0 0 2px var(--color-editor-img), 0 0 0 4px var(--color-blanco); }
+.ei__modos { display: flex; justify-content: center; gap: 6px; }
+.ei__modo { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 18px; border-radius: var(--radio-md); color: color-mix(in srgb, var(--color-blanco) 65%, transparent); font-size: 12px; font-family: var(--fuente-titulo); font-weight: 700; }
+.ei__modo[aria-pressed="true"] { background: color-mix(in srgb, var(--color-blanco) 16%, transparent); color: var(--color-blanco); }
+
+/* ---------- v3.0: reordenar entradas del perfil arrastrando desde el borde derecho ---------- */
+.perfil__lista { position: relative; }
+.entrada { padding-right: 38px; }                                                     /* lugar para el asa del lado derecho */
+.entrada__asa { position: absolute; top: 0; right: 0; bottom: 0; width: 32px; display: flex; align-items: center; justify-content: center; color: var(--color-texto-suave); cursor: grab; touch-action: none; border-radius: 0 var(--radio-md) var(--radio-md) 0; transition: background-color var(--mov-rapido) var(--ease-suave), color var(--mov-rapido) var(--ease-suave); }
+.entrada__asa:hover { background: color-mix(in srgb, var(--c) 12%, transparent); color: var(--c-texto); }
+.entrada__asa .material-symbols-rounded { font-size: 22px; }
+.entrada--arrastrando { z-index: 5; cursor: grabbing; box-shadow: 0 14px 34px color-mix(in srgb, var(--color-negro) 60%, transparent); transform-origin: center; }
+.entrada--arrastrando .entrada__asa { cursor: grabbing; color: var(--c-texto); }
+.entrada--desliza { transition: transform var(--mov-medio) var(--ease-salida); }
+body[data-vista="perfiles"].arrastrando-perfil { user-select: none; }
+
+/* ============================================================================================================
+   v3.0 — CALENDARIO DE AMOR (calendario.js)
+   Qué hace: estilos de la vista "Calendario" (mes + lista), la ventana de una fecha, el detalle, la ventanita flotante y las marcas en el selector de días de un plan.
+   Colores: cada fecha define --c (= var(--dia-color-N) de :root); nada se escribe a mano acá. Lo expirado usa las variables --color-exp*.
+   ============================================================================================================ */
+body[data-vista="calendario"] [data-solo-muro] { display: none !important; }              /* en el calendario se esconden portada, filtros y muro */
+body[data-vista="calendario"] #btnNotif { display: none !important; }                     /* la campanita se cambia por "volver al muro" */
+body[data-vista="calendario"] #btnVolver { display: inline-flex; }
+body[data-vista="calendario"] #btnCalendario { display: none !important; }
+.calv { display: flex; flex-direction: column; gap: 14px; }
+.calv__cab { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 4px 12px; }
+.calv__cab > .material-symbols-rounded { font-size: 34px; color: var(--yo-texto, var(--color-acento-texto)); grid-row: span 2; }
+.calv__titulo { font-family: var(--fuente-titulo); font-size: 20px; }
+.calv__sub { color: var(--color-texto-suave); font-size: 14px; }
+.calv__pestanas { align-self: center; }
+.calv__pestanas .segmento__btn { display: inline-flex; align-items: center; gap: 6px; }
+.calv__pestanas .segmento__btn .material-symbols-rounded { font-size: 18px; }
+.calv__cuerpo { display: flex; flex-direction: column; gap: 14px; }
+.calv__tarjeta { display: flex; flex-direction: column; gap: 12px; }
+.calv__nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.calv__mes { font-family: var(--fuente-titulo); font-size: 18px; flex: 1; text-align: center; min-width: 130px; }
+.calv__hoy { padding: 6px 10px; font-size: 13px; }
+.calv__hoy .material-symbols-rounded { font-size: 18px; }
+.calv__semana, .calv__dias { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.calv__semana span { text-align: center; font-family: var(--fuente-hud); font-size: 12px; color: var(--color-texto-suave); }
+.calv__rejilla { position: relative; }
+.calv__dia { position: relative; aspect-ratio: 1; min-height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px; padding: 4px 2px 3px; border: 1px solid var(--color-gris); border-radius: var(--radio-md); background: var(--color-fondo); color: var(--color-texto); overflow: hidden; user-select: none; transition: background var(--mov-rapido) var(--ease-suave), border-color var(--mov-rapido) var(--ease-suave), transform var(--mov-rapido) var(--ease-suave); }
+.calv__dia:hover { background: var(--color-acento-suave); transform: translateY(-1px); }
+.calv__dia--con { border-color: color-mix(in srgb, var(--c) 65%, var(--color-gris)); background: color-mix(in srgb, var(--c) 14%, var(--color-fondo)); }
+.calv__dia--con:hover { background: color-mix(in srgb, var(--c) 26%, var(--color-fondo)); }
+.calv__dia--hoy { box-shadow: 0 0 0 2px var(--color-acento-borde); }
+.calv__dia--hoy .calv__num { color: var(--color-acento-texto); font-weight: 700; }
+.calv__dia--exp { border-color: var(--color-exp); background: var(--color-exp-fondo); filter: grayscale(1); }
+.calv__vacio { aspect-ratio: 1; }
+.calv__num { font-family: var(--fuente-hud); font-size: 14px; line-height: 1; }
+.calv__marcas { display: flex; flex-direction: column; align-items: stretch; gap: 2px; width: 100%; min-width: 0; }
+.calv__marca { display: block; height: 4px; border-radius: 2px; background: var(--c); }                /* en el celular: rayitas de color */
+.calv__marca--exp { background: var(--color-exp-texto); }
+.calv__marca-txt { display: none; }
+.calv__mas { font-family: var(--fuente-hud); font-size: 10px; line-height: 1; color: var(--color-texto-suave); text-align: center; }
+@media (min-width: 720px) {                                                                         /* en PC: el nombre escrito dentro de cada día */
+  .calv__dia { aspect-ratio: auto; min-height: 92px; align-items: stretch; padding: 6px 6px 5px; }
+  .calv__num { align-self: flex-start; font-size: 15px; }
+  .calv__marca { height: auto; padding: 1px 6px; background: color-mix(in srgb, var(--c) 30%, var(--color-fondo)); border-left: 3px solid var(--c); border-radius: var(--radio-sm); min-width: 0; }
+  .calv__marca--exp { background: var(--color-exp-fondo); border-left-color: var(--color-exp); }
+  .calv__marca-txt { display: block; font-size: 11px; line-height: 1.25; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--color-texto); }
+  .calv__mas { font-size: 12px; text-align: left; }
+  .calv__vacio { aspect-ratio: auto; min-height: 92px; }
+}
+.calv__lineas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }   /* línea que une los días de un mismo plan */
+.calv__linea { stroke: var(--c); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 1 7; opacity: .95; }
+.calv__nodo { fill: var(--c); stroke: var(--color-fondo); stroke-width: 1.5; }
+.calv__ayuda { display: flex; align-items: center; gap: 6px; }
+.calv__ayuda .material-symbols-rounded { font-size: 18px; }
+.calv__interruptor { display: inline-flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: var(--radio-sm); font-size: 13px; color: var(--color-texto-suave); }
+.calv__interruptor-riel { width: 34px; height: 20px; border-radius: 10px; background: var(--color-gris); display: inline-flex; align-items: center; padding: 2px; transition: background var(--mov-rapido) var(--ease-suave); }
+.calv__interruptor-bola { width: 16px; height: 16px; border-radius: 50%; background: var(--color-texto-suave); transition: transform var(--mov-rapido) var(--ease-suave), background var(--mov-rapido) var(--ease-suave); }
+.calv__interruptor[aria-checked="true"] .calv__interruptor-riel { background: var(--color-acento-borde); }
+.calv__interruptor[aria-checked="true"] .calv__interruptor-bola { transform: translateX(14px); background: var(--color-blanco); }
+.calv__filtros { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.calv__lista { display: flex; flex-direction: column; gap: 8px; }
+.calv__fila { display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 12px; border: 1px solid var(--color-gris); border-left: 4px solid var(--c); border-radius: var(--radio-md); background: var(--color-fondo); transition: background var(--mov-rapido) var(--ease-suave), transform var(--mov-rapido) var(--ease-suave); }
+.calv__fila:hover { background: color-mix(in srgb, var(--c) 12%, var(--color-fondo)); transform: translateX(2px); }
+.calv__fila-icono { color: var(--c); display: inline-flex; }
+.calv__fila-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.calv__fila-nombre { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calv__fila-cuando { font-size: 12px; color: var(--color-texto-suave); }
+.calv__fila-cuenta { font-family: var(--fuente-hud); font-size: 13px; white-space: nowrap; color: var(--color-texto-suave); }
+.calv__fila-cuenta--ya { color: var(--c); font-weight: 700; }
+.calv__fila--exp, .calv__tarjeta-dia--exp { --c: var(--color-exp-texto); background: var(--color-exp-fondo); border-color: var(--color-exp); color: var(--color-exp-texto); filter: grayscale(1); }
+.calv__fila--exp .calv__fila-cuenta { color: var(--color-exp-texto); text-transform: uppercase; letter-spacing: .06em; }
+/* detalle de una fecha */
+.calv__tarjeta-dia { display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 1px solid var(--color-gris); border-left: 4px solid var(--c); border-radius: var(--radio-md); background: var(--color-fondo); }
+.calv__tarjeta-cab { display: flex; align-items: flex-start; gap: 10px; }
+.calv__tarjeta-icono { color: var(--c); display: inline-flex; }
+.calv__tarjeta-tit { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.calv__tarjeta-tit h3 { font-family: var(--fuente-titulo); font-size: 17px; overflow-wrap: anywhere; }
+.calv__tarjeta-cuando { font-size: 13px; color: var(--color-texto-suave); }
+.calv__cuenta { font-family: var(--fuente-hud); font-size: 13px; padding: 3px 8px; border-radius: var(--radio-sm); background: color-mix(in srgb, var(--c) 18%, transparent); white-space: nowrap; }
+.calv__cuenta--ya { background: var(--c); color: var(--color-blanco); font-weight: 700; }
+.calv__tarjeta-datos { display: flex; gap: 6px 12px; flex-wrap: wrap; }
+.calv__dato { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--color-texto-suave); }
+.calv__dato .material-symbols-rounded { font-size: 18px; }
+.calv__tarjeta-acciones { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.calv__tarjeta-dia--exp .calv__cuenta { background: transparent; color: var(--color-exp-texto); text-transform: uppercase; letter-spacing: .06em; }
+/* ventana de una fecha: colores */
+.calv__colores { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; }
+.calv__color { aspect-ratio: 1; border-radius: 50%; background: var(--c); border: 2px solid transparent; transition: transform var(--mov-rapido) var(--ease-suave), border-color var(--mov-rapido) var(--ease-suave); }
+.calv__color:hover { transform: scale(1.12); }
+.calv__color[aria-pressed="true"] { border-color: var(--color-texto); box-shadow: 0 0 0 2px var(--color-tarjeta), 0 0 0 4px var(--c); transform: scale(1.1); }
+.calv__fila-doble { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.calv__rango { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+/* ventanita flotante (mantener apretado un día del selector de plan) */
+.dia-flota { position: fixed; z-index: 120; width: min(300px, calc(100vw - 16px)); display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--color-tarjeta); border: 1px solid var(--color-acento-borde); border-top: 2px solid var(--yo, var(--color-acento)); border-radius: var(--radio-md); box-shadow: var(--sombra-tarjeta); animation: modal-entra var(--mov-rapido) var(--ease-salida) backwards; }
+.dia-flota__fecha { font-family: var(--fuente-titulo); font-size: 14px; display: block; }
+.dia-flota__fecha::first-letter { text-transform: uppercase; }   /* solo la primera letra en mayúscula ("Lunes 23 de noviembre…") */
+.dia-flota__fila { display: flex; align-items: flex-start; gap: 8px; padding-left: 8px; border-left: 3px solid var(--c); }
+.dia-flota__fila > .material-symbols-rounded { color: var(--c); font-size: 20px; }
+.dia-flota__txt { display: flex; flex-direction: column; min-width: 0; }
+.dia-flota__nombre { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.dia-flota__cuenta, .dia-flota__vacio { font-size: 12px; color: var(--color-texto-suave); }
+.dia-flota__fila--exp { --c: var(--color-exp-texto); filter: grayscale(1); opacity: .8; }
+/* selector de días de un plan: el día muestra rayitas con el color de las fechas importantes que ya tiene */
+.cal-dia { user-select: none; -webkit-touch-callout: none; }
+.cal-dia--pasado { color: var(--color-gris-claro); opacity: 0.45; cursor: default; }   /* v3.0: día pasado (no se puede elegir) */
+.cal-dia--info { border-color: color-mix(in srgb, var(--dc) 60%, var(--color-gris)); }
+.cal-dia__marcas { position: absolute; left: 4px; right: 4px; bottom: 3px; display: flex; gap: 2px; justify-content: center; pointer-events: none; }
+.cal-dia__marcas i { flex: 1; max-width: 12px; height: 3px; border-radius: 2px; background: var(--dc); }
+
+/* ============================================================================================================
+   v3.0 — AJUSTES (menú del engranaje) y NOVEDADES (patch notes)
+   Qué hace: el engranaje de la barra superior abre un menú con el tema como interruptor y el resumen de la última actualización;
+   "Ver todas" abre la ventana con todas las novedades (una tarjeta de color por versión, etiquetas Nuevo / Mejora / Arreglo).
+   ============================================================================================================ */
+.ajustes-btn { position: relative; }
+.ajustes-btn__punto { position: absolute; top: 4px; right: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--yo-gradiente); box-shadow: 0 0 0 2px var(--color-tarjeta); }
+.menu-ajustes { position: fixed; z-index: 90; width: min(360px, calc(100vw - 16px)); max-height: calc(100dvh - 80px); overflow: auto; display: flex; flex-direction: column; gap: 10px; padding: 14px; background: var(--color-tarjeta); border: 1px solid var(--color-acento-borde); border-top: 2px solid var(--yo); border-radius: var(--radio-md); box-shadow: var(--sombra-tarjeta); transform-origin: top right; animation: modal-entra var(--mov-rapido) var(--ease-salida) backwards; overscroll-behavior: contain; }
+.menu-ajustes[hidden] { display: none; }
+.menu-ajustes__fila { display: flex; align-items: center; gap: 12px; }
+.menu-ajustes__fila > .material-symbols-rounded { font-size: 26px; color: var(--yo-texto); }
+.menu-ajustes__texto { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.menu-ajustes__texto small { color: var(--color-texto-suave); font-size: 12px; }
+.menu-ajustes__nov { display: flex; flex-direction: column; gap: 10px; }
+.menu-ajustes__nov-cab { display: flex; align-items: center; gap: 8px; font-family: var(--fuente-titulo); }
+.menu-ajustes__nov-cab .material-symbols-rounded { color: var(--yo-texto); }
+.interruptor { display: inline-flex; align-items: center; padding: 2px; }
+.interruptor__riel { width: 46px; height: 26px; border-radius: 13px; background: var(--color-gris); display: inline-flex; align-items: center; padding: 3px; transition: background var(--mov-rapido) var(--ease-suave); }
+.interruptor__bola { width: 20px; height: 20px; border-radius: 50%; background: var(--color-texto-suave); transition: transform var(--mov-medio) var(--ease-rebote), background var(--mov-rapido) var(--ease-suave); }
+.interruptor[aria-checked="true"] .interruptor__riel { background: var(--yo); }
+.interruptor[aria-checked="true"] .interruptor__bola { transform: translateX(20px); background: var(--color-blanco); }
+/* tarjetas de novedades: cada versión con su color (--c) */
+.nov { --c: var(--dia-color-11); display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--color-gris); border-left: 4px solid var(--c); border-radius: var(--radio-md); background: color-mix(in srgb, var(--c) 7%, var(--color-fondo)); }
+.nov__cab { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.nov__version { font-family: var(--fuente-hud); font-size: 13px; padding: 2px 8px; border-radius: var(--radio-sm); background: var(--c); color: var(--color-blanco); font-weight: 700; }
+.nov__fecha { font-family: var(--fuente-hud); font-size: 12px; color: var(--color-texto-suave); margin-left: auto; }
+.nov__titulo { font-family: var(--fuente-titulo); font-size: 16px; }
+.nov__resumen { font-size: 13px; color: var(--color-texto-suave); }
+.nov__items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.nov__item { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; }
+.nov__tag { flex-shrink: 0; min-width: 62px; text-align: center; padding: 1px 6px; border-radius: var(--radio-sm); font-family: var(--fuente-hud); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--color-texto); background: color-mix(in srgb, var(--t) 28%, transparent); border: 1px solid color-mix(in srgb, var(--t) 70%, transparent); }
+.nov__tag--nuevo { --t: var(--color-nov-nuevo); }
+.nov__tag--mejora { --t: var(--color-nov-mejora); }
+.nov__tag--arreglo { --t: var(--color-nov-arreglo); }
+.nov-lista { max-height: 70dvh; overflow-y: auto; overscroll-behavior: contain; }
+.nov-resumen .nov { padding: 10px; }
+/* notificaciones: el ícono de cada aviso toma el color de quien lo hizo (azul M / rojo xB; los automáticos, gris) */
+.notif--de-M .notif__boton > .material-symbols-rounded, .notif--de-M.notif--nueva .notif__boton > .material-symbols-rounded { color: var(--color-m-texto); }
+.notif--de-xB .notif__boton > .material-symbols-rounded, .notif--de-xB.notif--nueva .notif__boton > .material-symbols-rounded { color: var(--color-xb-texto); }
+.notif--de-sistema .notif__boton > .material-symbols-rounded { color: var(--color-acento-texto); }
+.notif__boton > .material-symbols-rounded { font-size: 24px; }
+
+/* v3.0: con la barra de formato acoplada encima del teclado, las ventanas dejan lugar al pie (si no, la barra tapa el botón de guardar al llegar al final) */
+body.con-barra-acoplada .modal { padding-bottom: calc(18px + 64px + env(safe-area-inset-bottom)); }

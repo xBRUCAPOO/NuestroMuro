@@ -39,7 +39,7 @@ export function validarEntrada(c) {
 
 /* Entradas (con la lista de sus imágenes) de uno o de todos los perfiles, de la más nueva a la más vieja */
 export async function leerEntradas(db, id = null) {
-  const sql = `SELECT id, perfil, icono, titulo, texto, autor, creado, actualizado FROM perfil_entradas ${id ? 'WHERE id = ?' : ''} ORDER BY creado DESC`;
+  const sql = `SELECT id, perfil, icono, titulo, texto, autor, creado, actualizado, orden FROM perfil_entradas ${id ? 'WHERE id = ?' : ''} ORDER BY creado DESC`;
   const { results } = await (id ? db.prepare(sql).bind(id) : db.prepare(sql)).all();
   if (!results.length) return [];
   const { results: imgs } = await db.prepare('SELECT id, entrada, w, h FROM perfil_imagenes ORDER BY entrada, orden').all();

@@ -90,11 +90,23 @@ const TABLAS = [
   `CREATE INDEX IF NOT EXISTS idx_pentradas_perfil ON perfil_entradas(perfil, creado DESC)`,
   `CREATE TABLE IF NOT EXISTS perfil_imagenes (id TEXT PRIMARY KEY, entrada TEXT NOT NULL, orden INTEGER NOT NULL, imagen TEXT NOT NULL, w INTEGER, h INTEGER)`,
   `CREATE INDEX IF NOT EXISTS idx_pimagenes_entrada ON perfil_imagenes(entrada, orden)`,
+  /* NUEVO v3.0: calendario de fechas importantes (del proyecto "Calendario de Amor").
+     anio NULL = se repite todos los años (recurrente); anio con valor = fecha de una sola vez. fin_dia/fin_mes = último día de un rango.
+     recordar = avisar desde N días antes. grupo = id de la publicación de tipo plan que generó este día (días "ligados" a un plan: se crean, cambian y borran solos);
+     estado = estado del día dentro del plan (posible, ideal, descartado, seguro). color = 1…50 (--dia-color-N en el CSS). */
+  `CREATE TABLE IF NOT EXISTS dias_importantes (
+     id TEXT PRIMARY KEY, dia INTEGER NOT NULL, mes INTEGER NOT NULL, anio INTEGER, nombre TEXT NOT NULL, descripcion TEXT,
+     color INTEGER NOT NULL DEFAULT 1, categoria TEXT NOT NULL DEFAULT 'otro', recordar INTEGER, fin_dia INTEGER, fin_mes INTEGER,
+     grupo TEXT, estado TEXT, autor TEXT, creado INTEGER NOT NULL, actualizado INTEGER NOT NULL)`,
+  `CREATE INDEX IF NOT EXISTS idx_dias_grupo ON dias_importantes(grupo)`,
 ];
 let preparada = null;   // promesa: la preparación corre una sola vez por instancia del servidor
 
 async function preparar(env) {
   await env.DB.batch(TABLAS.map((s) => env.DB.prepare(s)));
+  /* v3.0: columna "orden" de las entradas de perfil (orden elegido arrastrando; NULL = sin orden propio). Se agrega una sola vez a las bases ya existentes. */
+  const tieneOrden = await env.DB.prepare(`SELECT 1 AS x FROM pragma_table_info('perfil_entradas') WHERE name = 'orden'`).first();
+  if (!tieneOrden) await env.DB.prepare('ALTER TABLE perfil_entradas ADD COLUMN orden REAL').run();
   /* Carga inicial: el INSERT de la marca "semilla" solo cambia 1 fila la primera vez en la vida de la base, así que
      aunque dos instancias arranquen a la vez, las publicaciones iniciales se cargan una sola vez. */
   const r = await env.DB.prepare(`INSERT INTO meta (clave, valor) VALUES ('semilla', '1') ON CONFLICT(clave) DO NOTHING`).run();
@@ -140,10 +152,14 @@ export function construirDatos(tipo, entrada, previo = {}) {
   const datos = { corazones: Array.isArray(previo.corazones) ? previo.corazones : [] };
   if (tipo === 'lista') {
     if (!Array.isArray(e.items) || !e.items.length) return { error: 'La lista necesita al menos un elemento.' };
+    /* v3.0: cada elemento puede tener un RESPONSABLE ("para": M o xB; no cambia nunca salvo editando la lista) y guarda QUIÉN lo completó ("por") */
     datos.items = e.items.slice(0, LIMITES.maxItems)
-      .map((i) => ({ t: limpiar(i && i.t, LIMITES.item), hecho: !!(i && i.hecho) })).filter((i) => i.t);
+      .map((i) => ({ t: limpiar(i && i.t, LIMITES.item), hecho: !!(i && i.hecho),
+        ...(i && IDENTIDADES.includes(i.para) ? { para: i.para } : {}), ...(i && i.hecho && IDENTIDADES.includes(i.por) ? { por: i.por } : {}) })).filter((i) => i.t);
+    if (fechaValida(e.limite)) datos.limite = e.limite;                // v3.0: fecha límite opcional (pasada esa fecha la lista se ve "Expirado")
     if (!datos.items.length) return { error: 'La lista necesita al menos un elemento.' };
   } else if (tipo === 'encuesta') {
+    if (fechaValida(e.limite)) datos.limite = e.limite;                // v3.0: fecha límite opcional: pasada esa fecha ya no se puede votar y se ve "Expirado"
     if (previo.opciones) datos.opciones = previo.opciones;   // las opciones y votos no se editan
     else {
       const ops = (Array.isArray(e.opciones) ? e.opciones : []).map((o) => limpiar(typeof o === 'string' ? o : o && o.t, LIMITES.item)).filter(Boolean).slice(0, LIMITES.maxOpciones);
@@ -186,6 +202,9 @@ export function construirDatos(tipo, entrada, previo = {}) {
   }
   return { datos };
 }
+
+/* v3.0: fecha de HOY en Argentina ("AAAA-MM-DD", UTC-3): sirve para saber si algo con fecha límite ya expiró y para los recordatorios del calendario */
+export const hoyAR = (ahora = Date.now()) => new Date(ahora - 3 * 3600 * 1000).toISOString().slice(0, 10);
 
 /* ---------- Planes (NUEVO v2.3) ---------- */
 /* Estados de un día, en el orden en que se recorren al tocarlos: posible → ideal → descartado → seguro */

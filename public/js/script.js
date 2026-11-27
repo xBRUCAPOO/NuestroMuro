@@ -118,7 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const a = b.nodeType === 1 ? porClave.get(b.getAttribute('data-k')) : null;
         if (!a || a.tagName !== b.tagName) return b;
         porClave.delete(b.getAttribute('data-k'));
-        if (!a.matches('textarea.comentar__campo')) morph(a, b, false);
+        if (!a.matches('textarea.comentar__campo, .vivo')) morph(a, b, false);   // v3.0: el envoltorio .vivo (cuadro de comentario con formato en vivo) también se conserva
         return a;
       });
       hv.forEach((n) => { if (!final.includes(n)) n.remove(); });
@@ -132,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!a) { viejo.append(b); continue; }
       if (a.nodeType === 3 && b.nodeType === 3) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; continue; }
       if (a.nodeType === 1 && b.nodeType === 1) {
-        if (a.matches('textarea.comentar__campo') && b.matches('textarea.comentar__campo')) continue;   // el cuadro de comentario se queda tal cual (con lo que se está escribiendo)
+        if ((a.matches('textarea.comentar__campo') && b.matches('textarea.comentar__campo')) || (a.classList.contains('vivo') && b.classList.contains('vivo'))) continue;   // el cuadro de comentario se queda tal cual (con lo que se está escribiendo); v3.0: dentro de su envoltorio .vivo
         if (a.tagName === b.tagName) { morph(a, b, false); continue; }
       }
       a.replaceWith(b);
@@ -185,12 +185,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ===== Ventanas (abrir / cerrar con animación) ===== */
+  let ignorarPop = 0;                    // v3.0: cuántos "popstate" provocados por el propio script hay que ignorar
   function abrirModal(el) {
     el.classList.remove('saliendo'); el.hidden = false;
     document.body.classList.add('modal-abierto');
+    window.Editor.refrescarTodo(el);                                  // v3.0: los campos que crecen se miden al abrir la ventana (antes estaban ocultos)
+    marcarLimpio(el.id);                                              // v3.0: lo que hay en el formulario al abrirlo es el punto de partida para detectar cambios sin guardar
+    /* v3.0: cada ventana (menos la de acceso y la de confirmar) añade un paso al historial del navegador: así el botón "atrás" del celular o del
+       navegador cierra la ventana (preguntando si hay cambios sin guardar) en vez de salirse de la página */
+    if (!el._enHistoria && el.id !== 'modalAcceso' && el.id !== 'modalConfirmar') { history.pushState({ muroModal: el.id }, ''); el._enHistoria = true; }
   }
   function cerrarModal(el) {
     if (el.hidden) return;
+    if (el._enHistoria) { el._enHistoria = false; ignorarPop++; history.back(); }   // v3.0: se quita el paso del historial que puso abrirModal (popstate lo ignora)
     if (typeof ocultarBarraFlota === 'function') ocultarBarraFlota();   // v2.7: la barra de formato flotante no queda suelta al cerrar una ventana
     el.classList.add('saliendo');
     /* v2.8: si la ventana se volvió a abrir mientras se cerraba (ej.: el servidor rechazó lo que se acababa de enviar y se reabre con lo escrito), el cierre pendiente se cancela */
@@ -206,14 +213,103 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  /* ===== Botón de tema ===== */
-  /* Qué hace: alterna claro/oscuro y cambia su icono (sol = "pasar a claro", luna = "pasar a oscuro") y su etiqueta accesible. */
-  Tema.alCambiar((t) => {
-    const claro = t === 'claro', b = $('btnTema');
-    b.querySelector('.material-symbols-rounded').textContent = claro ? 'dark_mode' : 'light_mode';
-    b.setAttribute('aria-label', claro ? 'Cambiar a tema oscuro' : 'Cambiar a tema claro');
+  /* ----- v3.0: avisar antes de salir de un formulario con cambios sin guardar -----
+     Qué hace: al abrir un formulario se guarda una "foto" de lo que tiene (instantaneas[id]()). Si se intenta cerrarlo (botón X, Cancelar, tocar afuera,
+     Esc o el botón "atrás" del celular / navegador) y la foto cambió, pregunta si de verdad se quiere salir porque los cambios no guardados se perderán.
+     Si no hubo cambios, se cierra sin preguntar. Para qué sirve: no perder por accidente lo que se estaba escribiendo. */
+  const instantaneas = {}, basesLimpias = new Map();
+  function marcarLimpio(id) { if (instantaneas[id]) { try { basesLimpias.set(id, instantaneas[id]()); } catch (e) { basesLimpias.delete(id); } } }
+  function haySinGuardar(id) { if (!instantaneas[id] || !basesLimpias.has(id)) return false; try { return instantaneas[id]() !== basesLimpias.get(id); } catch (e) { return false; } }
+  /* Devuelve true si se puede cerrar la ventana (no hay cambios o la persona confirmó que quiere salir) */
+  async function permitirSalida(el) {
+    if (!haySinGuardar(el.id)) return true;
+    return confirmar({ titulo: '¿Salir sin guardar?', texto: 'Hiciste cambios que todavía no se guardaron. Si sales ahora, se van a perder.', boton: 'Salir sin guardar' });
+  }
+  let cerrandoConAviso = false;          // evita abrir dos avisos a la vez (doble toque)
+  async function intentarCerrar(el) {
+    if (el.hidden || el.classList.contains('saliendo') || cerrandoConAviso) return;
+    cerrandoConAviso = true;
+    try { if (await permitirSalida(el)) cerrarModal(el); } finally { cerrandoConAviso = false; }
+  }
+  /* Botón "atrás": el navegador ya quitó el paso del historial; si hay cambios y la persona decide quedarse, se vuelve a poner */
+  window.addEventListener('popstate', async () => {
+    if (ignorarPop > 0) { ignorarPop--; return; }
+    const abiertas = [...document.querySelectorAll('.modal-fondo:not([hidden])')].filter((m) => m._enHistoria && !m.classList.contains('saliendo'));
+    const el = abiertas[abiertas.length - 1];
+    if (!el) return;
+    if (!$('modalConfirmar').hidden) { history.pushState({ muroModal: el.id }, ''); return; }   // ya hay una pregunta en pantalla: "atrás" no hace nada
+    el._enHistoria = false;
+    if (await permitirSalida(el)) cerrarModal(el);
+    else { history.pushState({ muroModal: el.id }, ''); el._enHistoria = true; }
   });
-  $('btnTema').addEventListener('click', Tema.alternar);
+
+  /* ===== AJUSTES (v3.0): engranaje → menú con el tema como interruptor y las novedades =====
+     Qué hace: el botón del tema pasó a ser un interruptor dentro de este menú. Abajo se muestra el resumen de la última actualización y un botón para ver todas.
+     Un puntito en el engranaje avisa que hay una actualización que todavía no se vio. */
+  Tema.alCambiar((t) => {
+    const oscuro = t !== 'claro', sw = $('switchTema');
+    sw.setAttribute('aria-checked', String(oscuro));
+    sw.setAttribute('aria-label', oscuro ? 'Desactivar el modo oscuro' : 'Activar el modo oscuro');
+    $('temaIcono').textContent = oscuro ? 'dark_mode' : 'light_mode';
+    $('temaEstado').textContent = oscuro ? 'Activado' : 'Desactivado (tema claro)';
+  });
+  $('switchTema').addEventListener('click', Tema.alternar);
+  const menuAj = $('menuAjustes'), btnAj = $('btnAjustes');
+  function cerrarAjustes() { if (menuAj.hidden) return; menuAj.hidden = true; btnAj.setAttribute('aria-expanded', 'false'); }
+  function abrirAjustes() {
+    const r = btnAj.getBoundingClientRect();
+    menuAj.style.top = Math.round(r.bottom + 8) + 'px'; menuAj.style.right = Math.max(8, Math.round(window.innerWidth - r.right - 4)) + 'px';
+    menuAj.hidden = false; btnAj.setAttribute('aria-expanded', 'true');
+    cargarNovedades().then(() => { pintarNovedadResumen(); marcarNovedadVista(); });
+  }
+  btnAj.addEventListener('click', (e) => { e.stopPropagation(); if (menuAj.hidden) abrirAjustes(); else cerrarAjustes(); });
+  document.addEventListener('pointerdown', (e) => { if (!menuAj.hidden && !menuAj.contains(e.target) && !btnAj.contains(e.target)) cerrarAjustes(); });
+  window.addEventListener('resize', cerrarAjustes);
+  /* Novedades: se piden una vez por sesión a /api/novedades */
+  let novedades = null;
+  const NOV_COLORES = [11, 6, 14, 3, 9, 16, 2, 13];                    // --dia-color-N que van rotando: cada versión con su color
+  const NOV_TIPOS = { nuevo: 'Nuevo', mejora: 'Mejora', arreglo: 'Arreglo' };
+  async function cargarNovedades() {
+    if (novedades) return novedades;
+    try { novedades = (await api('/novedades')).novedades; } catch (e) { novedades = null; }
+    return novedades;
+  }
+  /* Tarjeta de una versión (con color propio y etiquetas de color por tipo de cambio) */
+  function tarjetaNovedad(n, indice, conItems = true) {
+    const t = h('article', { class: 'nov' },
+      h('div', { class: 'nov__cab' }, h('span', { class: 'nov__version', text: 'v' + n.version }), h('strong', { class: 'nov__titulo', text: n.titulo }), h('span', { class: 'nov__fecha', text: n.fecha.split('-').reverse().join('/') })),
+      h('p', { class: 'nov__resumen', text: n.resumen }),
+      conItems ? h('ul', { class: 'nov__items' }, ...n.items.map((i) => h('li', { class: 'nov__item' }, h('span', { class: `nov__tag nov__tag--${i.t}`, text: NOV_TIPOS[i.t] || i.t }), h('span', { text: i.texto })))) : null);
+    t.style.setProperty('--c', `var(--dia-color-${NOV_COLORES[indice % NOV_COLORES.length]})`);
+    return t;
+  }
+  function pintarNovedadResumen() {
+    const caja = $('novResumen');
+    if (!novedades || !novedades.length) return void caja.replaceChildren(h('span', { class: 'campo__ayuda', text: 'No se pudieron cargar las novedades.' }));
+    caja.replaceChildren(tarjetaNovedad(novedades[0], 0, false));
+  }
+  /* Puntito del engranaje: la última versión que esta persona ya vio se guarda en este dispositivo */
+  const CLAVE_NOV = () => 'muro_nov_visto_' + (yo || '');
+  function marcarNovedadVista() {
+    if (!novedades || !novedades.length) return;
+    try { localStorage.setItem(CLAVE_NOV(), novedades[0].version); } catch (e) { /* sin almacenamiento */ }
+    $('ajustesPunto').hidden = true;
+  }
+  async function revisarPuntoNovedad() {
+    if (!yo) return;
+    await cargarNovedades();
+    let visto = ''; try { visto = localStorage.getItem(CLAVE_NOV()) || ''; } catch (e) { /* sin almacenamiento */ }
+    $('ajustesPunto').hidden = !novedades || !novedades.length || visto === novedades[0].version;
+  }
+  async function abrirNovedades() {
+    cerrarAjustes();
+    await cargarNovedades();
+    $('novLista').replaceChildren(...(novedades ? novedades.map((n, i) => tarjetaNovedad(n, i)) : [h('p', { class: 'campo__ayuda', text: 'No se pudieron cargar las novedades.' })]));
+    abrirModal($('modalNovedades')); marcarNovedadVista();
+  }
+  $('btnVerNovedades').addEventListener('click', abrirNovedades);
+  $('modalNovedades').querySelectorAll('[data-cerrar]').forEach((b) => b.addEventListener('click', () => cerrarModal($('modalNovedades'))));
+  $('modalNovedades').addEventListener('mousedown', (e) => { if (e.target === $('modalNovedades')) cerrarModal($('modalNovedades')); });
 
   /* ============================================================
      ACCESO — switch M / xB + contraseña (solo la primera vez: después la cookie de sesión lo evita)
@@ -240,7 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* Muestra la ventana de acceso y bloquea el muro de atrás */
   function mostrarAcceso() {
-    $('app').inert = true; $('btnNuevo').hidden = true; $('btnYo').hidden = true; $('btnNotif').hidden = true;   // v2.5: sin sesión no hay campanita
+    $('app').inert = true; $('btnNuevo').hidden = true; $('btnYo').hidden = true; $('btnNotif').hidden = true; $('btnCalendario').hidden = true;   // v2.5: sin sesión no hay campanita (v3.0: ni calendario)
     noLeidas = 0; pintarContador(); cerrarModal($('modalNotif'));
     document.documentElement.removeAttribute('data-yo');
     let ultimo = 'M'; try { ultimo = localStorage.getItem('muro_quien') === 'xB' ? 'xB' : 'M'; } catch (e) { /* sin almacenamiento */ }
@@ -305,7 +401,9 @@ document.addEventListener('DOMContentLoaded', () => {
     ultimaFirma = ''; nodos.forEach((n) => n.remove()); nodos.clear();   // otra identidad = se vuelve a pintar todo
     categorias = []; ultimaFirmaCats = ''; filtro.cat = '';              // v2.1: también se vuelven a pedir las categorías
     avisos = []; noLeidas = 0; avisosVistos.clear(); primeraCargaAvisos = true; pintarContador();   // v2.5: notificaciones de la otra identidad
-    $('btnNotif').hidden = false; sincronizarPush();
+    $('btnNotif').hidden = false; $('btnCalendario').hidden = false; sincronizarPush();
+    if (cal) { cal.reiniciar(); cal.cargar(); }
+    $('ajustesPunto').hidden = true; revisarPuntoNovedad();                // v3.0: puntito si hay una actualización sin ver                         // v3.0: las fechas del calendario (también las usa el selector de días de un plan)
     comentariosAbiertos.clear(); borradores.clear(); respondiendo.pid = respondiendo.cid = null; respuestasPlegadas.clear();   // v2.9: tampoco queda una respuesta a medio escribir ni hilos plegados
                         // v2.2: al cambiar de identidad no quedan comentarios desplegados ni borradores de la otra persona
     pintarFiltroCategorias();
@@ -416,10 +514,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const c = op.cuerpo, q = clon(p), d = q.datos, quien = op.quien;
     if (c.accion === 'corazon') { const l = Array.isArray(d.corazones) ? d.corazones : []; d.corazones = l.includes(quien) ? l.filter((x) => x !== quien) : [...l, quien]; }
     else if (c.accion === 'voto' && Array.isArray(d.opciones) && d.opciones[c.opcion]) {
+      if (d.limite && d.limite < hoyISO()) return q;                              // v3.0: encuesta vencida: no se puede votar (el servidor también la rechaza)
       const yaVotaba = d.opciones[c.opcion].votos.includes(quien);
       d.opciones.forEach((o) => { o.votos = o.votos.filter((x) => x !== quien); });      // un solo voto por persona
       if (!yaVotaba) d.opciones[c.opcion].votos.push(quien);                              // tocar tu opción otra vez quita el voto
-    } else if (c.accion === 'item' && Array.isArray(d.items) && d.items[c.indice]) d.items[c.indice].hecho = !!c.hecho;
+    } else if (c.accion === 'item' && Array.isArray(d.items) && d.items[c.indice]) {
+      const it = d.items[c.indice]; it.hecho = !!c.hecho;
+      if (it.hecho) it.por = quien; else delete it.por;                       // v3.0: se guarda quién la completó (su color rellena la casilla)
+    }
     else if (c.accion === 'comentar') {
       /* v2.9: "resp" = id del comentario al que se responde (debe existir y no estar eliminado, igual que en el servidor) */
       const l = Array.isArray(d.comentarios) ? d.comentarios : [], padre = c.resp ? l.find((x) => x.id === c.resp) : null;
@@ -466,11 +568,13 @@ document.addEventListener('DOMContentLoaded', () => {
     return { dias: r.dias, antes: r.antes, hora: e.hora || '', lugar: String(e.lugar || '').trim() };
   }
   const claveDePlan = (d) => JSON.stringify([(d.dias || []).map((x) => x.f), d.hora || '', d.lugar || '']);   // lo que cuenta como "editar" un plan (no el estado de los días)
+  /* v3.0: elemento de lista como lo guarda el servidor: texto, si está hecho, responsable (para) y quién lo completó (por) */
+  const itemLocal = (i) => ({ t: i.t, hecho: !!i.hecho, ...(i.para ? { para: i.para } : {}), ...(i.hecho && i.por ? { por: i.por } : {}) });
   /* Publicación nueva tal como se va a ver (la misma que armará el servidor) */
   function postLocal(op) {
     const c = op.cuerpo, datos = { corazones: [], categorias: c.categorias || [] };
-    if (c.tipo === 'lista') datos.items = c.datos.items.map((i) => ({ t: i.t, hecho: !!i.hecho }));
-    else if (c.tipo === 'encuesta') datos.opciones = c.datos.opciones.map((t) => ({ t, votos: [] }));
+    if (c.tipo === 'lista') { datos.items = c.datos.items.map(itemLocal); if (c.datos.limite) datos.limite = c.datos.limite; }
+    else if (c.tipo === 'encuesta') { datos.opciones = c.datos.opciones.map((t) => ({ t, votos: [] })); if (c.datos.limite) datos.limite = c.datos.limite; }
     else if (c.tipo === 'foto') { datos.w = c.datos.w; datos.h = c.datos.h; }
     else if (c.tipo === 'link') datos.vista = {};                                          // la vista previa del sitio llega cuando responde el servidor
     else if (c.tipo === 'plan') Object.assign(datos, planLocal({}, c.datos));
@@ -482,7 +586,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (c.titulo !== undefined) q.titulo = c.titulo;
     if (c.texto !== undefined) q.texto = c.texto;
     if (p.tipo === 'link' && c.url !== undefined && c.url !== p.url) { q.url = c.url; d.vista = {}; }
-    if (p.tipo === 'lista' && c.datos && c.datos.items) d.items = c.datos.items.map((i) => ({ t: i.t, hecho: !!i.hecho }));
+    if (p.tipo === 'lista' && c.datos && c.datos.items) d.items = c.datos.items.map(itemLocal);
+    if ((p.tipo === 'lista' || p.tipo === 'encuesta') && c.datos && 'limite' in c.datos) { if (c.datos.limite) d.limite = c.datos.limite; else delete d.limite; }   // v3.0: fecha límite
     if (p.tipo === 'plan' && c.datos) Object.assign(d, planLocal(p.datos, c.datos));
     if (c.categorias !== undefined) d.categorias = c.categorias.filter((id) => cats.some((x) => x.id === id));
     const cambio = q.titulo !== p.titulo || q.texto !== p.texto || q.url !== p.url || JSON.stringify(d.items || null) !== JSON.stringify(p.datos.items || null)
@@ -709,8 +814,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const enlace = (url, hijos) => h('a', { href: url, target: '_blank', rel: 'noopener noreferrer' }, hijos);
   /* Marcas dentro de una línea (como en WhatsApp). Grupos: 1 ```mono``` · 2 `código` · 3/4 *negrita* · 5/6 ~tachado~ · 7/8 _cursiva_ · 9/10/11 [texto](url) · 12 link suelto.
      v2.2: antes la negrita era **así** y el tachado ~~así~~; ahora es *así* y ~así~. Lo escrito entre marcas no puede empezar ni terminar con espacio. */
-  const MD_INLINE = '(```[^`\\n]+```)|(`[^`\\n]+`)|(\\*([^\\s*](?:[^*\\n]*?[^\\s*])?)\\*)|(~([^\\s~](?:[^~\\n]*?[^\\s~])?)~)|(\\b_([^\\s_](?:[^_\\n]*?[^\\s_])?)_\\b)|(\\[([^\\]\\n]+)\\]\\((https?:\\/\\/[^\\s)]+)\\))|(https?:\\/\\/[^\\s<]+)';
+  /* v3.0: la expresión vive en editor.js (la usan también el espejo del formato en vivo y esta función) para que los dos reconozcan EXACTAMENTE las mismas marcas.
+     Grupos nuevos: 13/14 ==resaltado== · 15/16 ++subrayado++ · 17/18 nota al pie [^id] */
+  const MD_INLINE = window.Editor.MD_INLINE;
   /* v2.7: sinEnlaces = true dentro de botones (elementos de lista, opciones de encuesta): ahí un link no puede ser clicable, se muestra como texto */
+  let notasCtx = null;      // v3.0: notas al pie del texto que se está armando con md() (null = fuera de md(): la marca queda como texto)
   function inline(texto, sinEnlaces) {
     const re = new RegExp(MD_INLINE, 'g'), out = [];          // una expresión nueva por llamada: la función se llama a sí misma (negrita dentro de cursiva…)
     let ultimo = 0, m;
@@ -722,6 +830,12 @@ document.addEventListener('DOMContentLoaded', () => {
       else if (m[5]) out.push(h('del', {}, inline(m[6], sinEnlaces)));
       else if (m[7]) out.push(h('em', {}, inline(m[8], sinEnlaces)));
       else if (m[9]) out.push(sinEnlaces ? m[10] : enlace(m[11], m[10]));
+      else if (m[13]) out.push(h('mark', { class: 'md-res' }, inline(m[14], sinEnlaces)));       // v3.0: ==resaltado==
+      else if (m[15]) out.push(h('u', {}, inline(m[16], sinEnlaces)));                            // v3.0: ++subrayado++
+      else if (m[17]) {                                                                           // v3.0: nota al pie [^id] → número chiquito (la nota se muestra al final del texto)
+        if (!notasCtx) out.push(m[17]);
+        else { if (!notasCtx.orden.includes(m[18])) notasCtx.orden.push(m[18]); out.push(h('sup', { class: 'md-nota', title: 'Nota al pie' }, String(notasCtx.orden.indexOf(m[18]) + 1))); }
+      }
       else if (sinEnlaces) out.push(m[12]);
       else {                                                   // link suelto: se le saca la puntuación final ("mira https://x.com.")
         let url = m[12], resto = '';
@@ -740,14 +854,28 @@ document.addEventListener('DOMContentLoaded', () => {
     lineas.forEach((l, k) => { if (k) out.push(h('br')); out.push(...inline(l)); });
     return out;
   }
-  const MD_BLOQUE = /^(#{1,3}\s|>|```|\s*[-*+]\s|\s*\d+[.)]\s)/;   // línea que empieza un bloque nuevo (título, cita, código, lista)
+  const MD_BLOQUE = /^(#{1,3}\s|>|```|\s*[-*+]\s|\s*\d+[.)]\s|\s*([-*_])\2{2,}\s*$|\s*\||\[\^[^\]\s]+\]:)/;   // línea que empieza un bloque nuevo (título, cita, código, lista; v3.0: línea separadora, tabla y nota al pie)
   /* Texto → <div class="md …"> con párrafos, títulos, citas, listas y código. clase = clases extra del contenedor */
   function md(texto, clase = '') {
-    const caja = h('div', { class: ('md ' + clase).trim() }), ls = String(texto).replace(/\r\n?/g, '\n').split('\n');
+    const caja = h('div', { class: ('md ' + clase).trim() });
+    let ls = String(texto).replace(/\r\n?/g, '\n').split('\n');
+    /* v3.0: las definiciones de notas al pie ("[^1]: texto") se sacan del cuerpo y se muestran al final, numeradas por orden de aparición */
+    const defs = new Map(), previa = notasCtx; notasCtx = { orden: [] };
+    ls = ls.filter((x) => { const d = x.match(/^\[\^([^\]\s]+)\]:\s*(.*)$/); if (d) { defs.set(d[1], d[2]); return false; } return true; });
     let i = 0, m;
     while (i < ls.length) {
       const l = ls[i];
       if (!l.trim()) { i++; continue; }
+      if (/^\s*([-*_])\1{2,}\s*$/.test(l)) { caja.append(h('hr', { class: 'md-hr' })); i++; continue; }          // v3.0: línea separadora (---)
+      if (/^\s*\|.*\|\s*$/.test(l) && i + 1 < ls.length && /^\s*\|?(\s*:?-{3,}:?\s*\|)+(\s*:?-{3,}:?\s*)?$/.test(ls[i + 1])) {   // v3.0: tabla (encabezado + fila |---|---| + filas)
+        const celdas = (r) => r.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+        const alin = celdas(ls[i + 1]).map((c) => (/^:-+:$/.test(c) ? 'center' : /-:$/.test(c) ? 'right' : 'left'));
+        const cab = celdas(l), filas = []; i += 2;
+        while (i < ls.length && /^\s*\|.*\|\s*$/.test(ls[i])) filas.push(celdas(ls[i++]));
+        caja.append(h('div', { class: 'md-tabla' }, h('table', {},
+          h('thead', {}, h('tr', {}, cab.map((c, k) => h('th', { style: `text-align:${alin[k] || 'left'}` }, inline(c))))),
+          h('tbody', {}, filas.map((f) => h('tr', {}, cab.map((_, k) => h('td', { style: `text-align:${alin[k] || 'left'}` }, inline(f[k] || ''))))))))); continue;
+      }
       if (/^```/.test(l) && !/^```[^`]+```\s*$/.test(l)) {          // bloque de código (una línea ```así``` es monoespaciado normal y se trata como texto)
         const cod = []; i++;
         while (i < ls.length && !/^```/.test(ls[i])) cod.push(ls[i++]);
@@ -770,6 +898,10 @@ document.addEventListener('DOMContentLoaded', () => {
       while (i < ls.length && ls[i].trim() && (!p.length || !MD_BLOQUE.test(ls[i]))) p.push(ls[i++]);
       caja.append(h('p', {}, lineasInline(p)));
     }
+    if (notasCtx.orden.length) {                                    // v3.0: notas al pie, en el orden en que se citaron
+      caja.append(h('div', { class: 'md-notas' }, h('ol', {}, notasCtx.orden.map((id) => h('li', {}, inline(defs.has(id) ? defs.get(id) : '—'))))));
+    }
+    notasCtx = previa;
     return caja;
   }
 
@@ -796,8 +928,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const completa = items.length > 0 && hechos === items.length;     // v2.7: al 100 % casillas y línea se ponen verdes y aparece el cuadro COMPLETADO
       partes.push(h('div', { class: 'lista-bloque' + (completa ? ' lista-bloque--completa' : '') },
         /* v2.7: solo el TEXTO se tacha (span .lista__texto); la casilla ya no. El texto acepta formato (sin links: el elemento es un botón) */
-        h('div', { class: 'lista' }, items.map((it, i) => h('button', { class: 'lista__item' + (it.hecho ? ' hecho' : ''), type: 'button', 'aria-pressed': String(!!it.hecho), onclick: () => accion(p, { accion: 'item', indice: i, hecho: !it.hecho }) },
-          icono(it.hecho ? 'check_box' : 'check_box_outline_blank', it.hecho), h('span', { class: 'lista__texto' }, inline(it.t, true))))),
+        /* v3.0: la casilla es propia (span.casilla): vacía = gris casi blanco; con responsable el borde es de SU color y nunca cambia; al completarla se rellena
+           con el color de QUIEN la completó (si es otra persona que la responsable, queda relleno de uno y borde del otro) */
+        h('div', { class: 'lista' }, items.map((it, i) => {
+          const por = it.hecho ? (it.por || p.autor) : null;                // las listas viejas no guardaban quién: se asume el autor
+          const nombreResp = it.para ? ` (para ${NOMBRE_ESCENA[it.para]})` : '';
+          return h('button', { class: 'lista__item' + (it.hecho ? ' hecho' : ''), type: 'button', 'aria-pressed': String(!!it.hecho), title: it.para ? `Responsable: ${NOMBRE_ESCENA[it.para]}` : null,
+            'aria-label': `${it.t}${nombreResp}${it.hecho ? ', completado por ' + NOMBRE_ESCENA[por] : ''}`, onclick: () => accion(p, { accion: 'item', indice: i, hecho: !it.hecho }) },
+            h('span', { class: 'casilla' + (it.para ? ` casilla--para-${it.para}` : '') + (por ? ` casilla--por-${por}` : ''), 'aria-hidden': 'true' }, icono('check', true)),
+            h('span', { class: 'lista__texto' }, inline(it.t, true)));
+        })),
         h('div', { class: 'progreso', role: 'progressbar', 'aria-valuenow': pct, 'aria-valuemin': 0, 'aria-valuemax': 100, style: `--valor:${pct}%` }, h('div', { class: 'progreso__barra' })),
         h('span', { class: 'progreso__texto', text: `${hechos} de ${items.length} · ${pct}%` }),
         completa ? h('div', { class: 'completado', role: 'status' }, icono('task_alt', true), h('span', { text: 'COMPLETADO' })) : null));
@@ -806,7 +946,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const ops = d.opciones || [], total = ops.reduce((s, o) => s + o.votos.length, 0);
       partes.push(h('div', { class: 'encuesta' }, ops.map((o, i) => {
         const nM = o.votos.filter((v) => v === 'M').length, ancho = total ? Math.round(o.votos.length * 100 / total) : 0, corte = o.votos.length ? Math.round(nM * 100 / o.votos.length) : 50;
-        return h('button', { class: 'opcion' + (o.votos.includes(yo) ? ' opcion--mia' : ''), type: 'button', 'aria-pressed': String(o.votos.includes(yo)), onclick: () => accion(p, { accion: 'voto', opcion: i }) },
+        return h('button', { class: 'opcion' + (o.votos.includes(yo) ? ' opcion--mia' : ''), type: 'button', 'aria-pressed': String(o.votos.includes(yo)), disabled: !!(d.limite && d.limite < hoyISO()), onclick: () => accion(p, { accion: 'voto', opcion: i }) },   // v3.0: vencida = no se vota
           h('span', { class: 'opcion__barra', style: `--ancho:${ancho}%;--corte:${corte}%` }),
           h('span', { class: 'opcion__texto' }, inline(o.t, true)),   // v2.7: la opción acepta formato
           h('span', { class: 'opcion__votos' }, fotosOrdenadas(o.votos).map((v) => avatar(v, 'avatar--mini'))));
@@ -822,6 +962,13 @@ document.addEventListener('DOMContentLoaded', () => {
      al marcarlo, el plan queda "Confirmado" y los demás días se descartan; tocar el día seguro lo quita y todo vuelve a como estaba.
      Con el plan confirmado, tocar otro día lo pasa a ser el seguro. Hora y lugar se muestran solo si se cargaron.
      Para qué sirve: decidir juntos en qué día se hace un plan (ej.: sábado o domingo según el clima). */
+  /* v3.0: ¿ya venció? Plan = pasó su último día; lista / encuesta = pasó su fecha límite (el mismo día todavía no cuenta como vencido) */
+  function expirado(p) {
+    const d = p.datos || {}, hoy = hoyISO();
+    if (p.tipo === 'plan') return Array.isArray(d.dias) && d.dias.length > 0 && d.dias.every((x) => x.f < hoy);
+    if (p.tipo === 'lista' || p.tipo === 'encuesta') return !!d.limite && d.limite < hoy;
+    return false;
+  }
   function cuerpoPlan(p) {
     const d = p.datos || {}, dias = Array.isArray(d.dias) ? d.dias : [], seguro = dias.find((x) => x.e === 'seguro'), hoy = hoyISO();
     const partes = [];
@@ -879,7 +1026,8 @@ document.addEventListener('DOMContentLoaded', () => {
     /* v2.7: data-rico = acepta formato (barra flotante y Ctrl+B/I/K). El comentario se ve al instante (accion() lo agrega en pantalla y lo manda en segundo plano) */
     const campo = h('textarea', { class: 'campo__entrada comentar__campo', rows: '1', maxlength: '500', placeholder: 'Escribe un comentario…', 'aria-label': 'Escribir un comentario', 'data-rico': 'flota' });
     campo.value = borradores.get(p.id) || '';
-    campo.addEventListener('input', () => { borradores.set(p.id, campo.value); campo.style.height = 'auto'; campo.style.height = Math.min(campo.scrollHeight, 120) + 'px'; });
+    const cajaCampo = window.Editor.envolver(campo);                                     // v3.0: formato en vivo y altura automática (editor.js)
+    campo.addEventListener('input', () => { borradores.set(p.id, campo.value); });
     campo.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviarComentario(p, campo); } });   // Enter envía; Shift+Enter hace un salto de línea
     /* v2.9: se arma el árbol: respuestas de cada comentario (si el comentario al que responde ya no está, pasa a ser uno de primer nivel) */
     const porId = new Map(coms.map((c) => [c.id, c])), hijosDe = new Map();
@@ -909,7 +1057,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     return h('div', { class: 'comentarios' },
       (hijosDe.get('') || []).map((c) => nodo(c, 0)),
-      h('div', { class: 'comentar', 'data-k': 'nuevo' }, campo,
+      h('div', { class: 'comentar', 'data-k': 'nuevo' }, cajaCampo,
         /* el cuadro de comentario se conserva al actualizar la tarjeta (ver morph), por eso el botón lo busca en la página en vez de usar esta copia */
         h('button', { class: 'btn-icono comentar__enviar', type: 'button', 'aria-label': 'Enviar comentario', title: 'Enviar', onclick: (e) => enviarComentario(p, e.currentTarget.closest('.comentar').querySelector('textarea')) }, icono('send'))));
   }
@@ -918,12 +1066,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const clave = `${p.id}:${c.id}`;
     const campo = h('textarea', { class: 'campo__entrada comentar__campo', rows: '1', maxlength: '500', placeholder: `Responder a ${NOMBRE_ESCENA[c.autor]}…`, 'aria-label': `Responder a ${NOMBRE_ESCENA[c.autor]}`, 'data-rico': 'flota' });
     campo.value = borradores.get(clave) || '';
-    campo.addEventListener('input', () => { borradores.set(clave, campo.value); campo.style.height = 'auto'; campo.style.height = Math.min(campo.scrollHeight, 120) + 'px'; });
+    const cajaCampo = window.Editor.envolver(campo);                                     // v3.0: formato en vivo y altura automática (editor.js)
+    campo.addEventListener('input', () => { borradores.set(clave, campo.value); });
     campo.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); enviarRespuesta(p, c, campo); }
       else if (e.key === 'Escape') { e.stopPropagation(); cerrarRespuesta(); }
     });
-    return h('div', { class: 'comentar comentar--resp', 'data-k': 'responder' }, campo,
+    return h('div', { class: 'comentar comentar--resp', 'data-k': 'responder' }, cajaCampo,
       h('button', { class: 'btn-icono comentar__enviar', type: 'button', 'aria-label': 'Enviar respuesta', title: 'Enviar', onclick: (e) => enviarRespuesta(p, c, e.currentTarget.closest('.comentar').querySelector('textarea')) }, icono('send')),
       h('button', { class: 'btn-icono', type: 'button', 'aria-label': 'Cancelar respuesta', title: 'Cancelar', onclick: () => cerrarRespuesta() }, icono('close')));
   }
@@ -967,7 +1116,7 @@ document.addEventListener('DOMContentLoaded', () => {
      ni se vea roto aunque el like se quite a mitad de la animación. Dar like: se achica, salta, rebota y se asienta (+ corazoncitos); quitar like: un
      pequeño "desinflado" suave. Con "reducir movimiento" activado en el sistema no se anima. */
   function animarCorazon(boton, daLike) {
-    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    /* v3.0: se quitó el chequeo de prefers-reduced-motion (apagaba la animación del corazón en muchos PC) */
     const ic = boton.querySelector('.material-symbols-rounded'); if (!ic || !ic.animate) return;
     ic.getAnimations().forEach((a) => a.cancel());                       // si se toca rápido, se empieza de cero sin dejar el corazón torcido
     if (daLike) {
@@ -999,7 +1148,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const mia = p.autor === yo, cor = (p.datos && p.datos.corazones) || [], meGusta = cor.includes(yo);
     const nComs = ((p.datos && p.datos.comentarios) || []).filter((c) => !c.borrado).length, abiertos = comentariosAbiertos.has(p.id);   // v2.2
     const editado = (p.datos && p.datos.editado) || 0, cats = catsDe(p);
-    const tarjeta = h('article', { class: 'post', 'data-autor': p.autor, 'data-id': p.id },
+    const tarjeta = h('article', { class: 'post', 'data-autor': p.autor, 'data-id': p.id, 'data-expirado': expirado(p) ? '' : null },   // v3.0: tarjeta vencida → colores en gris oscuro + cartel "Expirado"
+      expirado(p) ? h('span', { class: 'post__expirado', role: 'status' }, icono('event_busy'), h('span', { text: 'Expirado' })) : null,
       h('div', { class: 'post__cab' },
         h('span', { class: 'autor' }, avatar(p.autor, 'avatar--autor'), h('time', { class: 'autor__hora', 'data-ts': p.creado, text: hora(p.creado), title: new Date(p.creado).toLocaleString('es-AR') })),
         h('span', { class: 'material-symbols-rounded post__tipo', text: (TIPOS[p.tipo] || TIPOS.nota).icono, 'aria-hidden': 'true' })),   // icono del tipo (nota, lista…) a la derecha
@@ -1038,7 +1188,7 @@ document.addEventListener('DOMContentLoaded', () => {
     lista.forEach((p) => {
       /* v2.7: la huella es el CONTENIDO de la publicación (no solo "actualizado"): así una acción instantánea (que todavía no tiene hora del servidor)
          también repinta, y la confirmación del servidor, que deja el mismo contenido, no vuelve a tocar la tarjeta */
-      const firma = JSON.stringify([p.titulo, p.texto, p.url, p.datos, p.imagen, yo, catsDe(p).map((c) => [c.id, c.nombre, c.icono]), comentariosAbiertos.has(p.id), respondiendo.pid === p.id ? respondiendo.cid : 0, ((p.datos && p.datos.comentarios) || []).filter((c) => respuestasPlegadas.has(c.id)).map((c) => c.id), p.tipo === 'plan' ? hoyISO() : 0]);   // v2.9: también cambia si se abre una respuesta o se pliega un hilo   // v2.3: los planes se repintan al cambiar el día (cuenta regresiva)
+      const firma = JSON.stringify([expirado(p), p.titulo, p.texto, p.url, p.datos, p.imagen, yo, catsDe(p).map((c) => [c.id, c.nombre, c.icono]), comentariosAbiertos.has(p.id), respondiendo.pid === p.id ? respondiendo.cid : 0, ((p.datos && p.datos.comentarios) || []).filter((c) => respuestasPlegadas.has(c.id)).map((c) => c.id), p.tipo === 'plan' ? hoyISO() : 0]);   // v2.9: también cambia si se abre una respuesta o se pliega un hilo   // v2.3: los planes se repintan al cambiar el día (cuenta regresiva)
       let el = nodos.get(p.id);
       if (!el) {                                                         // tarjeta que recién aparece: entra con animación en cascada
         el = crearTarjeta(p); el._firma = firma;
@@ -1106,7 +1256,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let primeraCargaAvisos = true;           // la primera vez no se muestran emergentes (serían los viejos pendientes)
   let resaltarAvisos = new Set();          // ids no leídos al abrir el panel (se ven resaltados aunque ya se marquen como leídos)
   const tituloBase = document.title;
-  const ICONO_AVISO = { post: 'add_circle', corazon: 'favorite', comentario: 'chat_bubble', voto: 'ballot', tarea: 'check_circle', dia: 'event', editar: 'edit', borrar: 'delete', categoria: 'label' };
+  const ICONO_AVISO = { fecha: 'calendar_month', novedad: 'campaign', post: 'add_circle', corazon: 'favorite', comentario: 'chat_bubble', voto: 'ballot', tarea: 'check_circle', dia: 'event', editar: 'edit', borrar: 'delete', categoria: 'label' };
 
   /* Contador de la campanita, número en el título de la pestaña y globito en el icono de la app (si el navegador lo permite) */
   function pintarContador() {
@@ -1157,9 +1307,9 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Dibuja la lista del panel */
   function pintarPanelAvisos() {
     $('notifVaciar').disabled = !avisos.length;
-    $('notifLista').replaceChildren(...(avisos.length ? avisos.map((a) => h('li', { class: 'notif' + (resaltarAvisos.has(a.id) ? ' notif--nueva' : '') + (a.post ? ' notif--enlace' : '') },
-      h('button', { class: 'notif__boton', type: 'button', disabled: !a.post, onclick: () => { cerrarModal($('modalNotif')); irAPost(a.post); } },
-        avatar(a.de, 'avatar--chico'),
+    $('notifLista').replaceChildren(...(avisos.length ? avisos.map((a) => h('li', { class: 'notif' + (resaltarAvisos.has(a.id) ? ' notif--nueva' : '') + (a.post || a.tipo === 'fecha' || a.tipo === 'novedad' ? ' notif--enlace' : '') + ` notif--de-${a.de === 'M' || a.de === 'xB' ? a.de : 'sistema'}` },   // v3.0: el ícono toma el color de quien hizo el aviso
+      h('button', { class: 'notif__boton', type: 'button', disabled: !a.post && a.tipo !== 'fecha' && a.tipo !== 'novedad', onclick: () => { cerrarModal($('modalNotif')); if (a.tipo === 'fecha') mostrarVista('calendario'); else if (a.tipo === 'novedad') abrirNovedades(); else irAPost(a.post); } },   // v3.0: un aviso del calendario lleva al calendario
+        a.de === 'M' || a.de === 'xB' ? avatar(a.de, 'avatar--chico') : h('span', { class: 'avatar avatar--chico avatar--sistema', title: 'Nuestro Muro' }, h('img', { src: '/icons/icon-192.png', alt: 'Nuestro Muro', decoding: 'async', draggable: 'false' })),   // v3.0: los avisos automáticos (calendario, novedades) llevan el ícono de la app, no la carta de M
         h('span', { class: 'notif__texto' }, h('span', { class: 'notif__msg', text: a.texto }), h('span', { class: 'notif__hora', text: hora(a.creado) })),
         icono(ICONO_AVISO[a.tipo] || 'notifications', a.tipo === 'corazon')))) : [h('li', { class: 'notif__vacio', text: 'Todavía no hay notificaciones. Acá van a aparecer los comentarios, corazones, votos y demás que haga la otra persona.' })]));
   }
@@ -1225,7 +1375,12 @@ document.addEventListener('DOMContentLoaded', () => {
   /* Tocar un aviso del celular: sw.js enfoca la app y manda el id de la publicación; si la app estaba cerrada llega como ?post=ID */
   let postPendiente = new URLSearchParams(location.search).get('post');
   if (postPendiente) { try { history.replaceState(null, '', location.pathname); } catch (e) { /* nada */ } }
-  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.tipo === 'ir-post') { cargar().then(() => irAPost(e.data.id)); cargarAvisos(); } });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', (e) => { if (e.data && e.data.tipo === 'ir-post') { cargar().then(() => irAPost(e.data.id)); cargarAvisos(); }
+    if (e.data && e.data.tipo === 'ir-vista') { cargarAvisos(); if (e.data.vista === 'calendario') mostrarVista('calendario'); else if (e.data.vista === 'novedades') abrirNovedades(); }   // v3.0: avisos del calendario / novedades
+  });
+  /* v3.0: si la app estaba cerrada, el aviso la abre con ?vista=calendario o ?vista=novedades */
+  const vistaPendiente = new URLSearchParams(location.search).get('vista');
+  if (vistaPendiente) { try { history.replaceState(null, '', location.pathname); } catch (e) { /* nada */ } }
 
   /* ----- Acciones sobre una publicación (corazón, voto, tildar lista, comentarios): ver accion() y el motor (v2.7) más arriba ----- */
   /* Eliminar: se pide confirmación y después la tarjeta sale al instante (si el servidor falla vuelve a aparecer con un aviso) */
@@ -1258,18 +1413,35 @@ document.addEventListener('DOMContentLoaded', () => {
     h('button', { class: 'tipo-btn', type: 'button', role: 'tab', 'data-tipo': clave, onclick: () => elegirTipo(clave) }, icono(t.icono), h('span', { text: t.nombre }))));
 
   /* Filas editables (elementos de lista / opciones de encuesta): cada fila es un campo de texto con su botón de quitar */
-  function agregarFila(valor = '', hecho = false) {
+  function agregarFila(valor = '', hecho = false, para = '', por = '') {
     const max = tipoActual === 'encuesta' ? 8 : 50;
     if ($('filasItems').children.length >= max) { avisar(`Máximo ${max} elementos.`, 'error'); return; }
     /* v2.7: data-rico = el elemento / la opción acepta formato (barra flotante y Ctrl+B/I/K) */
-    const entrada = h('input', { class: 'campo__entrada', type: 'text', maxlength: 200, placeholder: tipoActual === 'encuesta' ? `Opción ${$('filasItems').children.length + 1}` : 'Elemento', autocomplete: 'off', value: valor, 'data-rico': 'flota' });
-    const fila = h('div', { class: 'fila' }, entrada, h('button', { class: 'btn-icono', type: 'button', 'aria-label': 'Quitar', onclick: () => fila.remove() }, icono('close')));
-    fila._hecho = hecho;                                                  // se conserva el "tildado" al editar una lista
+    /* v3.0: el campo es un cuadro que crece (textarea de 1 línea; Enter no hace salto de línea) con formato en vivo */
+    const entrada = h('textarea', { class: 'campo__entrada campo__linea', rows: '1', maxlength: 200, placeholder: tipoActual === 'encuesta' ? `Opción ${$('filasItems').children.length + 1}` : 'Elemento', autocomplete: 'off', 'data-rico': 'flota', 'data-linea': '' });
+    entrada.value = valor;
+    const fila = h('div', { class: 'fila' }, window.Editor.envolver(entrada), botonResponsable(() => fila), h('button', { class: 'btn-icono', type: 'button', 'aria-label': 'Quitar', onclick: () => fila.remove() }, icono('close')));
+    fila._hecho = hecho; fila._por = por; fila._para = para || '';           // se conserva el "tildado" (y quién lo hizo) y el responsable al editar una lista
+    pintarResponsable(fila);
     $('filasItems').append(fila);
+    window.Editor.refrescar(entrada);                                     // v3.0: ya está en la página: se mide su alto
     return entrada;
   }
+  /* v3.0: botón de RESPONSABLE de cada elemento de la lista: nadie → M → xB → nadie. Con responsable muestra su foto y el borde de la casilla es de su color */
+  function botonResponsable(dame) {
+    return h('button', { class: 'btn-icono fila__resp', type: 'button', onclick: () => {
+      const f = dame(), orden = ['', ...IDENTIDADES_UI]; f._para = orden[(orden.indexOf(f._para) + 1) % orden.length]; pintarResponsable(f);
+    } });
+  }
+  const IDENTIDADES_UI = ['M', 'xB'];
+  function pintarResponsable(f) {
+    const b = f.querySelector('.fila__resp'); if (!b) return;
+    b.replaceChildren(f._para ? avatar(f._para, 'avatar--mini') : icono('person_add'));
+    b.title = b.ariaLabel = f._para ? `Responsable: ${NOMBRE_ESCENA[f._para]} (toca para cambiar)` : 'Asignar a alguien';
+    b.classList.toggle('fila__resp--asignado', !!f._para);
+  }
   $('btnMasItems').addEventListener('click', () => agregarFila().focus());
-  $('filasItems').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); agregarFila().focus(); } });   // Enter = nueva fila
+  $('filasItems').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing && e.target.matches('textarea[data-linea]')) { e.preventDefault(); agregarFila().focus(); } });   // Enter = nueva fila (v3.0: los campos ahora son textarea)
 
   /* Muestra solo los campos que necesita cada tipo */
   function elegirTipo(tipo) {
@@ -1282,7 +1454,9 @@ document.addEventListener('DOMContentLoaded', () => {
     $('etiquetaTexto').textContent = tipo === 'nota' ? 'Texto' : (tipo === 'link' ? 'Comentario (opcional)' : 'Descripción (opcional)');
     $('campoUrl').hidden = tipo !== 'link';
     if ($('campoPlan')) $('campoPlan').hidden = tipo !== 'plan';   // v2.4.1: tolera un index.html viejo sin el campo del plan                              // v2.3: calendario de días + hora y lugar opcionales
-    if (tipo === 'plan') pintarCalendario();
+    if (tipo === 'plan') { pintarCalendario(); if (cal) cal.cargar().then(pintarCalendario); }   // v3.0: se vuelven a pedir las fechas importantes para marcarlas en el selector de días
+    $('campoLimite').hidden = !['lista', 'encuesta'].includes(tipo);       // v3.0: fecha límite opcional (lista y encuesta)
+    $('filasItems').classList.toggle('filas--sinresp', esEnc);              // v3.0: las opciones de una encuesta no tienen responsable
     $('campoItems').hidden = !['lista', 'encuesta'].includes(tipo) || (tipo === 'encuesta' && !!editando);   // v2.7: al editar una encuesta solo cambian la pregunta y la descripción (las opciones y votos no se tocan)
     $('etiquetaItems').textContent = esEnc ? 'Opciones (mínimo 2)' : 'Elementos de la lista';
     $('textoMasItems').textContent = esEnc ? 'Agregar opción' : 'Agregar elemento';
@@ -1327,8 +1501,21 @@ document.addEventListener('DOMContentLoaded', () => {
     for (let i = 0; i < vacias; i++) celdas.push(h('span', { class: 'cal-vacio', 'aria-hidden': 'true' }));
     for (let n = 1, total = new Date(anio, mes + 1, 0).getDate(); n <= total; n++) {
       const f = aISO(new Date(anio, mes, n)), dia = formDias.dias.find((x) => x.f === f), est = dia && ESTADOS_DIA[dia.e];
-      celdas.push(h('button', { class: 'cal-dia' + (dia ? ` cal-dia--e cal-dia--${dia.e}` : '') + (f === hoy ? ' cal-dia--hoy' : ''), type: 'button', 'aria-pressed': String(!!dia), 'aria-label': `${etiquetaDia(f)}: ${est ? est.nombre.toLowerCase() : 'sin elegir'}`, disabled: f < hoy && !dia, onclick: () => alternarDia(f) },
-        h('span', { text: String(n) }), est ? icono(est.icono, dia.e === 'seguro' || dia.e === 'ideal') : null));
+      /* v3.0: fechas importantes del calendario de amor que ya caen en este día (sin contar las de este mismo plan si se está editando) */
+      const info = cal ? cal.diasEn(f, editando && editando.id, true) : [];
+      const celda = h('button', { class: 'cal-dia' + (dia ? ` cal-dia--e cal-dia--${dia.e}` : '') + (info.length ? ' cal-dia--info' : '') + (f < hoy && !dia ? ' cal-dia--pasado' : '') + (f === hoy ? ' cal-dia--hoy' : ''), type: 'button', 'aria-pressed': String(!!dia), 'aria-label': `${etiquetaDia(f)}: ${est ? est.nombre.toLowerCase() : 'sin elegir'}` + (info.length ? `. Fechas importantes: ${info.map((x) => x.nombre).join(', ')}` : ''), disabled: f < hoy && !dia && !info.length, onclick: () => { if (f < hoy && !dia) return; alternarDia(f); } },   // v3.0: un día pasado con fechas importantes no se puede elegir, pero sí se puede mantener apretado para ver qué tiene
+        h('span', { text: String(n) }), est ? icono(est.icono, dia.e === 'seguro' || dia.e === 'ideal') : null,
+        info.length ? h('span', { class: 'cal-dia__marcas', 'aria-hidden': 'true' }, ...info.slice(0, 3).map((x) => { const i = h('i'); i.style.setProperty('--dc', cal.color(x)); return i; })) : null);
+      if (info.length) {
+        celda.style.setProperty('--dc', cal.color(info[0]));
+        /* v3.0: mantener apretado el día (≈0,45 s) abre una ventanita con lo que hay ese día; el toque que lo suelta no elige el día */
+        let reloj = 0, largo = false;
+        celda.addEventListener('pointerdown', () => { largo = false; clearTimeout(reloj); reloj = setTimeout(() => { largo = true; cal.flotante(f, celda); }, 450); });
+        ['pointerup', 'pointercancel', 'pointerleave'].forEach((t) => celda.addEventListener(t, () => clearTimeout(reloj)));
+        celda.addEventListener('click', (e) => { if (largo) { largo = false; e.preventDefault(); e.stopImmediatePropagation(); } }, true);
+        celda.addEventListener('contextmenu', (e) => e.preventDefault());
+      }
+      celdas.push(celda);
     }
     $('calDias').replaceChildren(...celdas);
     /* Lista de días elegidos (ordenados) con su tipo; tocarlos hace lo mismo que tocarlos en el calendario */
@@ -1365,13 +1552,14 @@ document.addEventListener('DOMContentLoaded', () => {
     elegirTipo(p.tipo);
     if (p.tipo === 'plan' && $('planHora')) { $('planHora').value = p.datos.hora || ''; $('planLugar').value = p.datos.lugar || ''; }
     $('nuevoTituloCampo').value = p.titulo; $('nuevoTexto').value = p.texto; $('nuevoUrl').value = p.url;
-    if (p.tipo === 'lista') { $('filasItems').replaceChildren(); (p.datos.items || []).forEach((i) => agregarFila(i.t, i.hecho)); }
+    if (p.tipo === 'lista') { $('filasItems').replaceChildren(); (p.datos.items || []).forEach((i) => agregarFila(i.t, i.hecho, i.para, i.por)); }
+    $('listaLimite').value = (p.tipo === 'lista' || p.tipo === 'encuesta') && p.datos.limite ? p.datos.limite : '';   // v3.0: fecha límite actual
     catsElegidas = new Set(catsDe(p).map((c) => c.id)); pintarCatsComposer(); reiniciarVistaTexto();   // v2.1: sus categorías actuales quedan marcadas
     abrirModal($('modalNuevo'));
   }
-  $('btnNuevo').addEventListener('click', () => (vista === 'perfiles' ? abrirEntrada() : abrirNuevo()));   // v2.8: en la pestaña "Perfiles" el + añade una entrada al perfil que se está viendo
-  document.querySelectorAll('#modalNuevo [data-cerrar]').forEach((b) => b.addEventListener('click', () => cerrarModal($('modalNuevo'))));
-  $('modalNuevo').addEventListener('mousedown', (e) => { if (e.target === $('modalNuevo')) cerrarModal($('modalNuevo')); });   // clic afuera = cerrar
+  $('btnNuevo').addEventListener('click', () => (vista === 'perfiles' ? abrirEntrada() : vista === 'calendario' ? cal.nuevo() : abrirNuevo()));   // v3.0: en el calendario el + agrega una fecha   // v2.8: en la pestaña "Perfiles" el + añade una entrada al perfil que se está viendo
+  document.querySelectorAll('#modalNuevo [data-cerrar]').forEach((b) => b.addEventListener('click', () => intentarCerrar($('modalNuevo'))));   // v3.0: pregunta si hay cambios sin guardar
+  $('modalNuevo').addEventListener('mousedown', (e) => { if (e.target === $('modalNuevo')) intentarCerrar($('modalNuevo')); });   // clic afuera = cerrar
 
   /* ============================================================
      v2.1 — FORMATO DE TEXTO (barra de botones sobre el cuadro de texto)
@@ -1380,24 +1568,56 @@ document.addEventListener('DOMContentLoaded', () => {
      El botón del ojo muestra cómo va a quedar. Atajos: Ctrl/Cmd + B, I y K.
      Para qué sirve: escribir notas y descripciones con distintos tipos de texto sin saber Markdown.
      ============================================================ */
+  /* v3.0: la barra tiene TODO lo que tienen los archivos .md (menos casillas e imágenes, que ya se usan en las listas y las fotos).
+     env = marcas a los dos lados · pre = marca al comienzo de cada línea · multi = solo en campos de varias líneas (texto grande) */
   const FORMATOS = {
-    /* v2.2: marcas como en WhatsApp */
+    /* marcas como en WhatsApp */
     negrita: { env: ['*', '*', 'texto en negrita'] },
     cursiva: { env: ['_', '_', 'texto en cursiva'] },
     tachado: { env: ['~', '~', 'texto tachado'] },
-    codigo: { env: ['```', '```', 'código'] },
+    subrayado: { env: ['++', '++', 'texto subrayado'] },             // v3.0
+    resaltado: { env: ['==', '==', 'texto resaltado'] },             // v3.0
+    codigo: { env: ['`', '`', 'código'] },                           // v3.0: código en línea (antes ``` ```)
+    bloque: { env: ['```\n', '\n```', 'código'], multi: true },      // v3.0: bloque de código
+    h1: { pre: '# ' }, h2: { pre: '## ' }, h3: { pre: '### ' },      // v3.0: tres niveles de título
     titulo: { pre: '## ' },
     cita: { pre: '> ' },
     lista: { pre: '- ' },
     numerada: { pre: '1. ', num: true },
     enlace: { enlace: true },
+    separador: { ins: 'separador' },                                 // v3.0: línea separadora ---
+    tabla: { ins: 'tabla' },                                         // v3.0
+    nota: { ins: 'nota' },                                           // v3.0: nota al pie
   };
   const PREFIJO_BLOQUE = /^(#{1,3}\s|>\s?|[-*+]\s|\d+[.)]\s)/;   // marcas de comienzo de línea que se reemplazan al cambiar de formato
-  /* v2.7: sirve para cualquier campo con formato (t = el cuadro de texto grande por defecto, o el campo de una línea que tiene la barra flotante).
-     En los campos de una línea solo van las marcas que no necesitan salto de línea (negrita, cursiva, tachado, código, enlace). */
+  /* v3.0: botones de la barra de formato: [formato, icono (fonts.google.com/icons), ayuda, soloVariasLineas]. null = separador.
+     La misma lista arma la barra de las notas, la de las entradas de perfil y la barra flotante / acoplada al teclado. */
+  const BOTONES_FORMATO = [
+    ['negrita', 'format_bold', 'Negrita (Ctrl+B)'], ['cursiva', 'format_italic', 'Cursiva (Ctrl+I)'], ['tachado', 'strikethrough_s', 'Tachado'],
+    ['subrayado', 'format_underlined', 'Subrayado (Ctrl+U)'], ['resaltado', 'ink_highlighter', 'Resaltado'], ['codigo', 'code', 'Código en línea'], ['enlace', 'link', 'Enlace (Ctrl+K)'],
+    null,
+    ['h1', 'format_h1', 'Título grande', 1], ['h2', 'format_h2', 'Título mediano', 1], ['h3', 'format_h3', 'Título chico', 1],
+    ['cita', 'format_quote', 'Cita', 1], ['lista', 'format_list_bulleted', 'Lista con viñetas', 1], ['numerada', 'format_list_numbered', 'Lista numerada', 1],
+    null,
+    ['bloque', 'data_object', 'Bloque de código', 1], ['separador', 'horizontal_rule', 'Línea separadora', 1], ['tabla', 'table', 'Tabla', 1], ['nota', 'superscript', 'Nota al pie', 1],
+  ];
+  /* Llena una barra con los botones. idVista = id del botón del ojo (vista previa) o null si esa barra no lo lleva */
+  function construirBarra(caja, idVista) {
+    const hijos = BOTONES_FORMATO.map((b) => (b
+      ? h('button', { class: 'btn-icono', type: 'button', 'data-fmt': b[0], title: b[2], 'aria-label': b[2].replace(/ \(.*\)/, ''), 'data-multi': b[3] ? '' : null }, icono(b[1]))
+      : h('span', { class: 'formato__sep', 'aria-hidden': 'true' })));
+    if (idVista) hijos.push(h('span', { class: 'formato__sep formato__sep--der', 'aria-hidden': 'true' }),
+      h('button', { class: 'btn-icono', type: 'button', id: idVista, 'data-fmt': 'vista', 'aria-pressed': 'false', title: 'Ver cómo queda', 'aria-label': 'Ver cómo queda' }, icono('visibility')));
+    caja.replaceChildren(...hijos);
+  }
+  construirBarra($('barraFormato'), 'btnVistaTexto'); construirBarra($('entBarraFormato'), 'entBtnVista'); construirBarra($('barraFlota'), null);
+  document.querySelectorAll('textarea[data-rico]').forEach((t) => window.Editor.envolver(t));   // v3.0: los campos que ya están en la página (título, texto…) pasan a ser editores en vivo que crecen
+  /* v2.7: sirve para cualquier campo con formato (t = el cuadro de texto grande por defecto, o un campo de una línea).
+     v3.0: en los campos de una línea (data-rico="flota") solo van las marcas que no necesitan salto de línea; las demás son para el texto grande (data-rico="completo"). */
   function aplicarFormato(nombre, t = $('nuevoTexto')) {
     const f = FORMATOS[nombre], v = t.value, ini = t.selectionStart, fin = t.selectionEnd;
-    if (!f || (f.pre && t.tagName !== 'TEXTAREA')) return;
+    if (!f) return;
+    if ((f.pre || f.ins || f.multi) && t.dataset.rico !== 'completo') return;
     if (f.env) {                                                       // marcas a los dos lados de lo seleccionado
       const [a, b, hueco] = f.env;
       if (v.slice(ini - a.length, ini) === a && v.slice(fin, fin + b.length) === b) {
@@ -1419,8 +1639,21 @@ document.addEventListener('DOMContentLoaded', () => {
       const sel = v.slice(ini, fin);
       if (/^https?:\/\/\S+$/.test(sel)) { t.setRangeText(`[enlace](${sel})`, ini, fin, 'preserve'); t.setSelectionRange(ini + 1, ini + 7); }
       else { const txt = sel || 'texto del enlace'; t.setRangeText(`[${txt}](https://)`, ini, fin, 'preserve'); t.setSelectionRange(ini + txt.length + 3, ini + txt.length + 11); }
+    } else if (f.ins) {                                                // v3.0: bloques que se insertan al final de la línea actual
+      let pos = v.indexOf('\n', fin); if (pos === -1) pos = v.length;
+      if (f.ins === 'separador') t.setRangeText('\n---\n', pos, pos, 'end');
+      else if (f.ins === 'tabla') {
+        const plantilla = '\n| Columna 1 | Columna 2 |\n| --- | --- |\n| Dato 1 | Dato 2 |\n';
+        t.setRangeText(plantilla, pos, pos, 'end'); t.setSelectionRange(pos + 4, pos + 13);
+      } else {                                                         // nota al pie: pone [^n] junto a lo seleccionado y la definición al final del texto
+        const nums = [...v.matchAll(/\[\^(\d+)\]/g)].map((x) => Number(x[1])), n = (nums.length ? Math.max(...nums) : 0) + 1;
+        t.setRangeText(v.slice(ini, fin) + `[^${n}]`, ini, fin, 'end');
+        const todo = t.value, sep = todo.endsWith('\n\n') ? '' : todo.endsWith('\n') ? '\n' : '\n\n', def = `[^${n}]: `, hueco = 'Texto de la nota';
+        t.setRangeText(sep + def + hueco, todo.length, todo.length, 'end');
+        t.setSelectionRange(todo.length + sep.length + def.length, todo.length + sep.length + def.length + hueco.length);
+      }
     }
-    t.focus(); t.dispatchEvent(new Event('input'));                    // avisa del cambio (actualiza la vista previa)
+    t.focus(); t.dispatchEvent(new Event('input'));                    // avisa del cambio (actualiza el espejo, la altura y la vista previa)
   }
   /* Vista previa del texto: el ojo la muestra/oculta y se actualiza mientras se escribe */
   function actualizarVistaTexto() {
@@ -1452,45 +1685,58 @@ document.addEventListener('DOMContentLoaded', () => {
      Para qué sirve: poder resaltar texto en cualquier parte, no solo en las notas. */
   document.addEventListener('keydown', (e) => {                        // atajos de teclado
     const t = e.target;
+    /* v3.0: los campos de UNA línea (ahora son cuadros que crecen) no aceptan saltos de línea con Enter */
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && t && t.matches && t.matches('textarea[data-linea]')) e.preventDefault();
     if (!(e.ctrlKey || e.metaKey) || e.altKey || !t || !t.dataset || !t.dataset.rico) return;
-    const fmt = { b: 'negrita', i: 'cursiva', k: 'enlace' }[e.key.toLowerCase()];
+    const fmt = { b: 'negrita', i: 'cursiva', k: 'enlace', u: 'subrayado' }[e.key.toLowerCase()];
     if (fmt) { e.preventDefault(); aplicarFormato(fmt, t); }
   });
   const barraFlota = $('barraFlota');
-  let campoFlota = null;                                               // campo de una línea que tiene el foco (el que recibe el formato)
-  function ocultarBarraFlota() { campoFlota = null; barraFlota.hidden = true; document.body.classList.remove('con-barra-flota'); }   // v2.9: también quita el espacio extra al pie de la página
-  /* v2.9: la barra va SIEMPRE justo DEBAJO del campo (antes iba encima): en el celular, al seleccionar texto, el menú del sistema (cortar / copiar / pegar)
-     aparece arriba de la selección y tapaba la barra. Solo si debajo no hay lugar (campo al pie de la pantalla o teclado abierto) se pone encima.
-     Se mide con visualViewport (la parte realmente visible, sin el teclado) y se oculta si el campo quedó fuera de la pantalla. */
-  /* v2.9: si el campo está tan abajo que no hay lugar para la barra debajo (típico en el celular con el teclado abierto), `acomodar` sube la página
-     para dejarle lugar en vez de taparle el texto poniéndola encima. Solo se pide al enfocar el campo o al abrirse/cerrarse el teclado, no al hacer scroll. */
+  let campoFlota = null;                                               // campo con formato que tiene el foco (el que recibe el formato)
+  let relojAcoplada = 0;
+  function ocultarBarraFlota() {
+    campoFlota = null; barraFlota.hidden = true; document.body.classList.remove('con-barra-flota');
+    /* v3.0: el lugar extra al pie de las ventanas se quita un instante DESPUÉS (0,7 s): si se quitara justo al soltar el foco, el botón que se está tocando (Guardar) se correría y el toque se perdería */
+    clearTimeout(relojAcoplada); relojAcoplada = setTimeout(() => { if (barraFlota.hidden) document.body.classList.remove('con-barra-acoplada'); }, 700);
+  }   // v2.9: también quita el espacio extra al pie de la página
+  /* v3.0: celular = pantalla angosta o táctil. Ahí la barra se ACOPLA encima del teclado (ocupa todo el ancho, con sus botones deslizables) y sirve
+     para TODOS los campos con formato. En PC la barra flota justo DEBAJO de los campos de una línea (los cuadros grandes ya tienen su barra fija debajo). */
+  const esMovil = () => window.matchMedia('(max-width: 699px), (pointer: coarse)').matches;
+  /* v2.9: la barra va debajo del campo (el menú del celular al seleccionar texto aparece arriba y la tapaba). Se mide con visualViewport (la parte visible,
+     sin el teclado). `acomodar` sube la página para que el campo no quede tapado por la barra; solo se pide al enfocar o al abrirse/cerrarse el teclado. */
   function colocarBarraFlota(acomodar) {
     if (!campoFlota || !document.body.contains(campoFlota)) return void ocultarBarraFlota();
-    if (acomodar === true) {
-      const v = window.visualViewport, pisoV = v ? v.offsetTop + v.height : window.innerHeight, rr = campoFlota.getBoundingClientRect();
-      if (rr.bottom + 6 + (barraFlota.offsetHeight || 44) > pisoV - 6 && rr.top >= (v ? v.offsetTop : 0)) {
-        document.body.classList.add('con-barra-flota');                                   // espacio extra al pie para poder subir el campo aunque sea lo último de la página
-        campoFlota.scrollIntoView({ block: 'center', behavior: 'instant' });
-      }
-    }
-    const vv = window.visualViewport, techo = vv ? vv.offsetTop : 0, piso = vv ? vv.offsetTop + vv.height : window.innerHeight;   // límites visibles
-    const r = campoFlota.getBoundingClientRect();
-    if (r.bottom < techo || r.top > piso) { barraFlota.hidden = true; return; }
+    const movil = esMovil(), vv = window.visualViewport, techo = vv ? vv.offsetTop : 0, piso = vv ? vv.offsetTop + vv.height : window.innerHeight;
+    barraFlota.classList.toggle('formato--acoplada', movil); barraFlota.dataset.modo = campoFlota.dataset.rico;
+    if (!movil && campoFlota.dataset.rico !== 'flota') { barraFlota.hidden = true; return; }   // PC + cuadro grande: usa su barra fija de abajo
     barraFlota.hidden = false;
-    const bw = barraFlota.offsetWidth, bh = barraFlota.offsetHeight;
-    let y = r.bottom + 6;                                                                  // debajo del campo
-    if (y + bh > piso - 6) y = r.top - bh - 6 >= techo + 6 ? r.top - bh - 6 : Math.max(techo + 6, piso - bh - 6);   // sin lugar: encima del campo (o pegada al borde visible)
-    barraFlota.style.top = `${y}px`; barraFlota.style.left = `${Math.max(6, Math.min(r.left, window.innerWidth - bw - 6))}px`;
+    const bw = barraFlota.offsetWidth, bh = barraFlota.offsetHeight || 44, r = campoFlota.getBoundingClientRect();
+    if (movil) {                                                                           // acoplada: pegada al borde de abajo de la parte visible (encima del teclado)
+      clearTimeout(relojAcoplada); document.body.classList.add('con-barra-flota', 'con-barra-acoplada');   // v3.0: 'con-barra-acoplada' deja lugar al pie de las ventanas para que la barra no tape el botón de guardar
+      barraFlota.style.left = '0px'; barraFlota.style.top = `${piso - bh}px`;
+      if (acomodar === true && (r.bottom > piso - bh - 8 || r.top < techo)) campoFlota.scrollIntoView({ block: 'center', behavior: 'instant' });
+      return;
+    }
+    if (acomodar === true && r.bottom + 6 + bh > piso - 6 && r.top >= techo) {               // PC: no hay lugar debajo → se sube la página
+      document.body.classList.add('con-barra-flota');                                     // espacio extra al pie para poder subir el campo aunque sea lo último de la página
+      campoFlota.scrollIntoView({ block: 'center', behavior: 'instant' });
+    }
+    const r2 = campoFlota.getBoundingClientRect();
+    if (r2.bottom < techo || r2.top > piso) { barraFlota.hidden = true; return; }
+    let y = r2.bottom + 6;                                                                 // debajo del campo
+    if (y + bh > piso - 6) y = r2.top - bh - 6 >= techo + 6 ? r2.top - bh - 6 : Math.max(techo + 6, piso - bh - 6);   // sin lugar: encima del campo (o pegada al borde visible)
+    barraFlota.style.top = `${y}px`; barraFlota.style.left = `${Math.max(6, Math.min(r2.left, window.innerWidth - bw - 6))}px`;
   }
   document.addEventListener('focusin', (e) => {
     const t = e.target;
-    if (t && t.dataset && t.dataset.rico === 'flota') { campoFlota = t; colocarBarraFlota(true); }
+    if (t && t.dataset && t.dataset.rico) { campoFlota = t; colocarBarraFlota(true); }
     else if (!barraFlota.contains(t)) ocultarBarraFlota();
   });
   document.addEventListener('focusout', (e) => { if (e.target === campoFlota) setTimeout(() => { if (document.activeElement !== campoFlota) ocultarBarraFlota(); }, 120); });
   window.addEventListener('scroll', () => colocarBarraFlota(), true); window.addEventListener('resize', () => colocarBarraFlota());
   if (window.visualViewport) { window.visualViewport.addEventListener('resize', () => colocarBarraFlota(true)); window.visualViewport.addEventListener('scroll', () => colocarBarraFlota()); }   // v2.9: al abrirse / cerrarse el teclado del celular
   barraFlota.addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });   // los botones no le quitan el foco (ni la selección) al campo
+  barraFlota.addEventListener('touchstart', (e) => { if (e.target.closest('button')) e.preventDefault(); }, { passive: false });   // v3.0: ídem en el celular (el teclado no se cierra al tocar un botón)
   barraFlota.addEventListener('click', (e) => {
     const b = e.target.closest('[data-fmt]');
     if (b && campoFlota) { aplicarFormato(b.dataset.fmt, campoFlota); colocarBarraFlota(); }
@@ -1865,8 +2111,8 @@ document.addEventListener('DOMContentLoaded', () => {
     abrirModal(modalCat); setTimeout(() => $('catNombre').focus(), 80);
   }
   $('btnNuevaCat').addEventListener('click', () => abrirNuevaCategoria((c) => { catsElegidas.add(c.id); pintarCatsComposer(); }));
-  document.querySelectorAll('#modalCategoria [data-cerrar]').forEach((b) => b.addEventListener('click', () => cerrarModal(modalCat)));
-  modalCat.addEventListener('mousedown', (e) => { if (e.target === modalCat) cerrarModal(modalCat); });
+  document.querySelectorAll('#modalCategoria [data-cerrar]').forEach((b) => b.addEventListener('click', () => intentarCerrar(modalCat)));   // v3.0: pregunta si hay cambios sin guardar
+  modalCat.addEventListener('mousedown', (e) => { if (e.target === modalCat) intentarCerrar(modalCat); });
   $('formCategoria').addEventListener('submit', (e) => {
     e.preventDefault();
     const nombre = $('catNombre').value.trim();
@@ -1907,7 +2153,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   $('btnElegirFoto').addEventListener('click', () => $('inputFoto').click());
   $('inputFoto').addEventListener('change', async () => {
-    const archivo = $('inputFoto').files[0]; if (!archivo) return;
+    let archivo = $('inputFoto').files[0]; $('inputFoto').value = ''; if (!archivo) return;
+    /* v3.0: antes de agregarla se abre el editor de imágenes (recortar, dibujar, texto). Si se cancela, la foto no se agrega */
+    archivo = await window.EditorImagen.abrir(archivo);
+    if (!archivo) return;
     $('textoFoto').textContent = 'Procesando foto…';
     try {
       foto = await comprimirFoto(archivo);
@@ -1922,16 +2171,17 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     const error = $('errorNuevo'); error.textContent = '';
     const tipo = tipoActual, cuerpo = { tipo, titulo: $('nuevoTituloCampo').value.trim(), texto: $('nuevoTexto').value.trim(), datos: {}, categorias: [...catsElegidas] };   // v2.1: + categorías marcadas
-    const filas = [...$('filasItems').children].map((f) => ({ t: f.querySelector('input').value.trim(), hecho: !!f._hecho })).filter((f) => f.t);
+    const filas = [...$('filasItems').children].map((f) => ({ t: f.querySelector('textarea').value.trim(), hecho: !!f._hecho, ...(f._para ? { para: f._para } : {}), ...(f._hecho && f._por ? { por: f._por } : {}) })).filter((f) => f.t);   // v3.0: + responsable y quién la completó
 
     if (tipo === 'nota' && !cuerpo.texto && !cuerpo.titulo) return void (error.textContent = 'Escribe algo en la nota.');
-    if (tipo === 'lista') { if (!filas.length) return void (error.textContent = 'Agrega al menos un elemento.'); cuerpo.datos.items = filas; }
+    if (tipo === 'lista') { if (!filas.length) return void (error.textContent = 'Agrega al menos un elemento.'); cuerpo.datos.items = filas; if ($('listaLimite').value) cuerpo.datos.limite = $('listaLimite').value; else if (editando) cuerpo.datos.limite = ''; }   // v3.0: fecha límite opcional
     if (tipo === 'encuesta') {
       if (!cuerpo.titulo) return void (error.textContent = 'Escribe la pregunta.');
       if (!editando) {                                                  // v2.7: al editar una encuesta no se tocan las opciones
         if (filas.length < 2) return void (error.textContent = 'Agrega al menos 2 opciones.');
         cuerpo.datos.opciones = filas.map((f) => f.t);
       }
+      if ($('listaLimite').value) cuerpo.datos.limite = $('listaLimite').value; else if (editando) cuerpo.datos.limite = '';   // v3.0: fecha límite opcional (también al editar una encuesta)
     }
     if (tipo === 'plan') {                                              // v2.3: nombre + al menos un día; hora y lugar son opcionales
       if (!cuerpo.titulo) return void (error.textContent = 'Ponle un nombre al plan.');
@@ -1978,7 +2228,7 @@ document.addEventListener('DOMContentLoaded', () => {
     $('nuevoTituloCampo').value = c.titulo || ''; $('nuevoTexto').value = c.texto || ''; $('nuevoUrl').value = c.url || '';
     if (c.tipo === 'lista' || c.tipo === 'encuesta') {
       $('filasItems').replaceChildren();
-      (c.tipo === 'lista' ? c.datos.items : c.datos.opciones.map((t) => ({ t, hecho: false }))).forEach((i) => agregarFila(i.t, i.hecho));
+      (c.tipo === 'lista' ? c.datos.items : c.datos.opciones.map((t) => ({ t, hecho: false }))).forEach((i) => agregarFila(i.t, i.hecho, i.para, i.por));
     }
     if (c.tipo === 'plan') {
       formDias = { dias: (c.datos.dias || []).map((x) => ({ f: x.f, e: x.e })), antes: { ...(c.datos.antes || {}) } }; formDiasTocados = true;
@@ -1990,15 +2240,27 @@ document.addEventListener('DOMContentLoaded', () => {
     catsElegidas = new Set(c.categorias || []); pintarCatsComposer(); actualizarVistaTexto();
   }
 
+  /* v3.0: "foto" del contenido de cada formulario (para saber si hay cambios sin guardar; ver permitirSalida) */
+  instantaneas.modalNuevo = () => JSON.stringify([
+    $('nuevoTituloCampo').value, $('nuevoTexto').value, $('nuevoUrl').value, [...$('filasItems').querySelectorAll('textarea')].map((i) => i.value),
+    $('planHora') ? $('planHora').value : '', $('planLugar') ? $('planLugar').value : '', formDias, foto ? foto.dataUrl.length : 0, [...catsElegidas].sort(),
+    [...$('filasItems').children].map((f) => f._para || ''), $('listaLimite') ? $('listaLimite').value : '']);
+  instantaneas.modalCategoria = () => JSON.stringify([$('catNombre').value, iconoCat]);
+  instantaneas.modalEntrada = () => JSON.stringify([$('entTituloCampo').value, $('entTexto').value, entIcono, entImgs.map((i) => i.id)]);
+
   /* Esc: cierra la ventana o el visor que esté arriba (la de acceso no se puede cerrar) */
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (!$('visor').hidden) cerrarVisor();
+    if (!menuAj.hidden) cerrarAjustes();                                      // v3.0: menú de ajustes
+    else if (!$('modalNovedades').hidden) cerrarModal($('modalNovedades'));  // v3.0: novedades
+    else if (!$('visor').hidden) cerrarVisor();
     else if (!$('modalConfirmar').hidden) { if ($('confNo').onclick) $('confNo').onclick(); }
-    else if (!$('modalCategoria').hidden) cerrarModal($('modalCategoria'));   // v2.1: la ventana de nueva categoría está por encima del formulario
+    else if (!$('modalCategoria').hidden) intentarCerrar($('modalCategoria'));   // v2.1: la ventana de nueva categoría está por encima del formulario
     else if (!$('modalNotif').hidden) cerrarModal($('modalNotif'));          // v2.5
-    else if (!$('modalEntrada').hidden) cerrarModal($('modalEntrada'));      // v2.8: ventana de entrada de perfil
-    else if (!$('modalNuevo').hidden) cerrarModal($('modalNuevo'));
+    else if (!$('modalDia').hidden) intentarCerrar($('modalDia'));            // v3.0: ventana de una fecha del calendario (pregunta si hay cambios)
+    else if (!$('modalDiaInfo').hidden) cerrarModal($('modalDiaInfo'));       // v3.0: detalle de una fecha
+    else if (!$('modalEntrada').hidden) intentarCerrar($('modalEntrada'));      // v2.8: ventana de entrada de perfil (v3.0: pregunta si hay cambios)
+    else if (!$('modalNuevo').hidden) intentarCerrar($('modalNuevo'));
   });
 
   /* ============================================================
@@ -2014,7 +2276,7 @@ document.addEventListener('DOMContentLoaded', () => {
      Para qué sirve: tener a mano la información de cada uno (gustos, datos, fotos…) dentro de la misma página.
      ============================================================ */
   const LIM_PERFIL = { frase: 120, titulo: 80, texto: 3000, imagenes: 4 };   // iguales a los del servidor (functions/_lib/perfiles.js)
-  const AVISO_ERROR_PERFIL = { frase: 'No se pudo guardar la frase', crear: 'No se pudo añadir la entrada', editar: 'No se pudieron guardar los cambios de la entrada', borrar: 'No se pudo eliminar la entrada' };
+  const AVISO_ERROR_PERFIL = { orden: 'No se pudo guardar el orden', frase: 'No se pudo guardar la frase', crear: 'No se pudo añadir la entrada', editar: 'No se pudieron guardar los cambios de la entrada', borrar: 'No se pudo eliminar la entrada' };
   let vista = 'muro';                                         // 'muro' | 'perfiles' (qué pestaña se ve)
   let perfilVer = 'M';                                        // perfil que se está viendo
   let perfServidor = { frases: { M: '', xB: '' }, entradas: [] };   // lo último que confirmó el servidor
@@ -2023,6 +2285,19 @@ document.addEventListener('DOMContentLoaded', () => {
   let colaPerf = Promise.resolve();                           // las acciones se mandan de a una y en orden
   let perfGen = 0;                                            // sube con cada acción confirmada o rechazada (descarta actualizaciones automáticas viejas)
   let perfCargando = false, perfCargadas = false;
+  /* v3.0: ORDEN de las entradas. Al ABRIR la pestaña Perfiles se calcula un orden (snapshot) y no cambia mientras se está ahí (solo se agregan arriba las
+     nuevas); cada persona puede reordenar las suyas arrastrando (se guarda en el servidor). Orden automático: las entradas con el mismo título (sin
+     importar mayúsculas, tildes ni formato) quedan en el mismo orden en los dos perfiles; las que ya tienen un orden guardado a mano lo conservan. */
+  let ordenSnap = { M: null, xB: null }, reordenarAlLlegar = false, arrastrando = false;
+  const claveTitulo = (e) => normalizar(planoDe(e.titulo)).replace(/\s+/g, ' ');
+  function calcularOrden(perfil) {
+    const todas = perfVista.entradas, rango = new Map();
+    [...todas].sort((a, b) => b.creado - a.creado).forEach((e) => { const k = claveTitulo(e); if (!rango.has(k)) rango.set(k, rango.size); });   // grupo = título; el grupo con la entrada más nueva va primero
+    const mias = todas.filter((e) => e.perfil === perfil);
+    const conOrden = mias.filter((e) => e.orden != null).sort((a, b) => a.orden - b.orden);
+    const sinOrden = mias.filter((e) => e.orden == null).sort((a, b) => rango.get(claveTitulo(a)) - rango.get(claveTitulo(b)) || b.creado - a.creado);
+    return [...sinOrden, ...conOrden].map((e) => e.id);
+  }
   const imgsLocales = new Map();                              // id de imagen → dataURL (se ve al instante, sin pedirla al servidor)
   const nodosEntradas = new Map();                            // id de entrada → tarjeta ya pintada
   const imgsCargadas = new Set();                             // v2.9: ids de imágenes de perfil que ya terminaron de cargar (para quitarles el círculo de carga)
@@ -2057,16 +2332,32 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   /* v2.10: la campanita se cambia por una flecha para volver al muro mientras se ve un perfil (el intercambio lo hace el CSS) */
   $('btnVolver').addEventListener('click', () => { mostrarVista('muro'); window.scrollTo({ top: 0 }); });
+  /* ----- v3.0: CALENDARIO DE AMOR -----
+     Qué hace: js/calendario.js dibuja el calendario; acá se le entrega lo que necesita (puente) y se conecta el botón de la barra superior.
+     Para qué sirve: ver y agregar fechas importantes, y que el selector de días de un plan muestre lo que ya hay en cada día. */
+  const cal = window.Calendario ? window.Calendario.iniciar({
+    h, $, icono, api, avisar, abrirModal, cerrarModal, intentarCerrar, confirmar, md, instantaneas, marcarLimpio, normalizar,
+    yo: () => yo, hoy: hoyISO,
+    /* "Ir al plan" desde una fecha ligada: vuelve al muro y lleva a la publicación */
+    irAlPlan: (id) => { mostrarVista('muro'); setTimeout(() => irAPost(id), 60); },
+  }) : null;
+  $('btnCalendario').addEventListener('click', () => mostrarVista('calendario'));
 
   /* Cambia entre el muro y los perfiles: esconde / muestra cada parte (lo marcado con data-solo-muro se esconde con CSS según body[data-vista]) y
      deja activa la ficha que corresponde en la fila de arriba */
   function mostrarVista(v) {
+    if (v === 'perfiles' && vista !== 'perfiles') reiniciarOrdenPerfiles();   // v3.0
     vista = v; document.body.dataset.vista = v;
     $('vistaPerfiles').hidden = v !== 'perfiles';
+    $('vistaCalendario').hidden = v !== 'calendario';                  // v3.0: vista del calendario de amor
+    if (cal && v !== 'calendario') cal.cerrarFlota();
     document.querySelectorAll('#filtroTipos .chip').forEach((x) => x.classList.toggle('chip--activo', v === 'perfiles' ? x === chipPerfiles : x !== chipPerfiles && x.dataset.tipo === filtro.tipo));
-    $('btnNuevo').setAttribute('aria-label', v === 'perfiles' ? 'Nueva entrada en el perfil' : 'Nueva publicación');
+    $('btnNuevo').setAttribute('aria-label', v === 'perfiles' ? 'Nueva entrada en el perfil' : v === 'calendario' ? 'Nueva fecha' : 'Nueva publicación');
     if (v === 'perfiles') { marcarSelector(); pintarPerfil(); cargarPerfiles(); }
+    if (v === 'calendario' && cal) { cal.mostrar(); window.scrollTo({ top: 0 }); }   // v3.0
   }
+  /* v3.0: al ENTRAR a la pestaña Perfiles se descarta el orden anterior; se recalcula con los datos que haya (y otra vez con la primera respuesta fresca del servidor) */
+  function reiniciarOrdenPerfiles() { ordenSnap = { M: null, xB: null }; reordenarAlLlegar = true; }
   /* Abre el perfil de una persona (tocando su foto) y sube para verlo */
   function abrirPerfil(q) {
     perfilVer = q === 'xB' ? 'xB' : 'M';
@@ -2078,6 +2369,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function reiniciarPerfiles(quien) {
     perfPend.length = 0; perfGen++; colaPerf = Promise.resolve();
     perfServidor = { frases: { M: '', xB: '' }, entradas: [] }; perfVista = { frases: { M: '', xB: '' }, entradas: [] };
+    ordenSnap = { M: null, xB: null }; reordenarAlLlegar = false;
     perfCargadas = false; perfilVer = quien; editandoFrase = false; perfilArmado = ''; firmaFrase = ''; refs = null;
     nodosEntradas.clear(); imgsLocales.clear(); imgsCargadas.clear(); $('perfilCuerpo').replaceChildren();
     mostrarVista('muro'); marcarSelector();
@@ -2127,14 +2419,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (firma === firmaFrase) return;
     firmaFrase = firma;
     if (mio && editandoFrase) {
-      const campo = h('input', { class: 'campo__entrada', type: 'text', maxlength: LIM_PERFIL.frase, value: f, placeholder: 'Una frase corta sobre ti…', 'aria-label': 'Tu frase', autocomplete: 'off', 'data-rico': 'flota' });
+      const campo = h('textarea', { class: 'campo__entrada campo__linea', rows: '1', maxlength: LIM_PERFIL.frase, placeholder: 'Una frase corta sobre ti…', 'aria-label': 'Tu frase', autocomplete: 'off', 'data-rico': 'flota', 'data-linea': '' });   // v3.0: cuadro que crece
+      campo.value = f; const cajaCampo = window.Editor.envolver(campo);
       const guardar = () => { editandoFrase = false; const nueva = campo.value.trim(); if (nueva !== f) encolarPerfil({ k: 'frase', quien: q, frase: nueva }); else { firmaFrase = ''; pintarFrase(); } };
       const cancelar = () => { editandoFrase = false; firmaFrase = ''; pintarFrase(); };
       campo.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); guardar(); } else if (e.key === 'Escape') { e.stopPropagation(); cancelar(); } });
-      refs.fraseCaja.replaceChildren(campo,
+      refs.fraseCaja.replaceChildren(cajaCampo,
         h('button', { class: 'btn-icono', type: 'button', 'aria-label': 'Guardar frase', title: 'Guardar', onclick: guardar }, icono('check')),
         h('button', { class: 'btn-icono', type: 'button', 'aria-label': 'Cancelar', title: 'Cancelar', onclick: cancelar }, icono('close')));
-      refs.fraseCaja.classList.add('perfil__frase-caja--edita'); campo.focus(); campo.setSelectionRange(campo.value.length, campo.value.length);
+      refs.fraseCaja.classList.add('perfil__frase-caja--edita'); window.Editor.refrescar(campo); campo.focus(); campo.setSelectionRange(campo.value.length, campo.value.length);
       return;
     }
     refs.fraseCaja.classList.remove('perfil__frase-caja--edita');
@@ -2168,7 +2461,9 @@ document.addEventListener('DOMContentLoaded', () => {
         /* v2.9: círculo girando mientras la entrada se está guardando en el servidor (se ve ya, pero todavía no está confirmada) */
         h('span', { class: 'entrada__guardando', role: 'status', hidden: !e._pend }, h('span', { class: 'giro giro--chico' }), h('span', { text: 'Guardando…' })),
         h('button', { class: 'post__accion post__accion--der', type: 'button', 'aria-label': 'Editar entrada', onclick: () => abrirEntrada(e) }, icono('edit')),
-        h('button', { class: 'post__accion post__accion--peligro', type: 'button', 'aria-label': 'Eliminar entrada', onclick: () => borrarEntrada(e) }, icono('delete'))));
+        h('button', { class: 'post__accion post__accion--peligro', type: 'button', 'aria-label': 'Eliminar entrada', onclick: () => borrarEntrada(e) }, icono('delete'))),
+      /* v3.0: asa del lado DERECHO de la tarjeta: se mantiene apretada y se arrastra hacia arriba o abajo para cambiar el orden */
+      h('button', { class: 'entrada__asa', type: 'button', title: 'Arrastra para cambiar el orden', 'aria-label': 'Arrastrar para cambiar el orden', onpointerdown: (ev) => iniciarArrastre(ev, ev.currentTarget.closest('.entrada')) }, icono('drag_indicator')));
     [...el.children].forEach((c) => c.setAttribute('data-k', c.className.split(' ')[0] || c.tagName));   // claves para morph(), igual que en las publicaciones
     return el;
   }
@@ -2202,8 +2497,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const todas = perfVista.entradas.filter((e) => e.perfil === perfilVer);
     refs.buscador.hidden = !todas.length;                                // v2.8.1: el buscador solo aparece si ya se añadió algo
     /* v2.8.1: la búsqueda mira el título y el texto (sin importar mayúsculas ni tildes) */
+    if (arrastrando) return;                                              // v3.0: mientras se arrastra una entrada no se reordena la pantalla
     const lista = perfilQ ? todas.filter((e) => perfilQ.split(/\s+/).every((w) => normalizar(e.titulo + ' ' + e.texto).includes(w))) : todas, visibles = new Set(lista.map((e) => e.id));
     nodosEntradas.forEach((el, id) => { if (!visibles.has(id)) { nodosEntradas.delete(id); if (obsEntradas) obsEntradas.unobserve(el); salirTarjeta(el); } });
+    /* v3.0: orden = snapshot calculado al abrir (las entradas que no estaban en él, o sea nuevas, van arriba de todo, las más nuevas primero) */
+    if (!ordenSnap[perfilVer] && perfCargadas) ordenSnap[perfilVer] = calcularOrden(perfilVer);
+    const pos = new Map((ordenSnap[perfilVer] || []).map((id, i) => [id, i]));
+    lista.sort((a, b) => (pos.has(a.id) ? pos.get(a.id) : -1) - (pos.has(b.id) ? pos.get(b.id) : -1) || b.creado - a.creado);
     const ordenadas = [];
     lista.forEach((e) => {
       const firma = JSON.stringify([e.icono, e.titulo, e.texto, (e.imagenes || []).map((i) => i.id), e.autor, e.actualizado, !!e._pend, yo]);   // v2.9: también cambia al confirmarse
@@ -2228,6 +2528,50 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!perfCargadas && !lista.length) { refs.vacio.hidden = false; refs.vacio.classList.add('perfil__vacio--cargando'); refs.vacio.replaceChildren(h('span', { class: 'giro', role: 'status', 'aria-label': 'Cargando' }), h('span', { text: 'Cargando el perfil…' })); }
   }
 
+  /* ----- v3.0: reordenar las entradas arrastrando desde el asa de la derecha -----
+     Cómo funciona: la tarjeta que se arrastra sigue al dedo (translateY); cuando su centro pasa por la mitad de la vecina, se intercambian en el DOM y la
+     vecina se desliza a su nuevo lugar (FLIP). Cerca del borde de la pantalla la página se desplaza sola. Al soltar se guarda el orden (encolarPerfil 'orden'). */
+  function iniciarArrastre(ev, el) {
+    if (!el || perfilQ || ev.button > 0) return;                         // con el buscador activo no se reordena (la lista está filtrada)
+    ev.preventDefault();
+    const asa = ev.currentTarget, lista = refs.lista, hermanas = () => [...lista.children].filter((x) => x.classList.contains('entrada') && !x.classList.contains('sale'));
+    if (hermanas().length < 2) return;
+    arrastrando = true; el.classList.add('entrada--arrastrando'); el.classList.remove('entrada--espera', 'entra-izq', 'entra-der');
+    try { asa.setPointerCapture(ev.pointerId); } catch (e) { /* ya no está */ }
+    const inicioOff = el.offsetTop, inicioY = ev.clientY, inicioScroll = window.scrollY, antes = hermanas().map((x) => x.dataset.id).join();
+    let y = ev.clientY, raf = 0;
+    const deslizar = (x, cambiar) => {                                   // mueve el DOM y anima a la vecina desde donde estaba (FLIP)
+      const t0 = x.getBoundingClientRect().top; cambiar(); const d = t0 - x.getBoundingClientRect().top;
+      if (d) { x.style.transition = 'none'; x.style.transform = `translateY(${d}px)`; void x.offsetHeight; x.style.transition = 'transform var(--mov-medio) var(--ease-salida)'; x.style.transform = ''; setTimeout(() => { x.style.transition = ''; }, 300); }
+    };
+    function mover() {
+      const dy = y - inicioY + (window.scrollY - inicioScroll), deseado = inicioOff + dy;
+      for (let n = 0; n < 30; n++) {
+        const centro = deseado + el.offsetHeight / 2, prev = el.previousElementSibling, sig = el.nextElementSibling;
+        if (prev && prev.classList.contains('entrada') && centro < prev.offsetTop + prev.offsetHeight / 2) deslizar(prev, () => lista.insertBefore(el, prev));
+        else if (sig && sig.classList.contains('entrada') && centro > sig.offsetTop + sig.offsetHeight / 2) deslizar(sig, () => lista.insertBefore(sig, el));
+        else break;
+      }
+      el.style.transform = `translateY(${deseado - el.offsetTop}px)`;
+    }
+    function autodesplazar() {                                           // cerca del borde de arriba o de abajo la página se desplaza sola
+      const vv = window.innerHeight, zona = 80, v = y < zona ? -Math.ceil((zona - y) / 6) : y > vv - zona ? Math.ceil((y - (vv - zona)) / 6) : 0;
+      if (v) { window.scrollBy(0, v); mover(); }
+      raf = requestAnimationFrame(autodesplazar);
+    }
+    const alMover = (e2) => { y = e2.clientY; mover(); };
+    const soltar = () => {
+      cancelAnimationFrame(raf); asa.removeEventListener('pointermove', alMover); asa.removeEventListener('pointerup', soltar); asa.removeEventListener('pointercancel', soltar);
+      el.style.transition = 'transform var(--mov-medio) var(--ease-salida)'; el.style.transform = '';                // la tarjeta se acomoda en su lugar
+      setTimeout(() => { el.style.transition = ''; el.classList.remove('entrada--arrastrando'); }, 260);
+      arrastrando = false;
+      const ids = hermanas().map((x) => x.dataset.id);
+      if (ids.join() !== antes) { ordenSnap[perfilVer] = ids; encolarPerfil({ k: 'orden', perfil: perfilVer, ids }); }
+    };
+    asa.addEventListener('pointermove', alMover); asa.addEventListener('pointerup', soltar); asa.addEventListener('pointercancel', soltar);
+    raf = requestAnimationFrame(autodesplazar);
+  }
+
   /* ----- Acciones instantáneas del perfil (misma idea que el motor de v2.7) ----- */
   /* Aplica una acción sobre una copia del estado (crear / editar / borrar entradas, cambiar una frase). Es idempotente: si el servidor ya la tenía, no pasa nada */
   function aplicarOpPerfil(v, op) {
@@ -2235,6 +2579,7 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (op.k === 'crear') { if (!v.entradas.some((e) => e.id === op.entrada.id)) v.entradas.push({ ...clon(op.entrada), _pend: true }); }   // v2.9: _pend = todavía sin confirmar (muestra el círculo "Guardando…")
     else if (op.k === 'editar') { const e = v.entradas.find((x) => x.id === op.id); if (e) Object.assign(e, op.campos, { actualizado: op.t, _pend: true, imagenes: op.imagenes.map((i) => ({ id: i.id, w: i.w, h: i.h })) }); }
     else if (op.k === 'borrar') v.entradas = v.entradas.filter((e) => e.id !== op.id);
+    else if (op.k === 'orden') op.ids.forEach((id, k) => { const e = v.entradas.find((x) => x.id === id && x.perfil === op.perfil); if (e) e.orden = k; });   // v3.0: orden elegido arrastrando
   }
   /* Lo que se ve = lo último que confirmó el servidor + las acciones que todavía no confirmó */
   function recomponerPerfiles() {
@@ -2253,13 +2598,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (op.sesion !== sesion || !perfPend.includes(op)) return;       // cambió la sesión mientras esperaba
     try {
       let r;
-      if (op.k === 'frase') r = await api(`/perfiles/bio/${op.quien}`, { metodo: 'PUT', cuerpo: { frase: op.frase } });
+      if (op.k === 'orden') r = await api('/perfiles/orden', { metodo: 'PUT', cuerpo: { perfil: op.perfil, ids: op.ids } });
+      else if (op.k === 'frase') r = await api(`/perfiles/bio/${op.quien}`, { metodo: 'PUT', cuerpo: { frase: op.frase } });
       else if (op.k === 'crear') r = await api('/perfiles/entradas', { metodo: 'POST', cuerpo: { id: op.id, perfil: op.entrada.perfil, ...op.campos, imagenes: op.nuevas } });
       else if (op.k === 'editar') r = await api(`/perfiles/entradas/${op.id}`, { metodo: 'PUT', cuerpo: { ...op.campos, conservar: op.conservar, imagenes: op.nuevas } });
       else r = await api(`/perfiles/entradas/${op.id}`, { metodo: 'DELETE' });
       if (op.sesion !== sesion) return;
       /* Confirmada: pasa a ser lo que dice el servidor */
-      if (op.k === 'frase') perfServidor.frases[op.quien] = r.frase;
+      if (op.k === 'orden') perfServidor.entradas.forEach((e) => { if (r.orden && e.id in r.orden) e.orden = r.orden[e.id]; });
+      else if (op.k === 'frase') perfServidor.frases[op.quien] = r.frase;
       else if (op.k === 'borrar') perfServidor.entradas = perfServidor.entradas.filter((e) => e.id !== op.id);
       else perfServidor.entradas = [...perfServidor.entradas.filter((e) => e.id !== r.entrada.id), r.entrada];
       perfPend.splice(perfPend.indexOf(op), 1); perfGen++; recomponerPerfiles();
@@ -2283,6 +2630,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const r = await api('/perfiles');
       if (gen !== perfGen || ses !== sesion || perfPend.length) return;
       perfServidor = { frases: { M: r.perfiles.M.frase, xB: r.perfiles.xB.frase }, entradas: r.entradas };
+      if (reordenarAlLlegar) { reordenarAlLlegar = false; ordenSnap = { M: null, xB: null }; }   // v3.0: primera respuesta fresca desde que se abrió la pestaña: se recalcula el orden
       perfCargadas = true; recomponerPerfiles();
     } catch (e) { /* sin conexión: se reintenta en el próximo ciclo */ }
     finally { perfCargando = false; }
@@ -2355,8 +2703,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   $('btnEntImg').addEventListener('click', () => $('entInputImg').click());
   $('entInputImg').addEventListener('change', async () => {
-    const archivos = [...$('entInputImg').files].slice(0, Math.max(0, LIM_PERFIL.imagenes - entImgs.length)); $('entInputImg').value = '';
-    if (!archivos.length) return void ($('errorEntrada').textContent = `Máximo ${LIM_PERFIL.imagenes} imágenes por entrada.`);
+    const elegidos = [...$('entInputImg').files].slice(0, Math.max(0, LIM_PERFIL.imagenes - entImgs.length)); $('entInputImg').value = '';
+    if (!elegidos.length) return void ($('errorEntrada').textContent = `Máximo ${LIM_PERFIL.imagenes} imágenes por entrada.`);
+    /* v3.0: cada imagen pasa primero por el editor (recortar, dibujar, texto); las que se cancelan no se agregan */
+    const archivos = [];
+    for (let k = 0; k < elegidos.length; k++) { const ed = await window.EditorImagen.abrir(elegidos[k], elegidos.length > 1 ? { contador: `${k + 1} de ${elegidos.length}` } : {}); if (ed) archivos.push(ed); }
+    if (!archivos.length) return;
     $('errorEntrada').textContent = ''; entProcesando += archivos.length; pintarImgsEnt();
     for (const a of archivos) {
       try { const f = await comprimirFoto(a, { lado: 1024, maxChars: 450000 }); entImgs.push({ id: uuid(), w: f.w, h: f.h, nuevo: true, dataUrl: f.dataUrl }); }
@@ -2381,8 +2733,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (op) { const g = $('entIconos'); g.scrollTop = Math.max(0, op.getBoundingClientRect().top - g.getBoundingClientRect().top + g.scrollTop - g.clientHeight / 2); }
     setTimeout(() => $('entTituloCampo').focus(), 80);
   }
-  document.querySelectorAll('#modalEntrada [data-cerrar]').forEach((b) => b.addEventListener('click', () => cerrarModal(modalEnt)));
-  modalEnt.addEventListener('mousedown', (e) => { if (e.target === modalEnt) cerrarModal(modalEnt); });
+  document.querySelectorAll('#modalEntrada [data-cerrar]').forEach((b) => b.addEventListener('click', () => intentarCerrar(modalEnt)));   // v3.0: pregunta si hay cambios sin guardar
+  modalEnt.addEventListener('mousedown', (e) => { if (e.target === modalEnt) intentarCerrar(modalEnt); });
   $('formEntrada').addEventListener('submit', (e) => {
     e.preventDefault();
     const titulo = $('entTituloCampo').value.trim();
@@ -2447,6 +2799,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const r = await api('/yo');
       iniciarSesion(r.quien);
+      if (vistaPendiente === 'calendario') mostrarVista('calendario'); else if (vistaPendiente === 'novedades') abrirNovedades();   // v3.0: la app se abrió desde un aviso del calendario o de novedades
     } catch (e) {
       if (e.status === 401) { $('cargando').hidden = true; mostrarAcceso(); }
       else {                                                              // sin conexión: si ya había sesión, se muestra lo último guardado
